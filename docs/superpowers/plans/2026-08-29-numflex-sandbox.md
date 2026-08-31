@@ -2683,8 +2683,12 @@ func (d *Deps) verifierOTP(ctx context.Context, numero, code string) *apperr.Err
 		return apperr.OTPExpired()
 	}
 	if code != stocke {
-		_, _ = d.DB.Pool.Exec(ctx,
-			`UPDATE otp SET tentatives = tentatives + 1 WHERE numero = $1`, numero)
+		// L'échec de cet incrément ne peut pas être avalé : sans lui, la limite
+		// de trois tentatives cesse silencieusement de s'appliquer.
+		if _, err := d.DB.Pool.Exec(ctx,
+			`UPDATE otp SET tentatives = tentatives + 1 WHERE numero = $1`, numero); err != nil {
+			return apperr.ErreurInterne("incrément des tentatives OTP")
+		}
 		return apperr.OTPInvalid()
 	}
 	return nil
