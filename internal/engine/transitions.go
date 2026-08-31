@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -54,6 +55,12 @@ func (e *Engine) AppliquerTransition(ctx context.Context, demandeID, origine str
 	}
 
 	suivante, existe := domain.EtapeSuivante(courante)
+	if !existe && courante != domain.EtapeCompletion {
+		// etape_actuelle n'a pas de contrainte CHECK en base : une valeur
+		// corrompue ne doit pas être traitée comme si COMPLETION était soldée
+		// (ce qui clôturerait la demande et transférerait le numéro).
+		return fmt.Errorf("étape inconnue %q sur la demande %s", courante, demandeID)
+	}
 	if !existe {
 		// COMPLETION soldée : la demande se termine.
 		if err := e.effetsFinDeDemande(ctx, tx, demandeID, typeDemande, d); err != nil {
