@@ -4,7 +4,9 @@ import (
 	"context"
 	"log"
 
+	"github.com/yas/numflex-sandbox/internal/api"
 	"github.com/yas/numflex-sandbox/internal/config"
+	"github.com/yas/numflex-sandbox/internal/httpx"
 	"github.com/yas/numflex-sandbox/internal/seed"
 	"github.com/yas/numflex-sandbox/internal/store"
 )
@@ -30,5 +32,12 @@ func main() {
 
 	if err := seed.Run(ctx, db); err != nil {
 		log.Fatalf("seed : %v", err)
+	}
+
+	d := &api.Deps{Cfg: c, DB: db, R: httpx.NewRenderer(c.Fidelity, c.ClockSkew)}
+	r := api.NewRouter(d)
+
+	if err := r.Run(":" + c.Port); err != nil {
+		log.Fatalf("serveur HTTP : %v", err)
 	}
 }
