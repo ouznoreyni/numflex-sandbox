@@ -37,6 +37,12 @@ func (d *Deps) getOperateurs(c *gin.Context) {
 		}
 		out = append(out, o)
 	}
+	// Next() renvoyant false signifie « fin des lignes » ou « erreur » : sans
+	// ce contrôle, une panne en cours d'itération passerait pour un succès partiel.
+	if err := rows.Err(); err != nil {
+		d.R.Fail(c, apperr.ErreurInterne("lecture des opérateurs"))
+		return
+	}
 	d.R.OK(c, http.StatusOK, "Opérateurs récupérés avec succès", out)
 }
 
@@ -61,6 +67,12 @@ func (d *Deps) getMotifsRejet(c *gin.Context) {
 			return
 		}
 		out = append(out, m)
+	}
+	// Next() renvoyant false signifie « fin des lignes » ou « erreur » : sans
+	// ce contrôle, une panne en cours d'itération passerait pour un succès partiel.
+	if err := rows.Err(); err != nil {
+		d.R.Fail(c, apperr.ErreurInterne("lecture des motifs de rejet"))
+		return
 	}
 	d.R.OK(c, http.StatusOK, "Motifs de rejet récupérés avec succès", out)
 }
@@ -87,6 +99,12 @@ func (d *Deps) getTypesDemande(c *gin.Context) {
 		}
 		out = append(out, t)
 	}
+	// Next() renvoyant false signifie « fin des lignes » ou « erreur » : sans
+	// ce contrôle, une panne en cours d'itération passerait pour un succès partiel.
+	if err := rows.Err(); err != nil {
+		d.R.Fail(c, apperr.ErreurInterne("lecture des types de demande"))
+		return
+	}
 	d.R.OK(c, http.StatusOK, "Types de demande récupérés avec succès", out)
 }
 
@@ -111,6 +129,12 @@ func (d *Deps) getProcessus(c *gin.Context) {
 			return
 		}
 		out = append(out, p)
+	}
+	// Next() renvoyant false signifie « fin des lignes » ou « erreur » : sans
+	// ce contrôle, une panne en cours d'itération passerait pour un succès partiel.
+	if err := rows.Err(); err != nil {
+		d.R.Fail(c, apperr.ErreurInterne("lecture des processus"))
+		return
 	}
 	d.R.OK(c, http.StatusOK, "Processus récupérés avec succès", out)
 }
@@ -137,6 +161,12 @@ func (d *Deps) getTypesIncident(c *gin.Context) {
 			return
 		}
 		out = append(out, ti)
+	}
+	// Next() renvoyant false signifie « fin des lignes » ou « erreur » : sans
+	// ce contrôle, une panne en cours d'itération passerait pour un succès partiel.
+	if err := rows.Err(); err != nil {
+		d.R.Fail(c, apperr.ErreurInterne("lecture des types d'incident"))
+		return
 	}
 	d.R.OK(c, http.StatusOK, "Types d'incident récupérés avec succès", out)
 }
