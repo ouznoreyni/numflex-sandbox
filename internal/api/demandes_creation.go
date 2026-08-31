@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
 	"time"
 
@@ -10,11 +11,12 @@ import (
 	"github.com/yas/numflex-sandbox/internal/oid"
 )
 
-// routesCreation est complétée au fil des tâches : /demandes/entreprise en
-// Task 11, /demandes/restitution en Task 12. Ne câbler ici que ce qui existe,
-// sinon le paquet ne compile pas à la fin de cette tâche.
+// routesCreation est complétée au fil des tâches : /demandes/restitution en
+// Task 12. Ne câbler ici que ce qui existe, sinon le paquet ne compile pas à
+// la fin de cette tâche.
 func (d *Deps) routesCreation(g *gin.RouterGroup) {
 	g.POST("/demandes/particulier", d.postDemandeParticulier)
+	g.POST("/demandes/entreprise", d.postDemandeEntreprise)
 }
 
 type clientDTO struct {
@@ -163,6 +165,214 @@ func validerParticulier(r reqParticulier) []apperr.FieldError {
 		champs = append(champs, apperr.FieldError{
 			ObjectName: "demandeParticulierDTO", Field: "typePortabilite",
 			Message: "doit valoir PREPAID ou POSTPAID",
+		})
+	}
+	return champs
+}
+
+// --- Entreprise (flotte) ----------------------------------------------------
+
+type reqEntreprise struct {
+	NumeroPorteurFlotte     string    `json:"numeroPorteurFlotte"`
+	OtpCode                 string    `json:"otpCode"`
+	OperateurSourceID       string    `json:"operateurSourceId"`
+	OperateurDestinataireID string    `json:"operateurDestinataireId"`
+	TypePortabilite         string    `json:"typePortabilite"`
+	NumerosFlotte           []string  `json:"numerosFlotte"`
+	Client                  clientDTO `json:"client"`
+}
+
+// numeroExclu porte le motif d'exclusion d'un numéro de la flotte (§7.4). Un
+// numéro exclu n'échoue pas la demande : il en est simplement retranché.
+type numeroExclu struct {
+	Numero     string `json:"numero"`
+	Raison     string `json:"raison"`
+	CodeErreur string `json:"codeErreur"`
+}
+
+func (d *Deps) postDemandeEntreprise(c *gin.Context) {
+	var req reqEntreprise
+	if err := c.ShouldBindJSON(&req); err != nil {
+		d.R.Fail(c, apperr.FormatJSONInvalide())
+		return
+	}
+	if champs := validerEntreprise(req); len(champs) > 0 {
+		d.R.Fail(c, apperr.Validation(champs...))
+		return
+	}
+
+	appelant := Appelant(c)
+	if req.OperateurDestinataireID != appelant.OperateurID {
+		d.R.Fail(c, apperr.DemandeAccesRefuse(
+			"L'opérateur connecté doit être l'opérateur destinataire de la demande."))
+		return
+	}
+
+	// Un seul OTP, vérifié sur le porteur de la flotte, couvre tous les numéros.
+	if e := d.verifierOTP(c, req.NumeroPorteurFlotte, req.OtpCode); e != nil {
+		d.R.Fail(c, e)
+		return
+	}
+
+	etats := make(map[string]domain.EtatNumero, len(req.NumerosFlotte))
+	for _, numero := range req.NumerosFlotte {
+		etat, e := d.etatNumero(c, numero)
+		if e != nil {
+			d.R.Fail(c, e)
+			return
+		}
+		etats[numero] = etat
+	}
+	for _, numero := range req.NumerosFlotte {
+		if etats[numero].OperateurActuelID != etats[req.NumerosFlotte[0]].OperateurActuelID {
+			d.R.Fail(c, apperr.FlotteOperateursMixtes())
+			return
+		}
+	}
+
+	var retenus []string
+	exclus := []numeroExclu{}
+	for _, numero := range req.NumerosFlotte {
+		if e := domain.VerifierEligibilitePortage(etats[numero], req.OperateurSourceID,
+			req.OperateurDestinataireID, domain.DelaiEntrePortages); e != nil {
+			exclus = append(exclus, numeroExclu{Numero: numero, Raison: e.Message, CodeErreur: e.Code})
+			continue
+		}
+		retenus = append(retenus, numero)
+	}
+	if len(retenus) == 0 {
+		d.R.Fail(c, apperr.AucunNumeroEligible())
+		return
+	}
+
+	id := oid.New()
+	maintenant := time.Now()
+
+	tx, err2 := d.DB.Pool.Begin(c)
+	if err2 != nil {
+		d.R.Fail(c, apperr.ErreurInterne("ouverture de transaction"))
+		return
+	}
+	defer tx.Rollback(c)
+
+	var prefixeSource string
+	if err := tx.QueryRow(c, `SELECT prefixe_routage FROM operateur WHERE id = $1`,
+		req.OperateurSourceID).Scan(&prefixeSource); err != nil {
+		d.R.Fail(c, apperr.ValidationEchouee("Opérateur source inconnu"))
+		return
+	}
+
+	if _, err := tx.Exec(c,
+		`INSERT INTO demande
+		   (id, numero, type_abonne, type_demande, statut_demande, etape_actuelle,
+		    statut_etape_actuel, operateur_source_id, operateur_destinataire_id,
+		    createur_operateur_id, processus, routage_info, date_demande, date_debut_etape)
+		 VALUES ($1,$2,'ENTREPRISE','PORTAGE','EN_COURS','ACCEPTATION','EN_COURS',
+		         $3,$4,$4,$5,$6,$7,$7)`,
+		id, req.NumeroPorteurFlotte, req.OperateurSourceID, req.OperateurDestinataireID,
+		req.TypePortabilite, prefixeSource, maintenant); err != nil {
+		d.R.Fail(c, apperr.ErreurInterne("création de la demande"))
+		return
+	}
+
+	for _, numero := range retenus {
+		if _, err := tx.Exec(c,
+			`INSERT INTO demande_numero (demande_id, numero, statut, routage_info)
+			 VALUES ($1,$2,'EN_COURS',$3)`, id, numero, prefixeSource); err != nil {
+			d.R.Fail(c, apperr.ErreurInterne("enregistrement du numéro"))
+			return
+		}
+	}
+	for _, ex := range exclus {
+		if _, err := tx.Exec(c,
+			`INSERT INTO demande_numero
+			   (demande_id, numero, statut, exclu, raison_exclusion, code_erreur_exclusion)
+			 VALUES ($1,$2,'REJETE',true,$3,$4)`,
+			id, ex.Numero, ex.Raison, ex.CodeErreur); err != nil {
+			d.R.Fail(c, apperr.ErreurInterne("enregistrement du numéro exclu"))
+			return
+		}
+	}
+
+	if _, err := tx.Exec(c,
+		`INSERT INTO demande_client
+		   (demande_id, nom, prenom, date_naissance, lieu_naissance, type_piece, numero_piece,
+		    raison_sociale, num_rc)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+		id, req.Client.Nom, req.Client.Prenom, req.Client.DateNaissance,
+		req.Client.LieuNaissance, req.Client.TypePiece, req.Client.NumeroPiece,
+		req.Client.RaisonSociale, req.Client.NumRC); err != nil {
+		d.R.Fail(c, apperr.ErreurInterne("enregistrement du client"))
+		return
+	}
+	if _, err := tx.Exec(c,
+		`UPDATE otp SET consomme = true WHERE numero = $1`, req.NumeroPorteurFlotte); err != nil {
+		d.R.Fail(c, apperr.ErreurInterne("consommation de l'OTP"))
+		return
+	}
+	if err := tx.Commit(c); err != nil {
+		d.R.Fail(c, apperr.ErreurInterne("validation de la transaction"))
+		return
+	}
+
+	data := gin.H{
+		"demande": gin.H{
+			"id":            id,
+			"typeDemande":   "PORTAGE",
+			"typeAbonne":    "ENTREPRISE",
+			"statutDemande": "EN_COURS",
+			"etapeActuelle": "ACCEPTATION",
+		},
+		"numerosPortesCount": len(retenus),
+		"numerosExclusCount": len(exclus),
+		"numerosExclus":      exclus,
+	}
+	if len(exclus) > 0 {
+		data["avertissement"] = fmt.Sprintf("%d numéro(s) exclu(s) de la demande.", len(exclus))
+	}
+	d.R.OK(c, http.StatusCreated, "Demande flotte créée", data)
+}
+
+// validerEntreprise reproduit la validation de forme d'une demande flotte : les
+// mêmes champs obligatoires qu'une demande particulier, mais numeroPorteurFlotte
+// à la place de numero, raisonSociale/numRC à la place d'une identité seule, et
+// numerosFlotte qui ne doit jamais être vide.
+func validerEntreprise(r reqEntreprise) []apperr.FieldError {
+	var champs []apperr.FieldError
+	obligatoire := func(champ, valeur string) {
+		if valeur == "" {
+			champs = append(champs, apperr.FieldError{
+				ObjectName: "demandeEntrepriseDTO", Field: champ,
+				Message: "ne doit pas être vide",
+			})
+		}
+	}
+	if !motifMSISDN.MatchString(r.NumeroPorteurFlotte) {
+		champs = append(champs, apperr.FieldError{
+			ObjectName: "demandeEntrepriseDTO", Field: "numeroPorteurFlotte",
+			Message: "doit correspondre à \"^[0-9]{9}$\"",
+		})
+	}
+	obligatoire("otpCode", r.OtpCode)
+	obligatoire("operateurSourceId", r.OperateurSourceID)
+	obligatoire("operateurDestinataireId", r.OperateurDestinataireID)
+	obligatoire("client.raisonSociale", r.Client.RaisonSociale)
+	obligatoire("client.numRC", r.Client.NumRC)
+	obligatoire("client.nom", r.Client.Nom)
+	obligatoire("client.prenom", r.Client.Prenom)
+	obligatoire("client.dateNaissance", r.Client.DateNaissance)
+	obligatoire("client.typePiece", r.Client.TypePiece)
+	obligatoire("client.numeroPiece", r.Client.NumeroPiece)
+	if r.TypePortabilite != "PREPAID" && r.TypePortabilite != "POSTPAID" {
+		champs = append(champs, apperr.FieldError{
+			ObjectName: "demandeEntrepriseDTO", Field: "typePortabilite",
+			Message: "doit valoir PREPAID ou POSTPAID",
+		})
+	}
+	if len(r.NumerosFlotte) == 0 {
+		champs = append(champs, apperr.FieldError{
+			ObjectName: "demandeEntrepriseDTO", Field: "numerosFlotte",
+			Message: "ne doit pas être vide",
 		})
 	}
 	return champs
