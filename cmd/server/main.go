@@ -6,6 +6,7 @@ import (
 
 	"github.com/yas/numflex-sandbox/internal/api"
 	"github.com/yas/numflex-sandbox/internal/config"
+	"github.com/yas/numflex-sandbox/internal/engine"
 	"github.com/yas/numflex-sandbox/internal/httpx"
 	"github.com/yas/numflex-sandbox/internal/seed"
 	"github.com/yas/numflex-sandbox/internal/store"
@@ -23,7 +24,9 @@ func main() {
 		log.Fatalf("migrations : %v", err)
 	}
 
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	db, err := store.Open(ctx, c.DatabaseURL)
 	if err != nil {
 		log.Fatalf("ouverture de la base : %v", err)
@@ -34,7 +37,10 @@ func main() {
 		log.Fatalf("seed : %v", err)
 	}
 
-	d := &api.Deps{Cfg: c, DB: db, R: httpx.NewRenderer(c.Fidelity, c.ClockSkew)}
+	moteur := engine.New(c, db)
+	go moteur.Run(ctx)
+
+	d := &api.Deps{Cfg: c, DB: db, R: httpx.NewRenderer(c.Fidelity, c.ClockSkew), Moteur: moteur}
 	r := api.NewRouter(d)
 
 	if err := r.Run(":" + c.Port); err != nil {

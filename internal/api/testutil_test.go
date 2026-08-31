@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -10,16 +11,18 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/yas/numflex-sandbox/internal/config"
+	"github.com/yas/numflex-sandbox/internal/engine"
 	"github.com/yas/numflex-sandbox/internal/httpx"
 	_ "github.com/yas/numflex-sandbox/internal/seed"
 	"github.com/yas/numflex-sandbox/internal/store"
 )
 
 type harnais struct {
-	t   *testing.T
-	srv *httptest.Server
-	cfg *config.Config
-	db  *store.DB
+	t      *testing.T
+	srv    *httptest.Server
+	cfg    *config.Config
+	db     *store.DB
+	moteur *engine.Engine
 }
 
 // nouveauHarnais monte le serveur complet sur une base de test ensemencée,
@@ -42,12 +45,40 @@ func nouveauHarnais(t *testing.T, ajuste ...func(*config.Config)) *harnais {
 		f(cfg)
 	}
 
-	// Le champ Moteur reste nil jusqu'à la Task 9, qui met ce harnais à jour.
-	d := &Deps{Cfg: cfg, DB: db, R: httpx.NewRenderer(cfg.Fidelity, cfg.ClockSkew)}
+	mot := engine.New(cfg, db)
+	d := &Deps{
+		Cfg: cfg, DB: db,
+		R:      httpx.NewRenderer(cfg.Fidelity, cfg.ClockSkew),
+		Moteur: mot,
+	}
 	srv := httptest.NewServer(NewRouter(d))
 	t.Cleanup(srv.Close)
 
-	return &harnais{t: t, srv: srv, cfg: cfg, db: db}
+	return &harnais{t: t, srv: srv, cfg: cfg, db: db, moteur: mot}
+}
+
+// converger déclenche un passage du moteur et vérifie qu'aucune transition ne
+// reste due. Les tests pilotent le moteur explicitement plutôt que d'attendre
+// son ticker.
+func (h *harnais) converger() {
+	h.t.Helper()
+	require.NoError(h.t, h.moteur.Tick(context.Background()))
+}
+
+func (h *harnais) etape(id string) string {
+	h.t.Helper()
+	var e string
+	require.NoError(h.t, h.db.Pool.QueryRow(context.Background(),
+		"SELECT etape_actuelle FROM demande WHERE id = $1", id).Scan(&e))
+	return e
+}
+
+func (h *harnais) statutDemande(id string) string {
+	h.t.Helper()
+	var s string
+	require.NoError(h.t, h.db.Pool.QueryRow(context.Background(),
+		"SELECT statut_demande FROM demande WHERE id = $1", id).Scan(&s))
+	return s
 }
 
 // jeton authentifie un compte du seed et retourne son id_token.
