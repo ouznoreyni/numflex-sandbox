@@ -28,6 +28,10 @@
   tronque toutes les tables métier puis rejoue le seed. **La cible `make test` porte `-p 1`** :
   tous les paquets partagent une seule base, et sans exécution sérielle le `TRUNCATE` d'un
   paquet entre en course avec les insertions d'un autre. Ne pas retirer ce drapeau.
+- **Lecture de lignes** : toute boucle `for rows.Next()` est suivie d'un `if err := rows.Err();
+  err != nil` qui remonte une `apperr.ErreurInterne`. Avec pgx, `Next()` renvoyant `false`
+  signifie « fin des lignes » **ou** « erreur » : sans cette vérification, une panne en cours
+  d'itération renvoie un résultat partiel avec un `200` et le message de succès.
 - **Commits** : un par tâche minimum, message en français **accentué**, préfixe conventionnel
   (`feat:`, `test:`, `chore:`). Rédiger le message via `git commit -F -` et un heredoc plutôt
   que `git commit -m`, pour que les accents et apostrophes survivent au shell.
@@ -2416,6 +2420,12 @@ func (d *Deps) getOperateurs(c *gin.Context) {
 			return
 		}
 		out = append(out, o)
+	}
+	// Next() renvoyant false signifie « fin des lignes » ou « erreur » : sans
+	// ce contrôle, une panne en cours d'itération passerait pour un succès partiel.
+	if err := rows.Err(); err != nil {
+		d.R.Fail(c, apperr.ErreurInterne("lecture des opérateurs"))
+		return
 	}
 	d.R.OK(c, http.StatusOK, "Opérateurs récupérés avec succès", out)
 }
