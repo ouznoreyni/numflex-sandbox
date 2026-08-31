@@ -94,6 +94,24 @@ func TestUnSeulIncidentInterneOuvertParOperateur(t *testing.T) {
 	require.Equal(t, http.StatusInternalServerError, rep.StatusCode)
 }
 
+// TestPlusieursIncidentsGatewayOuvertsAutorises est le miroir de
+// TestUnSeulIncidentInterneOuvertParOperateur : la règle « un seul incident
+// ouvert par opérateur » (§7.12) ne vaut que pour les incidents internes. Sans
+// ce test, une refonte qui étendrait par erreur la garde `if figeSysteme` aux
+// incidents gateway ne ferait échouer aucun test existant.
+func TestPlusieursIncidentsGatewayOuvertsAutorises(t *testing.T) {
+	h := nouveauHarnais(t)
+	jeton := h.jeton("orange", "orange2026")
+
+	rep, _ := h.appel(http.MethodPost, "/api/gateway/v1/incidents/gateway", jeton,
+		map[string]any{"commentaire": "timeout 1"})
+	require.Equal(t, http.StatusCreated, rep.StatusCode)
+
+	rep, _ = h.appel(http.MethodPost, "/api/gateway/v1/incidents/gateway", jeton,
+		map[string]any{"commentaire": "timeout 2"})
+	require.Equal(t, http.StatusCreated, rep.StatusCode)
+}
+
 func TestMesIncidentsSontCloisonnesParSegmentEtParOperateur(t *testing.T) {
 	h := nouveauHarnais(t)
 	h.appel(http.MethodPost, "/api/gateway/v1/incidents/gateway",
