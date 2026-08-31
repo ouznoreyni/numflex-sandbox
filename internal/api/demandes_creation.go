@@ -17,6 +17,7 @@ import (
 func (d *Deps) routesCreation(g *gin.RouterGroup) {
 	g.POST("/demandes/particulier", d.postDemandeParticulier)
 	g.POST("/demandes/entreprise", d.postDemandeEntreprise)
+	g.POST("/demandes/restitution", d.postDemandeRestitution)
 }
 
 type clientDTO struct {
@@ -376,4 +377,90 @@ func validerEntreprise(r reqEntreprise) []apperr.FieldError {
 		})
 	}
 	return champs
+}
+
+// --- Restitution -------------------------------------------------------------
+
+type reqRestitution struct {
+	Numero string `json:"numero"`
+}
+
+func (d *Deps) postDemandeRestitution(c *gin.Context) {
+	var req reqRestitution
+	if err := c.ShouldBindJSON(&req); err != nil {
+		d.R.Fail(c, apperr.FormatJSONInvalide())
+		return
+	}
+	if !motifMSISDN.MatchString(req.Numero) {
+		d.R.Fail(c, apperr.Validation(apperr.FieldError{
+			ObjectName: "demandeRestitutionDTO", Field: "numero",
+			Message: "doit correspondre à \"^[0-9]{9}$\"",
+		}))
+		return
+	}
+
+	etat, err := d.etatNumero(c, req.Numero)
+	if err != nil {
+		d.R.Fail(c, err)
+		return
+	}
+
+	// [HYP] Le guide ne tranche pas la répartition des rôles sur une restitution ;
+	// le projet a choisi que l'appelant doit être l'opérateur d'origine du numéro
+	// et devient destinataire (il récupère le numéro). Voir §9.4 de la spec.
+	appelant := Appelant(c)
+	if etat.OperateurOrigineID != appelant.OperateurID {
+		d.R.Fail(c, apperr.DemandeAccesRefuse(
+			"Seul l'opérateur d'origine du numéro peut demander sa restitution."))
+		return
+	}
+
+	if e := domain.VerifierEligibiliteRestitution(etat, domain.DelaiAvantRestitution); e != nil {
+		d.R.Fail(c, e)
+		return
+	}
+
+	id := oid.New()
+	maintenant := time.Now()
+
+	tx, err2 := d.DB.Pool.Begin(c)
+	if err2 != nil {
+		d.R.Fail(c, apperr.ErreurInterne("ouverture de transaction"))
+		return
+	}
+	defer tx.Rollback(c)
+
+	// operateur_source_id = détenteur actuel (il rend le numéro) ;
+	// operateur_destinataire_id = createur_operateur_id = opérateur d'origine
+	// (appelant, il récupère le numéro). routage_info et processus restent NULL :
+	// une restitution n'a ni prefixe de routage ni dimension PREPAID/POSTPAID
+	// avant sa COMPLETION.
+	if _, err := tx.Exec(c,
+		`INSERT INTO demande
+		   (id, numero, type_abonne, type_demande, statut_demande, etape_actuelle,
+		    statut_etape_actuel, operateur_source_id, operateur_destinataire_id,
+		    createur_operateur_id, date_demande, date_debut_etape)
+		 VALUES ($1,$2,'PARTICULIER','RESTITUTION','EN_COURS','ACCEPTATION','EN_COURS',
+		         $3,$4,$4,$5,$5)`,
+		id, req.Numero, etat.OperateurActuelID, etat.OperateurOrigineID, maintenant); err != nil {
+		d.R.Fail(c, apperr.ErreurInterne("création de la demande"))
+		return
+	}
+	if _, err := tx.Exec(c,
+		`INSERT INTO demande_numero (demande_id, numero, statut)
+		 VALUES ($1,$2,'EN_COURS')`, id, req.Numero); err != nil {
+		d.R.Fail(c, apperr.ErreurInterne("enregistrement du numéro"))
+		return
+	}
+	if err := tx.Commit(c); err != nil {
+		d.R.Fail(c, apperr.ErreurInterne("validation de la transaction"))
+		return
+	}
+
+	dto, err3 := d.demandeDTO(c, id)
+	if err3 != nil {
+		d.R.Fail(c, apperr.ErreurInterne("relecture de la demande"))
+		return
+	}
+	d.R.OK(c, http.StatusCreated, "Demande de restitution créée avec succès", dto)
 }
