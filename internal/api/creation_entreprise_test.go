@@ -1,0 +1,130 @@
+package api
+
+import (
+	"context"
+	"net/http"
+	"testing"
+
+	"github.com/stretchr/testify/require"
+	"github.com/yas/numflex-sandbox/internal/seed"
+)
+
+func corpsEntreprise(porteur string, flotte []string) map[string]any {
+	return map[string]any{
+		"numeroPorteurFlotte":     porteur,
+		"otpCode":                 "123456",
+		"operateurSourceId":       seed.OperateurOrange,
+		"operateurDestinataireId": seed.OperateurYAS,
+		"typePortabilite":         "POSTPAID",
+		"numerosFlotte":           flotte,
+		"client": map[string]any{
+			"raisonSociale": "Entreprise SARL", "numRC": "123456789",
+			"prenom": "Ousmane", "nom": "Diallo", "dateNaissance": "1975-03-20",
+			"typePiece": "CNI", "numeroPiece": "1234567890123",
+		},
+	}
+}
+
+func TestFlotteNominale(t *testing.T) {
+	h := nouveauHarnais(t)
+	jeton := h.jeton("yas", "yas2026")
+	h.appel(http.MethodPost, "/api/gateway/v1/otp/send", jeton,
+		map[string]any{"numero": "771000001"})
+
+	rep, corps := h.appel(http.MethodPost, "/api/gateway/v1/demandes/entreprise", jeton,
+		corpsEntreprise("771000001", []string{"771000001", "771000002", "771000003"}))
+
+	require.Equal(t, http.StatusCreated, rep.StatusCode, corps)
+	require.Equal(t, "Demande flotte créée", corps["message"])
+
+	data := corps["data"].(map[string]any)
+	demande := data["demande"].(map[string]any)
+	require.Equal(t, "ENTREPRISE", demande["typeAbonne"])
+	require.Equal(t, "ACCEPTATION", demande["etapeActuelle"])
+	require.Equal(t, float64(3), data["numerosPortesCount"])
+	require.Equal(t, float64(0), data["numerosExclusCount"])
+}
+
+func TestFlotteExclusionPartielle(t *testing.T) {
+	// BR-006 / invariant 11 : la flotte réussit avec moins de numéros que demandé.
+	h := nouveauHarnais(t)
+	h.creerPortage("771000009") // ce numéro a désormais une demande en cours
+
+	jeton := h.jeton("yas", "yas2026")
+	h.appel(http.MethodPost, "/api/gateway/v1/otp/send", jeton,
+		map[string]any{"numero": "771000001"})
+
+	rep, corps := h.appel(http.MethodPost, "/api/gateway/v1/demandes/entreprise", jeton,
+		corpsEntreprise("771000001", []string{"771000001", "771000002", "771000009"}))
+
+	require.Equal(t, http.StatusCreated, rep.StatusCode)
+	data := corps["data"].(map[string]any)
+	require.Equal(t, float64(2), data["numerosPortesCount"])
+	require.Equal(t, float64(1), data["numerosExclusCount"])
+	require.Equal(t, "1 numéro(s) exclu(s) de la demande.", data["avertissement"])
+
+	exclus := data["numerosExclus"].([]any)
+	require.Len(t, exclus, 1)
+	premier := exclus[0].(map[string]any)
+	require.Equal(t, "771000009", premier["numero"])
+	require.Equal(t, "Demande déjà en cours pour ce numéro", premier["raison"])
+	require.Equal(t, "DEMANDE_EN_COURS_POUR_NUMERO", premier["codeErreur"])
+}
+
+func TestFlotteVide(t *testing.T) {
+	h := nouveauHarnais(t)
+	jeton := h.jeton("yas", "yas2026")
+	h.appel(http.MethodPost, "/api/gateway/v1/otp/send", jeton,
+		map[string]any{"numero": "771000001"})
+
+	rep, corps := h.appel(http.MethodPost, "/api/gateway/v1/demandes/entreprise", jeton,
+		corpsEntreprise("771000001", []string{}))
+
+	require.Equal(t, http.StatusBadRequest, rep.StatusCode)
+	require.Contains(t, corps, "fieldErrors")
+}
+
+func TestFlotteOperateursMixtes(t *testing.T) {
+	h := nouveauHarnais(t)
+	jeton := h.jeton("yas", "yas2026")
+	h.appel(http.MethodPost, "/api/gateway/v1/otp/send", jeton,
+		map[string]any{"numero": "771000001"})
+
+	rep, _ := h.appel(http.MethodPost, "/api/gateway/v1/demandes/entreprise", jeton,
+		corpsEntreprise("771000001", []string{"771000001", "701000001"}))
+
+	require.Equal(t, http.StatusInternalServerError, rep.StatusCode)
+}
+
+func TestFlotteAucunNumeroEligible(t *testing.T) {
+	h := nouveauHarnais(t)
+	jeton := h.jeton("yas", "yas2026")
+	h.appel(http.MethodPost, "/api/gateway/v1/otp/send", jeton,
+		map[string]any{"numero": "772000001"})
+
+	// Tranche 772 : portée il y a 30 jours, donc sous le délai de 3 mois.
+	rep, corps := h.appel(http.MethodPost, "/api/gateway/v1/demandes/entreprise", jeton,
+		corpsEntreprise("772000001", []string{"772000001", "772000002"}))
+
+	require.Equal(t, http.StatusInternalServerError, rep.StatusCode)
+	require.Equal(t, "RuntimeException: Aucun numéro de la flotte n'est éligible au portage",
+		corps["detail"])
+
+	var n int
+	require.NoError(t, h.db.Pool.QueryRow(context.Background(),
+		"SELECT count(*) FROM demande").Scan(&n))
+	require.Equal(t, 0, n, "aucune demande ne doit être créée")
+}
+
+func TestFlotteUnSeulOTPCouvreToutLaFlotte(t *testing.T) {
+	h := nouveauHarnais(t)
+	jeton := h.jeton("yas", "yas2026")
+	// OTP envoyé uniquement sur le porteur.
+	h.appel(http.MethodPost, "/api/gateway/v1/otp/send", jeton,
+		map[string]any{"numero": "771000001"})
+
+	rep, _ := h.appel(http.MethodPost, "/api/gateway/v1/demandes/entreprise", jeton,
+		corpsEntreprise("771000001", []string{"771000001", "771000002", "771000003"}))
+
+	require.Equal(t, http.StatusCreated, rep.StatusCode)
+}

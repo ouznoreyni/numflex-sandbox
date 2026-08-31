@@ -42,7 +42,7 @@ func OperateurSourceIncorrect() *Error {
 
 func DemandeEnCoursPourNumero() *Error {
 	return New(KindEtat, "DEMANDE_EN_COURS_POUR_NUMERO",
-		"Une demande est déjà en cours pour ce numéro")
+		"Demande déjà en cours pour ce numéro")
 }
 
 // DelaiPortageNonRespecte — ANO-002 : la couche de validation est franchie et
