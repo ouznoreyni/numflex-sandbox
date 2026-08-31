@@ -200,3 +200,47 @@ func TestIncidentGatewayNeGelePas(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, gelee)
 }
+
+func TestTransfertRegistreExclutNumerosExclusEtRejetes(t *testing.T) {
+	// Un filtre qui disparaîtrait dans transfererAuRegistre ou recalculerRoutage
+	// transférerait — ou routerait vers le destinataire — un numéro rejeté :
+	// un défaut grave dans un système de portabilité.
+	e, db := moteur(t)
+	insererDemande(t, db, "d1", domain.EtapeActivation, time.Second)
+
+	_, err := db.Pool.Exec(context.Background(),
+		`INSERT INTO demande_numero (demande_id, numero, statut, exclu)
+		 VALUES ('d1','771000002','EN_COURS', true)`)
+	require.NoError(t, err)
+	_, err = db.Pool.Exec(context.Background(),
+		`INSERT INTO demande_numero (demande_id, numero, statut, exclu)
+		 VALUES ('d1','771000003','REJETE', false)`)
+	require.NoError(t, err)
+
+	require.NoError(t, e.PlanifierTransition(context.Background(), "d1"))
+	require.NoError(t, e.Tick(context.Background()))
+
+	operateurActuel := func(msisdn string) string {
+		var op string
+		require.NoError(t, db.Pool.QueryRow(context.Background(),
+			`SELECT operateur_actuel_id FROM numero WHERE msisdn = $1`, msisdn).Scan(&op))
+		return op
+	}
+	routageNumero := func(msisdn string) string {
+		var routage string
+		require.NoError(t, db.Pool.QueryRow(context.Background(),
+			`SELECT routage_info FROM demande_numero WHERE demande_id = 'd1' AND numero = $1`, msisdn).Scan(&routage))
+		return routage
+	}
+
+	// Le numéro normal a bien changé d'opérateur et porte le préfixe destinataire.
+	require.Equal(t, seed.OperateurYAS, operateurActuel("771000001"))
+	require.Equal(t, "192", routageNumero("771000001"))
+
+	// L'exclu et le rejeté restent chez l'opérateur source et portent son préfixe.
+	require.Equal(t, seed.OperateurOrange, operateurActuel("771000002"), "un numéro exclu ne doit pas être transféré")
+	require.Equal(t, "191", routageNumero("771000002"))
+
+	require.Equal(t, seed.OperateurOrange, operateurActuel("771000003"), "un numéro rejeté ne doit pas être transféré")
+	require.Equal(t, "191", routageNumero("771000003"))
+}
