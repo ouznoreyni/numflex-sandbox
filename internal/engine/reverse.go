@@ -111,26 +111,48 @@ func (e *Engine) validerReversesAutomatiquement(ctx context.Context) error {
 // completerReversesConfirmes : la COMPLETION d'un REVERSE est réservée à l'ARTP.
 // Aucun endpoint ne l'expose ; c'est le moteur qui la prononce une fois que tous
 // les opérateurs ont confirmé.
+//
+// Cette fonction doit aussi rattraper une demande REVERSE déjà à COMPLETION :
+// postAConfirmer est agnostique du type de demande, et quand la dernière
+// confirmation tombe, il planifie une transition générique via
+// PlanifierTransition. Au tick suivant, appliquerConvergencesDues s'exécute
+// avant cette fonction et fait passer la demande de CONFIRMATION à COMPLETION
+// par le chemin commun, en remettant transition_prevue_a à NULL — puisque la
+// COMPLETION d'un REVERSE n'appartient à aucun opérateur, plus aucun endpoint
+// ne peut la faire avancer ensuite. Sans ce rattrapage, la demande reste
+// figée à COMPLETION/EN_COURS pour toujours. La branche CONFIRMATION reste
+// nécessaire : elle sert quand validerReversesAutomatiquement amène une
+// demande jusqu'ici sans jamais passer par postAConfirmer (toutes les
+// confirmations peuvent avoir été enregistrées avant que la dernière ne
+// déclenche la planification, ou la demande peut n'avoir encore aucune
+// transition planifiée).
 func (e *Engine) completerReversesConfirmes(ctx context.Context) error {
 	rows, err := e.db.Pool.Query(ctx,
-		`SELECT d.id FROM demande d
+		`SELECT d.id, d.etape_actuelle FROM demande d
 		  WHERE d.type_demande = 'REVERSE'
 		    AND d.statut_demande = 'EN_COURS'
-		    AND d.etape_actuelle = 'CONFIRMATION'
 		    AND d.transition_prevue_a IS NULL
-		    AND (SELECT count(*) FROM confirmation c WHERE c.demande_id = d.id)
-		        >= (SELECT count(*) FROM operateur)`)
+		    AND (
+		         d.etape_actuelle = 'COMPLETION'
+		      OR (d.etape_actuelle = 'CONFIRMATION'
+		          AND (SELECT count(*) FROM confirmation c WHERE c.demande_id = d.id)
+		              >= (SELECT count(*) FROM operateur))
+		    )`)
 	if err != nil {
 		return err
 	}
-	ids := []string{}
+	type ligne struct {
+		id    string
+		etape string
+	}
+	lignes := []ligne{}
 	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
+		var l ligne
+		if err := rows.Scan(&l.id, &l.etape); err != nil {
 			rows.Close()
 			return err
 		}
-		ids = append(ids, id)
+		lignes = append(lignes, l)
 	}
 	if err := rows.Err(); err != nil {
 		rows.Close()
@@ -138,12 +160,16 @@ func (e *Engine) completerReversesConfirmes(ctx context.Context) error {
 	}
 	rows.Close()
 
-	for _, id := range ids {
-		// CONFIRMATION → COMPLETION, puis COMPLETION → TERMINE.
-		if err := e.AppliquerTransition(ctx, id, "ACTION"); err != nil {
-			return err
+	for _, l := range lignes {
+		// Depuis CONFIRMATION : CONFIRMATION → COMPLETION, puis COMPLETION →
+		// TERMINE. Depuis COMPLETION (déjà atteinte par la convergence
+		// générique) : une seule transition suffit, COMPLETION → TERMINE.
+		if l.etape == "CONFIRMATION" {
+			if err := e.AppliquerTransition(ctx, l.id, "ACTION"); err != nil {
+				return err
+			}
 		}
-		if err := e.AppliquerTransition(ctx, id, "ACTION"); err != nil {
+		if err := e.AppliquerTransition(ctx, l.id, "ACTION"); err != nil {
 			return err
 		}
 	}
