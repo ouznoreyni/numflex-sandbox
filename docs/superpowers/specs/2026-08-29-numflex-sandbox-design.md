@@ -383,14 +383,19 @@ exécutée. Ni rejet, ni avertissement, dans les deux modes de fidélité.
 
 ### 9.2 Création particulier
 
-Contrôles, dans l'ordre :
+Contrôles, dans l'ordre. **Cet ordre est une décision de conception, non une mesure** — ni le
+guide ni la recette ne le fixent :
 
 1. Validation de forme → `400 fieldErrors`. `client.lieuNaissance` est **obligatoire** malgré le
    guide (ANO-010, TC-050).
-2. OTP valide et non consommé.
-3. `operateurDestinataireId` == opérateur du jeton, sinon `DEMANDE_ACCES_REFUSE`.
-4. Le numéro appartient à `operateurSourceId`, sinon `OPERATEUR_SOURCE_INCORRECT`.
-5. Le numéro n'est pas déjà chez le destinataire → `NUMERO_DEJA_CHEZ_DESTINATAIRE`.
+2. `operateurDestinataireId` == opérateur du jeton, sinon `DEMANDE_ACCES_REFUSE`. **Avant l'OTP** :
+   sans cela, un opérateur pourrait sonder la validité d'un OTP portant sur le numéro d'un tiers
+   et en consommer les tentatives.
+3. OTP valide et non consommé.
+4. Le numéro n'est pas déjà chez le destinataire → `NUMERO_DEJA_CHEZ_DESTINATAIRE`. **Avant le
+   contrôle de source** : les deux conditions sont vraies simultanément dans ce cas, et celle-ci
+   est le diagnostic le plus spécifique.
+5. Le numéro appartient à `operateurSourceId`, sinon `OPERATEUR_SOURCE_INCORRECT`.
 6. Aucune demande en cours pour ce numéro → `DEMANDE_EN_COURS_POUR_NUMERO`.
 7. Dernier portage > 3 mois → sinon **ANO-002** (`500 Unexpected runtime exception`).
 
