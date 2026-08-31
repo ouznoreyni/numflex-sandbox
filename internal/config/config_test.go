@@ -8,6 +8,14 @@ import (
 )
 
 func TestLoadDefauts(t *testing.T) {
+	// make test exporte le profil CI pour toute la suite ; ce test-ci porte sur
+	// les valeurs par défaut, il neutralise donc ces variables.
+	for _, clef := range []string{
+		"ETAPE_TIMEOUT_SECONDS", "CONVERGENCE_MIN_SECONDS", "CONVERGENCE_MAX_SECONDS",
+		"COMPLETION_LATENCY_MS", "CLOCK_SKEW_SECONDS",
+	} {
+		t.Setenv(clef, "")
+	}
 	t.Setenv("DATABASE_URL", "postgres://x")
 
 	c, err := Load()
