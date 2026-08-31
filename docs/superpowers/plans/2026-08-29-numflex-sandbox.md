@@ -6,13 +6,16 @@
 
 **Architecture:** Un binaire serveur Gin exposant exactement les 33 routes du contrat et rien d'autre, une couche d'erreur unique rendue selon deux modes de fidélité commutables (`real` reproduit les anomalies mesurées, `contract` respecte le guide), et un moteur en goroutine qui fait avancer les demandes sans qu'aucun opérateur n'agisse. PostgreSQL porte un registre national des numéros qui rend les règles d'éligibilité réellement calculables.
 
-**Tech Stack:** Go 1.22+, Gin, pgx/v5, golang-migrate, golang-jwt/v5, bcrypt, testify, PostgreSQL 16, Docker Compose.
+**Tech Stack:** Go 1.24+, Gin, pgx/v5, golang-migrate, golang-jwt/v5, bcrypt, testify, PostgreSQL 16, Docker Compose.
 
 **Spec:** `docs/superpowers/specs/2026-08-29-numflex-sandbox-design.md`
 
 ## Global Constraints
 
-- **Module Go** : `github.com/yas/numflex-sandbox`. Go 1.22 minimum.
+- **Module Go** : `github.com/yas/numflex-sandbox`. La directive `go` de `go.mod` suit ce
+  qu'exigent les dépendances courantes — elle vaut `1.24` après la Task 1 et monte à `1.25`
+  dès qu'une tâche importe gin, pgx ou x/crypto. Ne jamais épingler une dépendance à une
+  version ancienne dans le seul but de tenir un plancher plus bas.
 - **Aucune route HTTP hors des 33 du §4 de la spec.** Pas d'endpoint d'administration, de santé, de metrics, de debug. Ajouter une route hors liste est un échec de tâche.
 - **`internal/domain` ne consulte jamais le mode de fidélité** et n'importe ni `gin`, ni `pgx`, ni `httpx`. Le mode de fidélité n'existe que dans `internal/httpx`.
 - **Toutes les erreurs renvoyées par `domain` et `store` sont des `*apperr.Error`.** Aucun `errors.New` nu ne remonte jusqu'au handler.
