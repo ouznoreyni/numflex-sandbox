@@ -24,7 +24,9 @@
 - **Défauts de configuration** : `FIDELITY=real`, `ETAPE_TIMEOUT_SECONDS=349`, `ENGINE_TICK_SECONDS=10`, `CONVERGENCE_MIN_SECONDS=60`, `CONVERGENCE_MAX_SECONDS=360`, `COMPLETION_LATENCY_MS=30500`, `CLOCK_SKEW_SECONDS=540`, `OTP_STATIC_CODE=123456`, `OTP_TTL_SECONDS=300`, `OTP_MAX_ATTEMPTS=3`, `REVERSE_AUTO_VALIDATION_SECONDS=0`, `JWT_TTL_HOURS=24`.
 - **Les tests d'intégration tournent avec le profil CI** : `ETAPE_TIMEOUT_SECONDS=0`, `CONVERGENCE_MIN_SECONDS=0`, `CONVERGENCE_MAX_SECONDS=0`, `COMPLETION_LATENCY_MS=0`, `CLOCK_SKEW_SECONDS=0`, sauf mention contraire explicite dans la tâche.
 - **Base de test** : `postgres://numflex:numflex@localhost:5433/numflex_test?sslmode=disable`, servie par le service `postgres-test` du `docker-compose.yml`. Chaque test d'intégration tronque toutes les tables métier puis rejoue le seed.
-- **Commits** : un par tâche minimum, message en français, préfixe conventionnel (`feat:`, `test:`, `chore:`).
+- **Commits** : un par tâche minimum, message en français **accentué**, préfixe conventionnel
+  (`feat:`, `test:`, `chore:`). Rédiger le message via `git commit -F -` et un heredoc plutôt
+  que `git commit -m`, pour que les accents et apostrophes survivent au shell.
 
 ---
 
