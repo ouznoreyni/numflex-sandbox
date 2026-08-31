@@ -663,6 +663,9 @@ CREATE TABLE incident (
     id                    TEXT PRIMARY KEY,
     operateur_id          TEXT NOT NULL REFERENCES operateur(id),
     type_incident_id      TEXT NOT NULL REFERENCES type_incident(id),
+    -- Dénormalisé depuis type_incident : un index partiel ne peut pas suivre
+    -- une jointure, et la contrainte du §7.12 ne vise que les incidents internes.
+    fige_systeme          BOOLEAN NOT NULL,
     description           TEXT NOT NULL,
     statut                TEXT NOT NULL,
     date_ouverture        TIMESTAMPTZ NOT NULL,
@@ -670,10 +673,11 @@ CREATE TABLE incident (
     commentaire_resolution TEXT
 );
 
--- Un seul incident interne (fige_systeme) ouvert à la fois par opérateur — §7.12.
+-- Un seul incident INTERNE ouvert à la fois par opérateur — §7.12. Les incidents
+-- gateway ne sont pas limités.
 CREATE UNIQUE INDEX incident_interne_unique_ouvert
-    ON incident (operateur_id, type_incident_id)
-    WHERE statut = 'EN_COURS';
+    ON incident (operateur_id)
+    WHERE statut = 'EN_COURS' AND fige_systeme;
 ```
 
 Create `migrations/0001_init.down.sql` : `DROP TABLE` de toutes les tables ci-dessus dans l'ordre inverse des dépendances.
@@ -3328,8 +3332,9 @@ func TestPlaceGeleeSuspendLeMoteur(t *testing.T) {
 	insererDemande(t, db, "d1", domain.EtapeAcceptation, time.Second)
 
 	_, err := db.Pool.Exec(context.Background(),
-		`INSERT INTO incident (id, operateur_id, type_incident_id, description, statut, date_ouverture)
-		 VALUES ('i1',$1,$2,'panne','EN_COURS',now())`,
+		`INSERT INTO incident (id, operateur_id, type_incident_id, fige_systeme,
+		                       description, statut, date_ouverture)
+		 VALUES ('i1',$1,$2,true,'panne','EN_COURS',now())`,
 		seed.OperateurExpresso, seed.TypeIncidentTechnique)
 	require.NoError(t, err)
 
@@ -3346,8 +3351,9 @@ func TestPlaceGeleeSuspendLeMoteur(t *testing.T) {
 func TestIncidentGatewayNeGelePas(t *testing.T) {
 	e, db := moteur(t)
 	_, err := db.Pool.Exec(context.Background(),
-		`INSERT INTO incident (id, operateur_id, type_incident_id, description, statut, date_ouverture)
-		 VALUES ('i1',$1,$2,'timeout','EN_COURS',now())`,
+		`INSERT INTO incident (id, operateur_id, type_incident_id, fige_systeme,
+		                       description, statut, date_ouverture)
+		 VALUES ('i1',$1,$2,false,'timeout','EN_COURS',now())`,
 		seed.OperateurYAS, seed.TypeIncidentGateway)
 	require.NoError(t, err)
 
@@ -3734,8 +3740,8 @@ git commit -m "feat: moteur d expiration, de convergence differee et de transiti
 
 **Files:**
 - Create: `internal/domain/eligibilite.go`, `internal/domain/eligibilite_test.go`
-- Create: `internal/api/demandes_creation.go`, `internal/api/creation_particulier_test.go`
-- Create: `internal/api/dto.go`
+- Modify: `internal/api/demandes_creation.go` (remplace le stub créé en Task 5)
+- Create: `internal/api/creation_particulier_test.go`, `internal/api/dto.go`
 
 **Interfaces:**
 - Consumes: `domain`, `Deps`, `verifierOTP`, `oid`.
@@ -4103,10 +4109,11 @@ import (
 	"github.com/yas/numflex-sandbox/internal/oid"
 )
 
+// routesCreation est complétée au fil des tâches : /demandes/entreprise en
+// Task 11, /demandes/restitution en Task 12. Ne câbler ici que ce qui existe,
+// sinon le paquet ne compile pas à la fin de cette tâche.
 func (d *Deps) routesCreation(g *gin.RouterGroup) {
 	g.POST("/demandes/particulier", d.postDemandeParticulier)
-	g.POST("/demandes/entreprise", d.postDemandeEntreprise)   // Task 11
-	g.POST("/demandes/restitution", d.postDemandeRestitution) // Task 12
 }
 
 type clientDTO struct {
@@ -4430,7 +4437,8 @@ Expected: FAIL.
 
 - [ ] **Step 3 : Implémenter la création flotte**
 
-Modify `internal/api/demandes_creation.go` — ajouter `reqEntreprise` (`numeroPorteurFlotte`, `otpCode`, `operateurSourceId`, `operateurDestinataireId`, `typePortabilite`, `numerosFlotte []string`, `client`) et `postDemandeEntreprise`, dans cet ordre :
+Modify `internal/api/demandes_creation.go` — ajouter la ligne
+`g.POST("/demandes/entreprise", d.postDemandeEntreprise)` à `routesCreation`, puis `reqEntreprise` (`numeroPorteurFlotte`, `otpCode`, `operateurSourceId`, `operateurDestinataireId`, `typePortabilite`, `numerosFlotte []string`, `client`) et `postDemandeEntreprise`, dans cet ordre :
 
 1. Validation de forme ; `numerosFlotte` vide → `apperr.Validation` sur le champ `numerosFlotte`, message `ne doit pas être vide`.
 2. L'appelant doit être le destinataire.
@@ -4577,7 +4585,9 @@ Expected: FAIL.
 
 - [ ] **Step 3 : Implémenter la restitution**
 
-Modify `internal/api/demandes_creation.go` — `postDemandeRestitution` :
+Modify `internal/api/demandes_creation.go` — ajouter la ligne
+`g.POST("/demandes/restitution", d.postDemandeRestitution)` à `routesCreation`, puis
+`postDemandeRestitution` :
 
 1. Corps `{ "numero": "..." }` uniquement ; format 9 chiffres sinon `apperr.Validation`.
 2. Lire l'état du numéro.
@@ -4823,7 +4833,7 @@ func (d *Deps) routesLecture(g *gin.RouterGroup) {
 }
 ```
 
-Attention : Gin refuse de router `GET /demandes/a-confirmer` et `POST /demandes/a-confirmer` sur des paramètres différents s'ils entrent en conflit avec `/demandes/:id/...`. Comme le contrat impose **à la fois** `/demandes/a-confirmer/:id` et `/demandes/:id/acceptation`, déclarer les segments littéraux (`a-accepter`, `a-traiter`, `a-confirmer`, `particulier`, `entreprise`, `restitution`, `acceptation`, `traitement`, `deja-confirmees`, `in`, `out`) **avant** les routes paramétrées, et vérifier au lancement des tests que Gin ne panique pas sur un conflit de wildcard. Si Gin refuse la coexistence, monter les routes `/demandes/:id/acceptation` et `/demandes/:id/annuler` via un `gin.RouterGroup` distinct utilisant `NoRoute` n'est pas acceptable ; la solution retenue est de déclarer un seul paramètre nommé `:id` sur ce niveau et de router à la main dans le handler quand `id` vaut un segment littéral.
+Le contrat impose de faire coexister des segments littéraux (`a-accepter`, `a-confirmer`, `in`, `out`…) et un paramètre (`/demandes/:id/acceptation`, `/demandes/:id/annuler`) au même niveau d'URL. **Gin le supporte nativement** — vérifié en enregistrant les dix routes concernées : aucune panique, le littéral l'emporte sur le paramètre au routage. Aucun contournement n'est nécessaire.
 
 Chaque liste applique son filtre :
 
@@ -5401,6 +5411,10 @@ func TestChampEtapeAccepteEtIgnoreEnSilence(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, rep.StatusCode, "ni rejet, ni avertissement")
 
+	// La ligne d'historique est écrite par le moteur au moment de la transition,
+	// pas par le handler — il faut donc converger avant de la lire (R-10).
+	h.converger()
+
 	var etape, statut string
 	require.NoError(t, h.db.Pool.QueryRow(context.Background(),
 		`SELECT etape, statut FROM etape_historique WHERE demande_id = $1`, id).
@@ -5853,7 +5867,7 @@ Expected: FAIL.
 Create `internal/api/incidents.go` — six routes, deux familles partageant la même logique paramétrée par `figeSysteme` :
 
 1. `POST /incidents/gateway` et `POST /incidents/interne` : corps `{commentaire}` uniquement. Le type est résolu par `SELECT id, libelle FROM type_incident WHERE fige_systeme = $1 LIMIT 1` ; tout `typeIncidentId` présent dans le corps est ignoré.
-2. Pour le segment interne, un incident `EN_COURS` déjà ouvert chez l'appelant → `apperr.EtapeInvalide("Un incident interne est déjà ouvert pour votre opérateur.")` (l'index unique partiel de la migration le garantit aussi côté base).
+2. La colonne `incident.fige_systeme` est renseignée depuis le type résolu. Pour le segment interne uniquement, un incident `EN_COURS` déjà ouvert chez l'appelant → `apperr.EtapeInvalide("Un incident interne est déjà ouvert pour votre opérateur.")` — l'index unique partiel de la migration le garantit aussi côté base. Le segment gateway n'est soumis à aucune limite de ce genre.
 3. Réponse `201`, message `Incident déclaré avec succès`, `data` = `{id, typeIncidentId, type, figeSysteme, description, statut, dateOuverture, operateur{id,nom}}`.
 4. `POST /incidents/{gateway|interne}/:id/resoudre` : incident inexistant → `apperr.DemandeNonTrouvee()` avec le message `Incident introuvable` ; déclarant différent de l'appelant → `apperr.DemandeAccesRefuse("Seul l'opérateur ayant déclaré l'incident peut le résoudre.")` ; mauvais segment → `apperr.Validation(apperr.FieldError{ObjectName:"incidentDTO", Field:"id", Message:"Cet incident se résout via POST /api/gateway/v1/incidents/interne/{id}/resoudre"})` (ou `/gateway/` selon le cas). Sinon `statut='RESOLU'`, `date_resolution=now()`, `commentaire_resolution`. Réponse `200`, message `Incident résolu avec succès`.
 5. `GET /incidents/{gateway|interne}/mes-incidents` : incidents de l'appelant dans le segment, tous statuts. Ces deux listes **acceptent** `page` et `size` (défauts `0` et `20`) — contrairement aux listes de demandes.
