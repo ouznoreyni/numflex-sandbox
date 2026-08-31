@@ -86,9 +86,13 @@ func (e *Engine) PlanifierTransition(ctx context.Context, demandeID string) erro
 	if ecart := e.cfg.ConvergenceMax - e.cfg.ConvergenceMin; ecart > 0 {
 		delai += time.Duration(rand.Int63n(int64(ecart)))
 	}
+	// L'échéance est calculée par la base, pas par Go : c'est le now() de
+	// Postgres qui la relira dans appliquerConvergencesDues, et deux horloges
+	// pour une même comparaison produisent une intermittence (le conteneur
+	// Postgres et le process Go ne s'accordent pas à la milliseconde près).
 	_, err := e.db.Pool.Exec(ctx,
-		`UPDATE demande SET transition_prevue_a = $2 WHERE id = $1`,
-		demandeID, time.Now().Add(delai))
+		`UPDATE demande SET transition_prevue_a = now() + make_interval(secs => $2)
+		  WHERE id = $1`, demandeID, delai.Seconds())
 	return err
 }
 
