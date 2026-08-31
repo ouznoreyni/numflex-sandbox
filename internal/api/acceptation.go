@@ -66,6 +66,21 @@ func (d *Deps) postAcceptation(c *gin.Context) {
 		d.R.Fail(c, err)
 		return
 	}
+	// Le brief l'énonce sans condition : un motifRejetId renseigné doit exister,
+	// que la demande soit acceptée ou rejetée. Un identifiant valide envoyé
+	// inutilement avec accepte:true continue de passer — seul un identifiant
+	// inconnu est refusé.
+	if req.MotifRejetID != "" {
+		existe, err := d.motifExiste(c, req.MotifRejetID)
+		if err != nil {
+			d.R.Fail(c, apperr.ErreurInterne("vérification du motif de rejet"))
+			return
+		}
+		if !existe {
+			d.R.Fail(c, apperr.ValidationEchouee("Motif de rejet inconnu"))
+			return
+		}
+	}
 
 	if !req.Accepte {
 		d.traiterRejetDemande(c, dm.ID, req.MotifRejetID, req.Commentaire)
@@ -108,6 +123,19 @@ func (d *Deps) postAcceptationFlotte(c *gin.Context) {
 	if err := domain.PeutAccepter(dm, Appelant(c).OperateurID); err != nil {
 		d.R.Fail(c, err)
 		return
+	}
+	// Même contrôle inconditionnel que le particulier : un motifRejetId de
+	// premier niveau renseigné doit exister, avant l'embranchement.
+	if req.MotifRejetID != "" {
+		existe, err := d.motifExiste(c, req.MotifRejetID)
+		if err != nil {
+			d.R.Fail(c, apperr.ErreurInterne("vérification du motif de rejet"))
+			return
+		}
+		if !existe {
+			d.R.Fail(c, apperr.ValidationEchouee("Motif de rejet inconnu"))
+			return
+		}
 	}
 
 	// Rejet total : même traitement qu'un particulier, la flotte entière tombe.
@@ -162,8 +190,10 @@ func (d *Deps) postAcceptationFlotte(c *gin.Context) {
 		}
 	}
 
-	// Si le rejet partiel a en fait vidé toute la flotte, la demande n'a plus
-	// rien à porter : elle bascule REJETE elle aussi, sans transition à planifier.
+	// [HYP] Le guide ne dit nulle part ce qu'il advient d'une flotte rejetée
+	// numéro par numéro jusqu'à épuisement complet ; ni mesuré au SIT, ni fixé
+	// par un test. Le projet a choisi que la demande n'a alors plus rien à
+	// porter et bascule REJETE elle aussi, sans transition à planifier.
 	var resteEligible bool
 	if err := tx.QueryRow(c,
 		`SELECT EXISTS (SELECT 1 FROM demande_numero WHERE demande_id = $1 AND statut <> 'REJETE')`,
