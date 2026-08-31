@@ -137,7 +137,7 @@ type Error struct {
 
 Reproduit ANO-001, ANO-003, ANO-004, ANO-008, ANO-016.
 
-**`Kind == Validation` → HTTP 400**
+**`Kind == Validation` avec `Fields` → HTTP 400**
 
 ```json
 {
@@ -154,6 +154,26 @@ Reproduit ANO-001, ANO-003, ANO-004, ANO-008, ANO-016.
 ```
 
 `Content-Type: application/problem+json`.
+
+**`Kind == Validation` sans `Fields` → HTTP 400, autre forme**
+
+Une pile Spring/JHipster ne répond jamais `constraint-violation` avec un `fieldErrors` vide :
+ce corps est produit par l'échec d'une validation de bean, qui produit toujours au moins un
+champ. Une erreur de validation sans détail de champ prend donc la forme générique, en
+conservant le statut 400 :
+
+```json
+{
+  "type": "https://www.jhipster.tech/problem/problem-with-message",
+  "title": "Bad Request",
+  "status": 400,
+  "detail": "Le corps de la requête n'est pas un JSON valide",
+  "path": "/api/gateway/v1/demandes/particulier",
+  "message": "error.http.400"
+}
+```
+
+Le préfixe `RuntimeException: ` n'apparaît **pas** ici : c'est la fuite mesurée sur les 500.
 
 **Tout autre `Kind` → HTTP 500**
 
