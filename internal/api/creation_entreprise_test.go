@@ -128,3 +128,34 @@ func TestFlotteUnSeulOTPCouvreToutLaFlotte(t *testing.T) {
 
 	require.Equal(t, http.StatusCreated, rep.StatusCode)
 }
+
+func TestFlotteExclusionLibereLeNumeroPourUneNouvelleDemande(t *testing.T) {
+	// Un numéro exclu d'une flotte ne doit plus être compté comme "en cours" une
+	// fois que la demande qui le bloquait réellement se termine — sinon la ligne
+	// exclue laissée par la flotte elle-même le bloque indéfiniment (Task 13+).
+	h := nouveauHarnais(t)
+	idBlocage := h.creerPortage("771000009") // demande réelle, encore EN_COURS
+
+	jeton := h.jeton("yas", "yas2026")
+	h.appel(http.MethodPost, "/api/gateway/v1/otp/send", jeton,
+		map[string]any{"numero": "771000001"})
+
+	rep, corps := h.appel(http.MethodPost, "/api/gateway/v1/demandes/entreprise", jeton,
+		corpsEntreprise("771000001", []string{"771000001", "771000002", "771000009"}))
+	require.Equal(t, http.StatusCreated, rep.StatusCode, corps)
+	data := corps["data"].(map[string]any)
+	require.Equal(t, float64(1), data["numerosExclusCount"])
+
+	// La demande qui bloquait réellement 771000009 se termine : plus rien ne le
+	// concerne, y compris la ligne exclue de la flotte ci-dessus.
+	_, err := h.db.Pool.Exec(context.Background(),
+		"UPDATE demande SET statut_demande = 'TERMINE' WHERE id = $1", idBlocage)
+	require.NoError(t, err)
+
+	h.appel(http.MethodPost, "/api/gateway/v1/otp/send", jeton,
+		map[string]any{"numero": "771000009"})
+	rep2, corps2 := h.appel(http.MethodPost, "/api/gateway/v1/demandes/particulier", jeton,
+		corpsParticulier("771000009"))
+
+	require.Equal(t, http.StatusCreated, rep2.StatusCode, corps2)
+}

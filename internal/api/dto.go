@@ -88,7 +88,10 @@ func (d *Deps) etatNumero(ctx context.Context, msisdn string) (domain.EtatNumero
 		SELECT EXISTS (
 		  SELECT 1 FROM demande_numero dn
 		    JOIN demande dm ON dm.id = dn.demande_id
-		   WHERE dn.numero = $1 AND dm.statut_demande = 'EN_COURS')`, msisdn).
+		   WHERE dn.numero = $1
+		     AND dm.statut_demande = 'EN_COURS'
+		     AND NOT dn.exclu
+		     AND dn.statut <> 'REJETE')`, msisdn).
 		Scan(&n.DemandeEnCours); err != nil {
 		return domain.EtatNumero{}, apperr.ErreurInterne("lecture des demandes en cours")
 	}
