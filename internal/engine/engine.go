@@ -163,13 +163,3 @@ func (e *Engine) expirerEtapes(ctx context.Context, debutTick time.Time) error {
 	}
 	return nil
 }
-
-// validerReversesAutomatiquement et completerReversesConfirmes sont implémentées
-// en Task 19. Déclarées ici pour que Tick compile et reste complet.
-func (e *Engine) validerReversesAutomatiquement(ctx context.Context) error {
-	return nil
-}
-
-func (e *Engine) completerReversesConfirmes(ctx context.Context) error {
-	return nil
-}
