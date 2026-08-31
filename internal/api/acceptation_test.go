@@ -153,3 +153,17 @@ func TestAcceptationFlotteRejetTotal(t *testing.T) {
 		"SELECT statut_demande FROM demande WHERE id = $1", id).Scan(&statut))
 	require.Equal(t, "REJETE", statut)
 }
+
+func TestAcceptationAccepteAvecMotifRejetInconnuRefuse(t *testing.T) {
+	// Le contrôle d'existence du motifRejetId ne dépend pas de accepte : un
+	// identifiant inconnu est refusé même sur une acceptation.
+	h := nouveauHarnais(t)
+	id := h.creerPortage("771000001")
+
+	rep, corps := h.appel(http.MethodPost, "/api/gateway/v1/demandes/acceptation",
+		h.jeton("orange", "orange2026"),
+		map[string]any{"idDemande": id, "accepte": true, "motifRejetId": "inconnu-000"})
+
+	require.Equal(t, http.StatusBadRequest, rep.StatusCode, corps)
+	require.Equal(t, "Motif de rejet inconnu", corps["detail"])
+}
