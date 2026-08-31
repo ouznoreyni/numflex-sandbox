@@ -68,7 +68,10 @@ consulter `config.Fidelity`.
 
 ## 4. Les routes — périmètre exact
 
-Aucune autre route n'existe. Toute autre URL renvoie le 404 du mode courant.
+Aucune autre route n'existe. Toute autre URL renvoie le 404 du mode courant — pour une requête
+**authentifiée**. L'authentification s'exécute avant le routage, comme les filtres Spring
+Security de la plateforme réelle : une requête non authentifiée sous `/api/gateway/v1` reçoit
+donc son 401 même si le chemin n'existe pas.
 
 ### Authentification — hors préfixe gateway
 
