@@ -2,6 +2,8 @@ package httpx
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -155,4 +157,101 @@ func TestSkew(t *testing.T) {
 
 	sans := NewRenderer(config.FidelityReal, 0)
 	require.Equal(t, base, sans.Skew(base))
+}
+
+func TestRealValidationAvecChampsGardeConstraintViolation(t *testing.T) {
+	c, rec, r := contexte(config.FidelityReal, "/api/gateway/v1/demandes/particulier")
+
+	r.Fail(c, apperr.Validation(apperr.FieldError{
+		ObjectName: "demandeParticulierDTO",
+		Field:      "numero",
+		Message:    "ne doit pas être vide",
+	}))
+
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+	var corps map[string]any
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &corps))
+	require.Equal(t, "https://www.jhipster.tech/problem/constraint-violation", corps["type"])
+	require.Equal(t, "Method argument not valid", corps["title"])
+	require.Equal(t, "error.validation", corps["message"])
+	require.NotContains(t, corps, "code")
+	require.NotEmpty(t, corps["fieldErrors"])
+}
+
+func TestRealValidationSansChampsRendMessagePrecis(t *testing.T) {
+	// Correction revue #1 : sans Fields, la forme constraint-violation ne serait
+	// jamais produite par une pile Spring/JHipster (elle porte toujours au moins un
+	// fieldError). FormatJSONInvalide, FlotteVide, ValidationEchouee(msg) doivent
+	// donc rendre un problem-with-message en 400 qui porte le message métier.
+	c, rec, r := contexte(config.FidelityReal, "/api/gateway/v1/demandes/flotte")
+
+	r.Fail(c, apperr.ValidationEchouee("un message précis"))
+
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+	var corps map[string]any
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &corps))
+	require.Equal(t, "https://www.jhipster.tech/problem/problem-with-message", corps["type"])
+	require.Equal(t, "Bad Request", corps["title"])
+	require.Equal(t, float64(400), corps["status"])
+	require.Equal(t, "un message précis", corps["detail"])
+	require.Equal(t, "error.http.400", corps["message"])
+	require.NotContains(t, corps, "code")
+	require.NotContains(t, corps, "fieldErrors")
+}
+
+func TestFailAvecErreurNilNePaniquePas(t *testing.T) {
+	// Correction revue #2 : un appelant qui fait `return r.Fail(c, err)` avec err
+	// nil ne doit pas transformer la requête en panique récupérée par gin.
+	c, rec, r := contexte(config.FidelityReal, "/x")
+
+	require.NotPanics(t, func() {
+		r.Fail(c, nil)
+	})
+
+	require.Equal(t, http.StatusInternalServerError, rec.Code)
+	require.Equal(t, "application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func TestFailAvecApperrErrorTypeNilNePaniquePas(t *testing.T) {
+	// Correction revue #2 : un *apperr.Error typé nil, emballé dans un error,
+	// fait réussir errors.As avec e == nil ; e.Kind paniquerait sans la garde.
+	c, rec, r := contexte(config.FidelityReal, "/x")
+
+	var e *apperr.Error
+	var err error = e
+
+	require.NotPanics(t, func() {
+		r.Fail(c, err)
+	})
+
+	require.Equal(t, http.StatusInternalServerError, rec.Code)
+	require.Equal(t, "application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func TestFailErreurNueDevient500AvecSonTexte(t *testing.T) {
+	// Correction revue #3 : chemin de repli pour une erreur qui n'est pas un
+	// *apperr.Error.
+	c, rec, r := contexte(config.FidelityReal, "/x")
+
+	r.Fail(c, errors.New("panne imprévue"))
+
+	require.Equal(t, http.StatusInternalServerError, rec.Code)
+	var corps map[string]any
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &corps))
+	require.Equal(t, "RuntimeException: panne imprévue", corps["detail"])
+}
+
+func TestFailErreurEmballeeConserveKindEtMessage(t *testing.T) {
+	// Correction revue #3 : errors.As doit déballer une erreur enveloppée par
+	// fmt.Errorf("...: %w", ...), comme le feront les tâches en aval.
+	c, rec, r := contexte(config.FidelityContract, "/x")
+
+	err := fmt.Errorf("contexte : %w", apperr.DemandeNonTrouvee())
+	r.Fail(c, err)
+
+	require.Equal(t, http.StatusNotFound, rec.Code)
+	var corps map[string]any
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &corps))
+	require.Equal(t, "DEMANDE_NON_TROUVEE", corps["code"])
+	require.Equal(t, "Demande introuvable", corps["message"])
 }

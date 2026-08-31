@@ -49,7 +49,20 @@ type problem struct {
 
 func (r *Renderer) Fail(c *gin.Context, err error) {
 	var e *apperr.Error
-	if !errors.As(err, &e) {
+	trouve := errors.As(err, &e)
+	switch {
+	case trouve && e != nil:
+		// e déjà renseigné : soit err était un *apperr.Error, soit il en
+		// enveloppait un (fmt.Errorf("...: %w", ...)).
+	case err == nil:
+		e = apperr.ErreurInterne("erreur interne")
+	case trouve:
+		// errors.As a réussi sur un *apperr.Error typé nil enveloppé dans err :
+		// err.Error() appellerait la méthode sur ce récepteur nil et paniquerait.
+		e = apperr.ErreurInterne("erreur interne")
+	default:
+		// Pas un *apperr.Error, pas nil : une erreur "normale" en amont ; son
+		// texte devient le message métier du 500.
 		e = apperr.ErreurInterne(err.Error())
 	}
 	if r.fid == config.FidelityContract {
@@ -67,7 +80,9 @@ func (r *Renderer) failReel(c *gin.Context, e *apperr.Error) {
 		chemin = c.Request.URL.Path
 	}
 
-	if e.Kind == apperr.KindValidation {
+	// KindValidation avec Fields : une vraie violation de bean validation Spring,
+	// qui porte toujours au moins un fieldError.
+	if e.Kind == apperr.KindValidation && len(e.Fields) > 0 {
 		c.Header("Content-Type", "application/problem+json")
 		c.JSON(http.StatusBadRequest, problem{
 			Type:        "https://www.jhipster.tech/problem/constraint-violation",
@@ -76,6 +91,29 @@ func (r *Renderer) failReel(c *gin.Context, e *apperr.Error) {
 			Path:        chemin,
 			Message:     "error.validation",
 			FieldErrors: e.Fields,
+		})
+		c.Abort()
+		return
+	}
+
+	// KindValidation sans Fields : une validation métier échouée en dehors de la
+	// couche bean validation (ex. FormatJSONInvalide, FlotteVide, ValidationEchouee).
+	// Une pile Spring/JHipster ne répond jamais constraint-violation avec zéro
+	// fieldErrors ; ce corps-là est un problem-with-message ordinaire en 400, et le
+	// message métier reste lisible (pas de préfixe RuntimeException:, réservé aux 500).
+	if e.Kind == apperr.KindValidation {
+		detail := e.RealDetail
+		if detail == "" {
+			detail = e.Message
+		}
+		c.Header("Content-Type", "application/problem+json")
+		c.JSON(http.StatusBadRequest, problem{
+			Type:    "https://www.jhipster.tech/problem/problem-with-message",
+			Title:   "Bad Request",
+			Status:  http.StatusBadRequest,
+			Detail:  detail,
+			Path:    chemin,
+			Message: "error.http.400",
 		})
 		c.Abort()
 		return
