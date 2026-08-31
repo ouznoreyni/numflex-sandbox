@@ -114,13 +114,13 @@ func (d *Deps) postDemandeParticulier(c *gin.Context) {
 		d.R.Fail(c, apperr.ErreurInterne("enregistrement du client"))
 		return
 	}
-	if err := tx.Commit(c); err != nil {
-		d.R.Fail(c, apperr.ErreurInterne("validation de la transaction"))
+	if _, err := tx.Exec(c,
+		`UPDATE otp SET consomme = true WHERE numero = $1`, req.Numero); err != nil {
+		d.R.Fail(c, apperr.ErreurInterne("consommation de l'OTP"))
 		return
 	}
-
-	if err := d.consommerOTP(c, req.Numero); err != nil {
-		d.R.Fail(c, apperr.ErreurInterne("consommation de l'OTP"))
+	if err := tx.Commit(c); err != nil {
+		d.R.Fail(c, apperr.ErreurInterne("validation de la transaction"))
 		return
 	}
 
