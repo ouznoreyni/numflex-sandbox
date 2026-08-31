@@ -24,10 +24,15 @@ func NewRouter(d *Deps) *gin.Engine {
 	// groupe que pour une route qui y est effectivement enregistrée, alors
 	// qu'un chemin non contractuel sous /api/gateway/v1 doit renvoyer le même
 	// 401 qu'un chemin valide — comme le filtre de sécurité Spring, qui
-	// s'exécute avant la résolution de route.
+	// s'exécute avant la résolution de route. La garde compare le segment
+	// entier (égalité ou préfixe suivi de "/") pour ne pas capturer un chemin
+	// frontalier comme /api/gateway/v1extra ou un futur /api/gateway/v10 —
+	// un filtre Spring Security s'écrit "/api/gateway/v1/**", qui exige la
+	// barre oblique et ne matcherait jamais ces chemins-là non plus.
 	authentifieGateway := d.Authentifier()
 	r.Use(func(c *gin.Context) {
-		if !strings.HasPrefix(c.Request.URL.Path, prefixeGateway) {
+		chemin := c.Request.URL.Path
+		if chemin != prefixeGateway && !strings.HasPrefix(chemin, prefixeGateway+"/") {
 			c.Next()
 			return
 		}
