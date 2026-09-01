@@ -192,9 +192,18 @@ peut la déclencher par `/demandes/traitement`.
 
 ## Postman
 
-`postman/` contient une collection calquée sur celle de l'ARTP et son environnement. Le script de
-test de `POST /api/authenticate` enregistre automatiquement `{{token}}`. Basculer du sandbox vers la
-recette ARTP ne demande que de changer `{{baseUrl}}`.
+`postman/` contient une collection calquée sur celle de l'ARTP et son environnement — les 33 routes
+gateway et les deux routes d'authentification, groupées par section du guide. Le script de test de
+`POST /api/authenticate` enregistre automatiquement `{{token}}`. Basculer du sandbox vers la recette
+ARTP ne demande que de changer `{{baseUrl}}`.
+
+**Le jeton n'est pas neutre : chaque étape est réservée à un opérateur précis.** La requête
+d'authentification est pré-remplie avec `yas`, qui convient pour créer une demande, l'annuler,
+traiter l'`ACTIVATION` et la `COMPLETION`, et lire `/demandes/in`. Il faut se réauthentifier en
+`orange` pour tout ce qui revient à la source — acceptation, `DESACTIVATION`, `/demandes/a-accepter`,
+`/demandes/out`, restitution, reverse — et en `orange` ou `expresso` pour la confirmation, attendue
+de tous **sauf** le destinataire. La description de chaque requête concernée le rappelle. Un appel
+émis avec le mauvais compte ne renvoie pas un refus lisible mais un `500` (ANO-003).
 
 ## Sources
 
