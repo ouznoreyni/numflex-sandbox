@@ -21,8 +21,19 @@ func NewRouter(d *Deps) *gin.Engine {
 	// n'enregistre aucune route — voir cors.go.
 	r.Use(d.autoriserCORS())
 
-	r.POST("/api/authenticate", d.postAuthenticate)
-	r.GET("/api/authenticate", d.Authentifier(), d.getAuthenticate)
+	// Task 10 : les deux routes /api/authenticate passent en clean
+	// architecture — un contrôleur qui délègue à AuthenticateInteractor et
+	// DescribeCallerInteractor — et l'authentification elle-même passe du
+	// gestionnaire historique Deps.Authentifier au middleware.Authenticate
+	// de la Task 6, câblé ici pour la première fois : postgres.UserGateway,
+	// la pièce qui lui manquait, apparaît dans authController/authentifier
+	// (internal/api/authentification.go). Construits une seule fois, comme
+	// otpCtrl plus bas.
+	authCtrl := d.authController()
+	authentifier := d.authentifier()
+
+	r.POST("/api/authenticate", authCtrl.PostAuthenticate)
+	r.GET("/api/authenticate", authentifier, authCtrl.GetAuthenticate)
 
 	// L'authentification est câblée en middleware global, gardé par préfixe,
 	// plutôt qu'en middleware de groupe : gin n'exécute le middleware d'un
@@ -34,14 +45,13 @@ func NewRouter(d *Deps) *gin.Engine {
 	// frontalier comme /api/gateway/v1extra ou un futur /api/gateway/v10 —
 	// un filtre Spring Security s'écrit "/api/gateway/v1/**", qui exige la
 	// barre oblique et ne matcherait jamais ces chemins-là non plus.
-	authentifieGateway := d.Authentifier()
 	r.Use(func(c *gin.Context) {
 		chemin := c.Request.URL.Path
 		if chemin != prefixeGateway && !strings.HasPrefix(chemin, prefixeGateway+"/") {
 			c.Next()
 			return
 		}
-		authentifieGateway(c)
+		authentifier(c)
 	})
 
 	g := r.Group(prefixeGateway)
@@ -76,7 +86,7 @@ func NewRouter(d *Deps) *gin.Engine {
 	// pas à la plateforme, un chemin inconnu sous /api/sandbox/v1 doit donc
 	// bien répondre 404 plutôt que 401.
 	if d.Cfg.SandboxAdmin {
-		d.routesSandbox(r.Group(prefixeSandbox, d.Authentifier()))
+		d.routesSandbox(r.Group(prefixeSandbox, authentifier))
 	}
 
 	return r

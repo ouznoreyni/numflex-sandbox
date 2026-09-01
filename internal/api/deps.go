@@ -25,10 +25,13 @@ type Moteur interface {
 	PlanifierTransition(ctx context.Context, demandeID string) error
 }
 
-const cleIdentite = "numflex.identite"
-
+// Appelant lit le Caller que middleware.Authenticate (Task 6, câblé en
+// Task 10) a résolu et déposé sur le contexte de la requête — pas sur le
+// magasin propre à *gin.Context comme le faisait l'ancien Authentifier :
+// entity.CallerFromContext est le point de passage commun entre le
+// middleware (internal/framework) et ce paquet, qui n'est pas soumis à la
+// règle de dépendance de test/architecture_test.go (il n'est ni adapter, ni
+// framework) et peut donc lire ce que le middleware y a placé.
 func Appelant(c *gin.Context) entity.Caller {
-	v, _ := c.Get(cleIdentite)
-	id, _ := v.(entity.Caller)
-	return id
+	return entity.CallerFromContext(c.Request.Context())
 }

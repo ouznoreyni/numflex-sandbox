@@ -59,6 +59,12 @@ func Authenticate(secret string, users port.UserGateway, p presenter.Presenter) 
 		}
 
 		c.Set(callerContextKey, caller)
+		// Also carried on the request's context.Context, not just gin's own
+		// store: an internal/adapter/controller cannot import this package
+		// (test/architecture_test.go's dependency rule), but it can read
+		// entity.CallerFromContext(c.Request.Context()) — entity is an inner
+		// layer both sides already depend on.
+		c.Request = c.Request.WithContext(entity.WithCaller(c.Request.Context(), caller))
 		c.Next()
 	}
 }

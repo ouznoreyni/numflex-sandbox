@@ -135,3 +135,14 @@ func InvalidJSONFormat() *Fault {
 func InternalError(message string) *Fault {
 	return New(FaultInternal, "ERREUR_INTERNE", message)
 }
+
+// --- Authentification ---------------------------------------------------
+
+// BadCredentials is AuthenticateInteractor's answer to an unknown username or
+// a wrong password. ANO-016 : the real platform renders this outside the
+// ARTP envelope entirely, in JHipster's own "Bad credentials" problem+json —
+// this Fault's Code and Message never reach a client, only its Kind, which
+// the controller uses to pick that fixed rendering over the presenter.
+func BadCredentials() *Fault {
+	return New(FaultAccess, "IDENTIFIANTS_INVALIDES", "Nom d'utilisateur ou mot de passe incorrect")
+}

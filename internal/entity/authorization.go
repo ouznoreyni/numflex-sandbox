@@ -3,11 +3,16 @@ package entity
 import "fmt"
 
 // Caller describes the operator behind the token presented on a request.
+// Roles is populated only by UserGateway.ByCredentials — the login use case
+// needs it to issue a token — and left empty by ByUsername, which the
+// authentication middleware uses: nothing downstream of a resolved request
+// reads a caller's roles today.
 type Caller struct {
 	UserID       string
 	Username     string
 	OperatorID   string
 	OperatorName string
+	Roles        []string
 }
 
 // CanProcess decides whether an operator may call /demandes/traitement now.
