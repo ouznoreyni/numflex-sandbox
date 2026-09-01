@@ -34,9 +34,8 @@ docker compose up
 ```
 
 Postgres démarre, les migrations sont appliquées, le seed est joué, l'API écoute sur
-`http://localhost:8080`. Le `.env` du dépôt, s'il existe, alimente le conteneur ; seules
-`DATABASE_URL` et `CORS_ALLOWED_ORIGINS` sont imposées par le compose, la base ne s'appelant pas
-`localhost` dans son réseau.
+`http://localhost:8080`. Le `.env` du dépôt, s'il existe, alimente le conteneur ; seule
+`DATABASE_URL` est imposée par le compose, la base ne s'appelant pas `localhost` dans son réseau.
 
 ### L'image seule
 
@@ -207,7 +206,7 @@ l'état courant. Pour repartir à zéro, supprimer le volume Postgres.
 | `OTP_TTL_SECONDS` | `300` | Validité de l'OTP |
 | `OTP_MAX_ATTEMPTS` | `3` | Tentatives de saisie |
 | `REVERSE_AUTO_VALIDATION_SECONDS` | `0` | `0` = validation par le CLI `artp` uniquement |
-| `CORS_ALLOWED_ORIGINS` | — | Origines autorisées, séparées par des virgules ; vide = aucun en-tête CORS, comme la plateforme réelle. `*` autorise tout |
+| `CORS_ALLOWED_ORIGINS` | `*` | Origines autorisées, séparées par des virgules. **Absente = `*`**, toute origine ; **posée vide = aucun en-tête CORS**, comme la plateforme réelle |
 | `ENV_FILE` | `.env` | Chemin du fichier d'environnement à charger — voir ci-dessous |
 
 ### D'où viennent les valeurs
@@ -374,12 +373,14 @@ sinon il ne présente plus la même surface que la plateforme réelle.
 
 Deux conséquences à connaître :
 
-- **« Try it out » exige que le CORS soit activé.** L'appel part d'une autre origine
-  (`8081` → `8080`) ; sans en-tête `Access-Control-Allow-Origin`, le navigateur le bloque.
-  `make run` et `docker compose up` posent `CORS_ALLOWED_ORIGINS=http://localhost:8081` pour vous.
-  **Cette variable est une commodité de bac à sable, pas un trait du contrat** : la gateway réelle
-  est consommée de serveur à serveur et aucun test du SIT n'a mesuré son comportement cross-origin.
-  Laissez-la vide — le défaut — pour retrouver le comportement exact de la plateforme.
+- **« Try it out » exige que le CORS soit activé, et il l'est par défaut.** L'appel part d'une
+  autre origine (`8081` → `8080`) ; sans en-tête `Access-Control-Allow-Origin`, le navigateur le
+  bloque. Le défaut, écrit dans le code, est `*` : rien à configurer, quel que soit le port d'où
+  vous servez la page.
+  **Ce CORS est une commodité de bac à sable, pas un trait du contrat** : la gateway réelle est
+  consommée de serveur à serveur, n'émet aucun en-tête CORS, et aucun test du SIT n'a mesuré son
+  comportement cross-origin. Poser `CORS_ALLOWED_ORIGINS=` — vide — retrouve ce silence ; y mettre
+  une liste d'origines restreint sans l'éteindre.
 - **La spécification décrit le contrat**, donc le sandbox lancé en `FIDELITY=contract`. En
   `FIDELITY=real` — le défaut — les réponses d'erreur diffèrent ; chaque description signale
   l'écart par son identifiant SIT.
