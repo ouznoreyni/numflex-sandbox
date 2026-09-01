@@ -1,172 +1,33 @@
 package api
 
 import (
-	"net/http"
-
-	"github.com/gin-gonic/gin"
-	"github.com/ouznoreyni/numflex-sandbox/internal/entity"
+	"github.com/ouznoreyni/numflex-sandbox/internal/adapter/controller"
+	"github.com/ouznoreyni/numflex-sandbox/internal/adapter/gateway/postgres"
+	"github.com/ouznoreyni/numflex-sandbox/internal/usecase/reference"
 )
 
-func (d *Deps) routesReferentiels(g *gin.RouterGroup) {
-	g.GET("/operateurs", d.getOperateurs)
-	g.GET("/motifs-rejet", d.getMotifsRejet)
-	g.GET("/types-demande", d.getTypesDemande)
-	g.GET("/processus", d.getProcessus)
-	g.GET("/types-incident", d.getTypesIncident)
-}
+// referenceController wires the clean-architecture reference-data stack —
+// gateway, five interactors, presenter — behind the five reference routes.
+// NewRouter calls it once, at router construction, exactly as it does
+// otpController (internal/api/otp.go) and authController
+// (internal/api/authentification.go): the same build-once rationale applies
+// unchanged.
+//
+// None of the five interactors carries a business rule: there is nothing to
+// validate or filter in a read-only catalog, so each is a direct
+// pass-through from gateway to presenter — see internal/usecase/reference's
+// package doc for why that is correct rather than under-engineered.
+func (d *Deps) referenceController() *controller.ReferenceController {
+	gw := postgres.NewReferenceGateway(d.DB.Pool)
 
-type operateurDTO struct {
-	ID  string `json:"id"`
-	Nom string `json:"nom"`
-}
+	operators := reference.NewListOperators(gw)
+	rejectionReasons := reference.NewListRejectionReasons(gw)
+	requestTypes := reference.NewListRequestTypes(gw)
+	processes := reference.NewListProcesses(gw)
+	incidentTypes := reference.NewListIncidentTypes(gw)
 
-func (d *Deps) getOperateurs(c *gin.Context) {
-	rows, err := d.DB.Pool.Query(c, `SELECT id, nom FROM operateur ORDER BY nom`)
-	if err != nil {
-		d.R.Fail(c, entity.InternalError("lecture des opérateurs"))
-		return
-	}
-	defer rows.Close()
-
-	out := []operateurDTO{}
-	for rows.Next() {
-		var o operateurDTO
-		if err := rows.Scan(&o.ID, &o.Nom); err != nil {
-			d.R.Fail(c, entity.InternalError("lecture des opérateurs"))
-			return
-		}
-		out = append(out, o)
-	}
-	// Next() renvoyant false signifie « fin des lignes » ou « erreur » : sans
-	// ce contrôle, une panne en cours d'itération passerait pour un succès partiel.
-	if err := rows.Err(); err != nil {
-		d.R.Fail(c, entity.InternalError("lecture des opérateurs"))
-		return
-	}
-	d.R.OK(c, http.StatusOK, "Opérateurs récupérés avec succès", out)
-}
-
-type motifRejetDTO struct {
-	ID    string `json:"id"`
-	Motif string `json:"motif"`
-}
-
-func (d *Deps) getMotifsRejet(c *gin.Context) {
-	rows, err := d.DB.Pool.Query(c, `SELECT id, motif FROM motif_rejet ORDER BY motif`)
-	if err != nil {
-		d.R.Fail(c, entity.InternalError("lecture des motifs de rejet"))
-		return
-	}
-	defer rows.Close()
-
-	out := []motifRejetDTO{}
-	for rows.Next() {
-		var m motifRejetDTO
-		if err := rows.Scan(&m.ID, &m.Motif); err != nil {
-			d.R.Fail(c, entity.InternalError("lecture des motifs de rejet"))
-			return
-		}
-		out = append(out, m)
-	}
-	// Next() renvoyant false signifie « fin des lignes » ou « erreur » : sans
-	// ce contrôle, une panne en cours d'itération passerait pour un succès partiel.
-	if err := rows.Err(); err != nil {
-		d.R.Fail(c, entity.InternalError("lecture des motifs de rejet"))
-		return
-	}
-	d.R.OK(c, http.StatusOK, "Motifs de rejet récupérés avec succès", out)
-}
-
-type typeDemandeDTO struct {
-	ID   string `json:"id"`
-	Type string `json:"type"`
-}
-
-func (d *Deps) getTypesDemande(c *gin.Context) {
-	rows, err := d.DB.Pool.Query(c, `SELECT id, type FROM type_demande ORDER BY type`)
-	if err != nil {
-		d.R.Fail(c, entity.InternalError("lecture des types de demande"))
-		return
-	}
-	defer rows.Close()
-
-	out := []typeDemandeDTO{}
-	for rows.Next() {
-		var t typeDemandeDTO
-		if err := rows.Scan(&t.ID, &t.Type); err != nil {
-			d.R.Fail(c, entity.InternalError("lecture des types de demande"))
-			return
-		}
-		out = append(out, t)
-	}
-	// Next() renvoyant false signifie « fin des lignes » ou « erreur » : sans
-	// ce contrôle, une panne en cours d'itération passerait pour un succès partiel.
-	if err := rows.Err(); err != nil {
-		d.R.Fail(c, entity.InternalError("lecture des types de demande"))
-		return
-	}
-	d.R.OK(c, http.StatusOK, "Types de demande récupérés avec succès", out)
-}
-
-type processusDTO struct {
-	ID   string `json:"id"`
-	Type string `json:"type"`
-}
-
-func (d *Deps) getProcessus(c *gin.Context) {
-	rows, err := d.DB.Pool.Query(c, `SELECT id, type FROM processus ORDER BY type`)
-	if err != nil {
-		d.R.Fail(c, entity.InternalError("lecture des processus"))
-		return
-	}
-	defer rows.Close()
-
-	out := []processusDTO{}
-	for rows.Next() {
-		var p processusDTO
-		if err := rows.Scan(&p.ID, &p.Type); err != nil {
-			d.R.Fail(c, entity.InternalError("lecture des processus"))
-			return
-		}
-		out = append(out, p)
-	}
-	// Next() renvoyant false signifie « fin des lignes » ou « erreur » : sans
-	// ce contrôle, une panne en cours d'itération passerait pour un succès partiel.
-	if err := rows.Err(); err != nil {
-		d.R.Fail(c, entity.InternalError("lecture des processus"))
-		return
-	}
-	d.R.OK(c, http.StatusOK, "Processus récupérés avec succès", out)
-}
-
-type typeIncidentDTO struct {
-	ID          string `json:"id"`
-	Libelle     string `json:"libelle"`
-	FigeSysteme bool   `json:"figeSysteme"`
-}
-
-func (d *Deps) getTypesIncident(c *gin.Context) {
-	rows, err := d.DB.Pool.Query(c, `SELECT id, libelle, fige_systeme FROM type_incident ORDER BY libelle`)
-	if err != nil {
-		d.R.Fail(c, entity.InternalError("lecture des types d'incident"))
-		return
-	}
-	defer rows.Close()
-
-	out := []typeIncidentDTO{}
-	for rows.Next() {
-		var ti typeIncidentDTO
-		if err := rows.Scan(&ti.ID, &ti.Libelle, &ti.FigeSysteme); err != nil {
-			d.R.Fail(c, entity.InternalError("lecture des types d'incident"))
-			return
-		}
-		out = append(out, ti)
-	}
-	// Next() renvoyant false signifie « fin des lignes » ou « erreur » : sans
-	// ce contrôle, une panne en cours d'itération passerait pour un succès partiel.
-	if err := rows.Err(); err != nil {
-		d.R.Fail(c, entity.InternalError("lecture des types d'incident"))
-		return
-	}
-	d.R.OK(c, http.StatusOK, "Types d'incident récupérés avec succès", out)
+	return controller.NewReferenceController(
+		operators, rejectionReasons, requestTypes, processes, incidentTypes,
+		d.presenter(),
+	)
 }

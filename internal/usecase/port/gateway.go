@@ -33,3 +33,15 @@ type UserGateway interface {
 	ByCredentials(ctx context.Context, username, password string) (entity.Caller, bool, error)
 	ByUsername(ctx context.Context, username string) (entity.Caller, bool, error)
 }
+
+// ReferenceGateway resolves the five read-only reference lists behind
+// /operateurs, /motifs-rejet, /types-demande, /processus and /types-incident.
+// Each method returns a full, already-ordered list: there is no filtering or
+// paging in the guide for any of these five endpoints.
+type ReferenceGateway interface {
+	Operators(ctx context.Context) ([]entity.Operator, error)
+	RejectionReasons(ctx context.Context) ([]entity.RejectionReason, error)
+	RequestTypes(ctx context.Context) ([]entity.RequestTypeRef, error)
+	Processes(ctx context.Context) ([]entity.Process, error)
+	IncidentTypes(ctx context.Context) ([]entity.IncidentType, error)
+}

@@ -31,9 +31,41 @@ package postgres
 //	—           operateur_id    join key into operateur, read by ByUsername only
 
 // Table operateur — the OperatorID/OperatorName half of entity.Caller,
-// joined in by ByUsername.
+// joined in by ByUsername, and separately the full row backing
+// entity.Operator (internal/usecase/port/gateway.go's ReferenceGateway).
 //
 //	Go field       SQL column   Notes
 //	-----------    ----------   -----
-//	OperatorID     id
-//	OperatorName   nom
+//	OperatorID     id           entity.Caller's half
+//	OperatorName   nom          entity.Caller's half
+//	ID             id           entity.Operator's half
+//	Name           nom          entity.Operator's half
+
+// Table motif_rejet — entity.RejectionReason (internal/usecase/port/gateway.go).
+//
+//	Go field   SQL column   Notes
+//	--------   ----------   -----
+//	ID         id
+//	Reason     motif        ANO-009: the JSON field stays "motif", not "libelle"
+
+// Table type_demande — entity.RequestTypeRef (internal/usecase/port/gateway.go).
+//
+//	Go field   SQL column   Notes
+//	--------   ----------   -----
+//	ID         id
+//	Type       type
+
+// Table processus — entity.Process (internal/usecase/port/gateway.go).
+//
+//	Go field   SQL column   Notes
+//	--------   ----------   -----
+//	ID         id
+//	Type       type
+
+// Table type_incident — entity.IncidentType (internal/usecase/port/gateway.go).
+//
+//	Go field       SQL column     Notes
+//	-----------    ------------   -----
+//	ID             id
+//	Label          libelle
+//	SystemLocked   fige_systeme

@@ -55,7 +55,18 @@ func NewRouter(d *Deps) *gin.Engine {
 	})
 
 	g := r.Group(prefixeGateway)
-	d.routesReferentiels(g) // Task 6
+
+	// Task 11 : les cinq routes de données de référence passent en clean
+	// architecture — un contrôleur qui délègue à cinq interactors
+	// passe-plat, chacun un simple relais vers ReferenceGateway (aucune
+	// règle métier à appliquer à une liste de référence). Construit une
+	// seule fois ici, comme otpCtrl et authCtrl.
+	refCtrl := d.referenceController()
+	g.GET("/operateurs", refCtrl.Operators)
+	g.GET("/motifs-rejet", refCtrl.RejectionReasons)
+	g.GET("/types-demande", refCtrl.RequestTypes)
+	g.GET("/processus", refCtrl.Processes)
+	g.GET("/types-incident", refCtrl.IncidentTypes)
 
 	// Task 9 : otp/send et otp/verify passent en clean architecture — le
 	// gestionnaire d'autrefois est remplacé par un contrôleur qui ne fait
