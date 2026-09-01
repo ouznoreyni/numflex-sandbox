@@ -4,11 +4,19 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"regexp"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/ouznoreyni/numflex-sandbox/internal/entity"
 )
+
+// motifMSISDN est le format MSISDN du contrat ARTP. Sa copie d'origine
+// vivait dans internal/api/otp.go ; elle reste ici pour
+// demandes_creation.go et reverse.go, qui la partagent, jusqu'à ce que ces
+// deux fichiers migrent à leur tour (Tasks 12, 19). Le contrôleur OTP
+// (internal/adapter/controller) porte désormais sa propre copie, indépendante.
+var motifMSISDN = regexp.MustCompile(`^[0-9]{9}$`)
 
 // demandeDTO sérialise une demande au format du guide §7.3, commun à tous les
 // endpoints qui renvoient une demande (Tasks 10 à 17). Tous les horodatages

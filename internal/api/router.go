@@ -46,7 +46,17 @@ func NewRouter(d *Deps) *gin.Engine {
 
 	g := r.Group(prefixeGateway)
 	d.routesReferentiels(g) // Task 6
-	d.routesOTP(g)          // Task 7
+
+	// Task 9 : otp/send et otp/verify passent en clean architecture — le
+	// gestionnaire d'autrefois est remplacé par un contrôleur qui ne fait
+	// plus rien d'autre que lier la requête, valider la forme du MSISDN et
+	// déléguer à l'interactor. d.otpController() est reconstruit à chaque
+	// requête (construction sans I/O) plutôt qu'une fois ici, pour que
+	// NewRouter reste appelable avec un Deps sans base — TestLeCORSNAjouteAucuneRoute
+	// compte les routes d'un tel Deps sans jamais émettre de requête.
+	g.POST("/otp/send", func(c *gin.Context) { d.otpController().Send(c) })
+	g.POST("/otp/verify", func(c *gin.Context) { d.otpController().Verify(c) })
+
 	d.routesCreation(g)     // Tasks 10-12
 	d.routesLecture(g)      // Task 13
 	d.routesAcceptation(g)  // Task 14

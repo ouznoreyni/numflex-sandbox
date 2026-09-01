@@ -13,6 +13,13 @@ type VerifyOTPInput struct {
 	Code   string
 }
 
+// VerifyOTPBoundary is the interface a controller drives; it exists so the
+// controller can depend on the use case's contract, not its struct — the
+// counterpart of SendOTPBoundary in send_otp.go.
+type VerifyOTPBoundary interface {
+	Execute(context.Context, VerifyOTPInput) *entity.Fault
+}
+
 // VerifyOTPInteractor pre-verifies without consuming (TC-021): the code
 // stays usable so the request creation that follows can still succeed. Only
 // failed attempts are counted.
