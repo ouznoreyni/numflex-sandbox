@@ -33,8 +33,11 @@ func (p *Contract) SuccessWithoutData(status int, message string) ViewModel {
 	}}
 }
 
-// Failure mirrors Renderer.failContrat.
-func (p *Contract) Failure(f *entity.Fault) ViewModel {
+// Failure mirrors Renderer.failContrat. path is accepted to satisfy
+// Presenter but unused: the contract envelope, unlike Real's problem+json,
+// has no path field (mirroring failContrat, which never reads
+// c.Request.URL.Path).
+func (p *Contract) Failure(f *entity.Fault, _ string) ViewModel {
 	if f == nil {
 		f = entity.InternalError("erreur interne")
 	}

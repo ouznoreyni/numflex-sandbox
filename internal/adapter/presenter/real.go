@@ -38,8 +38,10 @@ func (p *Real) SuccessWithoutData(status int, message string) ViewModel {
 // Failure mirrors Renderer.failReel: it reproduces ANO-001, ANO-003 and
 // ANO-004 — no envelope, no code field, business errors surfacing as a 500,
 // and the Java exception class name exposed via the "RuntimeException: "
-// prefix (overridden by RealDetail for ANO-002 and ANO-020).
-func (p *Real) Failure(f *entity.Fault) ViewModel {
+// prefix (overridden by RealDetail for ANO-002 and ANO-020). path is
+// rendered verbatim into Problem.Path, exactly as failReel reads
+// c.Request.URL.Path into chemin (including "" when there is no request).
+func (p *Real) Failure(f *entity.Fault, path string) ViewModel {
 	if f == nil {
 		f = entity.InternalError("erreur interne")
 	}
@@ -51,6 +53,7 @@ func (p *Real) Failure(f *entity.Fault) ViewModel {
 			Type:        "https://www.jhipster.tech/problem/constraint-violation",
 			Title:       "Method argument not valid",
 			Status:      http.StatusBadRequest,
+			Path:        path,
 			Message:     "error.validation",
 			FieldErrors: f.Fields,
 		}}
@@ -72,6 +75,7 @@ func (p *Real) Failure(f *entity.Fault) ViewModel {
 			Title:   "Bad Request",
 			Status:  http.StatusBadRequest,
 			Detail:  detail,
+			Path:    path,
 			Message: "error.http.400",
 		}}
 	}
@@ -85,6 +89,7 @@ func (p *Real) Failure(f *entity.Fault) ViewModel {
 		Title:   "Internal Server Error",
 		Status:  http.StatusInternalServerError,
 		Detail:  detail,
+		Path:    path,
 		Message: "error.http.500",
 	}}
 }

@@ -2,6 +2,7 @@ package presenter
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"testing"
 	"time"
@@ -35,7 +36,7 @@ func bodyMap(t *testing.T, vm ViewModel) map[string]any {
 func TestRealErreurEtatSortEn500SansCode(t *testing.T) {
 	r := NewReal(inmemory.FixedClock{})
 
-	vm := r.Failure(entity.RequestNotFound())
+	vm := r.Failure(entity.RequestNotFound(), "/api/gateway/v1/demandes/traitement")
 
 	require.Equal(t, http.StatusInternalServerError, vm.Status)
 	corps := bodyMap(t, vm)
@@ -46,10 +47,9 @@ func TestRealErreurEtatSortEn500SansCode(t *testing.T) {
 	require.Equal(t, float64(500), corps["status"])
 	require.Equal(t, "error.http.500", corps["message"])
 	require.Equal(t, "RuntimeException: Demande introuvable", corps["detail"])
-	// NOTE: httpx.Renderer.failReel fills "path" from the live *gin.Context.
-	// Presenter.Failure takes only a *entity.Fault, with no request in scope
-	// (see the Problem doc comment) — "path" is present but empty for now.
-	require.Equal(t, "", corps["path"])
+	// Finding 1 (fix round 1) : le chemin de la requête, passé en argument,
+	// atteint bien le corps rendu — branche problem-with-message 500.
+	require.Equal(t, "/api/gateway/v1/demandes/traitement", corps["path"])
 }
 
 func TestRealErreurValidationSortEn400AvecFieldErrors(t *testing.T) {
@@ -59,7 +59,7 @@ func TestRealErreurValidationSortEn400AvecFieldErrors(t *testing.T) {
 		ObjectName: "demandeParticulierDTO",
 		Field:      "client.lieuNaissance",
 		Message:    "ne doit pas être vide",
-	}))
+	}), "/api/gateway/v1/demandes/particulier")
 
 	require.Equal(t, http.StatusBadRequest, vm.Status)
 	corps := bodyMap(t, vm)
@@ -67,6 +67,8 @@ func TestRealErreurValidationSortEn400AvecFieldErrors(t *testing.T) {
 	require.Equal(t, "https://www.jhipster.tech/problem/constraint-violation", corps["type"])
 	require.Equal(t, "Method argument not valid", corps["title"])
 	require.Equal(t, "error.validation", corps["message"])
+	// Finding 1 (fix round 1) : branche constraint-violation.
+	require.Equal(t, "/api/gateway/v1/demandes/particulier", corps["path"])
 
 	champs := corps["fieldErrors"].([]any)
 	require.Len(t, champs, 1)
@@ -81,7 +83,7 @@ func TestRealDetailPersonnalise(t *testing.T) {
 	// une panne.
 	r := NewReal(inmemory.FixedClock{})
 
-	vm := r.Failure(entity.PortingDelayNotRespected())
+	vm := r.Failure(entity.PortingDelayNotRespected(), "/api/gateway/v1/demandes/particulier")
 
 	require.Equal(t, http.StatusInternalServerError, vm.Status)
 	corps := bodyMap(t, vm)
@@ -126,7 +128,7 @@ func TestRealValidationAvecChampsGardeConstraintViolation(t *testing.T) {
 		ObjectName: "demandeParticulierDTO",
 		Field:      "numero",
 		Message:    "ne doit pas être vide",
-	}))
+	}), "/api/gateway/v1/demandes/particulier")
 
 	require.Equal(t, http.StatusBadRequest, vm.Status)
 	corps := bodyMap(t, vm)
@@ -145,7 +147,7 @@ func TestRealValidationSansChampsRendMessagePrecis(t *testing.T) {
 	// 400 qui porte le message métier.
 	r := NewReal(inmemory.FixedClock{})
 
-	vm := r.Failure(entity.ValidationFailed("un message précis"))
+	vm := r.Failure(entity.ValidationFailed("un message précis"), "/api/gateway/v1/demandes/flotte")
 
 	require.Equal(t, http.StatusBadRequest, vm.Status)
 	corps := bodyMap(t, vm)
@@ -156,51 +158,64 @@ func TestRealValidationSansChampsRendMessagePrecis(t *testing.T) {
 	require.Equal(t, "error.http.400", corps["message"])
 	require.NotContains(t, corps, "code")
 	require.NotContains(t, corps, "fieldErrors")
+	// Finding 1 (fix round 1) : branche problem-with-message 400.
+	require.Equal(t, "/api/gateway/v1/demandes/flotte", corps["path"])
 }
 
-func TestFailureAvecFaultNilNePaniquePas(t *testing.T) {
-	// Correction revue #2 (portée à la présentation) : httpx.Renderer.Fail
-	// normalise un appelant qui fait `return r.Fail(c, err)` avec err nil en
-	// entity.InternalError("erreur interne") avant que failReel ne
-	// s'exécute. Presenter.Failure reçoit désormais un *entity.Fault déjà
-	// normalisé, mais reste défensif : un Fault nil ne doit pas non plus
-	// faire paniquer Failure.
-	r := NewReal(inmemory.FixedClock{})
-
-	var vm ViewModel
+func TestFailAvecErreurNilNePaniquePas(t *testing.T) {
+	// Correction revue #2, déplacée dans la couche pure : un appelant qui
+	// fait `return httpx.Renderer.Fail(c, err)` avec err nil ne doit pas
+	// transformer la requête en panique. Fix round 1 (finding 2) :
+	// entity.FaultFrom porte désormais cette normalisation ; ce test
+	// l'exerce directement, plutôt que de reconstruire son résultat à la
+	// main.
+	var f *entity.Fault
 	require.NotPanics(t, func() {
-		vm = r.Failure(nil)
+		f = entity.FaultFrom(nil)
 	})
+	require.Equal(t, entity.InternalError("erreur interne"), f)
+
+	r := NewReal(inmemory.FixedClock{})
+	vm := r.Failure(f, "/x")
 
 	require.Equal(t, http.StatusInternalServerError, vm.Status)
 	corps := bodyMap(t, vm)
 	require.Equal(t, "RuntimeException: erreur interne", corps["detail"])
 }
 
-func TestFailureAvecFaultDeNormalisationTypeNilNePaniquePas(t *testing.T) {
-	// Correction revue #2 (portée à la présentation) : un *entity.Fault typé
-	// nil, emballé dans un error, fait aussi réussir errors.As avec e ==
-	// nil dans httpx.Renderer.Fail ; e.Kind y paniquerait sans sa garde, qui
-	// normalise ce cas vers le même entity.InternalError("erreur interne").
-	// Ce fault normalisé, transmis à Failure, rend le même corps que pour un
-	// Fault nil direct.
-	r := NewReal(inmemory.FixedClock{})
+func TestFailAvecApperrErrorTypeNilNePaniquePas(t *testing.T) {
+	// Correction revue #2, déplacée dans la couche pure : un *entity.Fault
+	// typé nil, emballé dans un error, fait réussir errors.As avec e == nil ;
+	// e.Kind paniquerait sans la garde. Fix round 1 (finding 2) : exerce
+	// entity.FaultFrom sur ce cas précis plutôt que sur son résultat déjà
+	// construit.
+	var e *entity.Fault
+	var err error = e
 
-	vm := r.Failure(entity.InternalError("erreur interne"))
+	var f *entity.Fault
+	require.NotPanics(t, func() {
+		f = entity.FaultFrom(err)
+	})
+	require.Equal(t, entity.InternalError("erreur interne"), f)
+
+	r := NewReal(inmemory.FixedClock{})
+	vm := r.Failure(f, "/x")
 
 	require.Equal(t, http.StatusInternalServerError, vm.Status)
 	corps := bodyMap(t, vm)
 	require.Equal(t, "RuntimeException: erreur interne", corps["detail"])
 }
 
-func TestFailureErreurNueDevientRuntimeExceptionAvecSonTexte(t *testing.T) {
-	// Correction revue #3 (portée à la présentation) : chemin de repli pour
-	// une erreur qui n'est pas un *entity.Fault. httpx.Renderer.Fail la
-	// normalise en entity.InternalError(err.Error()) avant de rendre ; ce
-	// fault normalisé rend le même détail "RuntimeException: <texte>".
-	r := NewReal(inmemory.FixedClock{})
+func TestFailErreurNueDevient500AvecSonTexte(t *testing.T) {
+	// Correction revue #3, déplacée dans la couche pure : chemin de repli
+	// pour une erreur qui n'est pas un *entity.Fault. Fix round 1
+	// (finding 2) : exerce entity.FaultFrom sur une erreur nue plutôt que
+	// sur le fault qu'elle produirait.
+	f := entity.FaultFrom(errors.New("panne imprévue"))
+	require.Equal(t, entity.InternalError("panne imprévue"), f)
 
-	vm := r.Failure(entity.InternalError("panne imprévue"))
+	r := NewReal(inmemory.FixedClock{})
+	vm := r.Failure(f, "/x")
 
 	require.Equal(t, http.StatusInternalServerError, vm.Status)
 	corps := bodyMap(t, vm)

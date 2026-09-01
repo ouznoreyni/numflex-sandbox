@@ -1,6 +1,7 @@
 package presenter
 
 import (
+	"fmt"
 	"net/http"
 	"testing"
 
@@ -17,7 +18,7 @@ import (
 func TestContractErreurEtatSortEnveloppee(t *testing.T) {
 	c := NewContract(inmemory.FixedClock{})
 
-	vm := c.Failure(entity.RequestNotFound())
+	vm := c.Failure(entity.RequestNotFound(), "/x")
 
 	require.Equal(t, http.StatusNotFound, vm.Status)
 	corps := bodyMap(t, vm)
@@ -41,7 +42,7 @@ func TestContractCorrespondanceKindStatut(t *testing.T) {
 	}
 	for _, x := range cas {
 		c := NewContract(inmemory.FixedClock{})
-		vm := c.Failure(x.err)
+		vm := c.Failure(x.err, "/x")
 		require.Equalf(t, x.statut, vm.Status, "code %s", x.code)
 		corps := bodyMap(t, vm)
 		require.Equal(t, x.code, corps["code"])
@@ -69,14 +70,16 @@ func TestOKSansDataRendDataNullEnContrat(t *testing.T) {
 	require.Nil(t, corps["data"])
 }
 
-func TestFailureConserveKindEtMessageDuFaultEmballe(t *testing.T) {
-	// Correction revue #3 (portée à la présentation) : httpx.Renderer.Fail
-	// déballe une erreur enveloppée par fmt.Errorf("...: %w", ...) via
-	// errors.As avant de rendre ; le fault déballé conserve son Kind et son
-	// Message. Presenter.Failure reçoit directement ce fault déballé.
-	c := NewContract(inmemory.FixedClock{})
+func TestFailErreurEmballeeConserveKindEtMessage(t *testing.T) {
+	// Correction revue #3, déplacée dans la couche pure : errors.As doit
+	// déballer une erreur enveloppée par fmt.Errorf("...: %w", ...). Fix
+	// round 1 (finding 2) : exerce entity.FaultFrom sur l'erreur emballée
+	// plutôt que sur le fault qu'elle produirait.
+	f := entity.FaultFrom(fmt.Errorf("contexte : %w", entity.RequestNotFound()))
+	require.Equal(t, entity.RequestNotFound(), f)
 
-	vm := c.Failure(entity.RequestNotFound())
+	c := NewContract(inmemory.FixedClock{})
+	vm := c.Failure(f, "/x")
 
 	require.Equal(t, http.StatusNotFound, vm.Status)
 	corps := bodyMap(t, vm)

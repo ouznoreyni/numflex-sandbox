@@ -20,12 +20,9 @@ type EnvelopeSansData struct {
 }
 
 // Problem is the JHipster problem+json shape used by Real's error rendering.
-//
-// NOTE on Path: internal/httpx.Renderer.failReel fills Path from the live
-// *gin.Context (c.Request.URL.Path). Presenter.Failure takes only a
-// *entity.Fault — it has no HTTP request in scope — so Real renders Path
-// present but empty for now. Threading the real request path through is
-// deferred to the task that wires internal/api onto this package (Task 18).
+// Path is filled by Real.Failure from the path argument the caller passes
+// it — the future controller's equivalent of httpx.Renderer.failReel reading
+// c.Request.URL.Path.
 type Problem struct {
 	Type        string              `json:"type"`
 	Title       string              `json:"title"`
@@ -38,10 +35,16 @@ type Problem struct {
 
 // Presenter renders a use case's outcome into a ViewModel. Real and Contract
 // are its two implementations, one per fidelity mode of the guide.
+//
+// Failure takes the request path alongside the fault: Real's problem+json
+// body carries it (mirroring httpx.Renderer.failReel, which reads
+// c.Request.URL.Path); Contract's envelope has no such field and ignores it,
+// but the interface stays common to both so a controller need not know which
+// fidelity it is talking to.
 type Presenter interface {
 	Success(status int, message string, data any) ViewModel
 	SuccessWithoutData(status int, message string) ViewModel
-	Failure(f *entity.Fault) ViewModel
+	Failure(f *entity.Fault, path string) ViewModel
 }
 
 var _ Presenter = (*Real)(nil)

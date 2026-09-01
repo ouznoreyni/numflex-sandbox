@@ -1,5 +1,7 @@
 package entity
 
+import "errors"
+
 // FaultKind classifies a Fault for HTTP status mapping. Rendering — the ARTP
 // envelope or JHipster problem+json — is decided elsewhere, in
 // internal/httpx, according to the fidelity mode.
@@ -49,5 +51,35 @@ func Validation(fields ...FieldFault) *Fault {
 		Code:    "VALIDATION_ECHOUEE",
 		Message: "Un ou plusieurs champs obligatoires sont manquants ou invalides",
 		Fields:  fields,
+	}
+}
+
+// FaultFrom normalizes any error into a *Fault, the shape every renderer
+// error path consumes. It is the pure counterpart of what
+// internal/httpx.Renderer.Fail used to do inline with errors.As before
+// delegating to failReel/failContrat:
+//
+//   - err already a *Fault (or wraps one via fmt.Errorf("...: %w", ...)):
+//     that Fault, unwrapped, is returned as-is.
+//   - err nil, or errors.As succeeds on a *Fault that is itself a typed nil
+//     (a nil *Fault wrapped in a non-nil error — calling Error() on that
+//     receiver would panic): InternalError("erreur interne").
+//   - any other error: InternalError(err.Error()), its text becoming the
+//     business message of the resulting 500.
+func FaultFrom(err error) *Fault {
+	var f *Fault
+	trouve := errors.As(err, &f)
+	switch {
+	case trouve && f != nil:
+		return f
+	case err == nil:
+		return InternalError("erreur interne")
+	case trouve:
+		// errors.As a réussi sur un *Fault typé nil emballé dans err :
+		// err.Error() appellerait la méthode sur ce récepteur nil et
+		// paniquerait.
+		return InternalError("erreur interne")
+	default:
+		return InternalError(err.Error())
 	}
 }

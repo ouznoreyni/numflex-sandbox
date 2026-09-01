@@ -1,7 +1,6 @@
 package httpx
 
 import (
-	"errors"
 	"net/http"
 	"time"
 
@@ -57,23 +56,7 @@ type problem struct {
 }
 
 func (r *Renderer) Fail(c *gin.Context, err error) {
-	var e *entity.Fault
-	trouve := errors.As(err, &e)
-	switch {
-	case trouve && e != nil:
-		// e déjà renseigné : soit err était un *entity.Fault, soit il en
-		// enveloppait un (fmt.Errorf("...: %w", ...)).
-	case err == nil:
-		e = entity.InternalError("erreur interne")
-	case trouve:
-		// errors.As a réussi sur un *entity.Fault typé nil enveloppé dans err :
-		// err.Error() appellerait la méthode sur ce récepteur nil et paniquerait.
-		e = entity.InternalError("erreur interne")
-	default:
-		// Pas un *entity.Fault, pas nil : une erreur "normale" en amont ; son
-		// texte devient le message métier du 500.
-		e = entity.InternalError(err.Error())
-	}
+	e := entity.FaultFrom(err)
 	if r.fid == config.FidelityContract {
 		r.failContrat(c, e)
 		return
