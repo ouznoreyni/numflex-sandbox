@@ -34,7 +34,97 @@ docker compose up
 ```
 
 Postgres démarre, les migrations sont appliquées, le seed est joué, l'API écoute sur
-`http://localhost:8080`.
+`http://localhost:8080`. Le `.env` du dépôt, s'il existe, alimente le conteneur ; seules
+`DATABASE_URL` et `CORS_ALLOWED_ORIGINS` sont imposées par le compose, la base ne s'appelant pas
+`localhost` dans son réseau.
+
+### L'image seule
+
+```bash
+make image        # ou : docker build -t numflex-sandbox .
+```
+
+Le seul réglage sans défaut est `DATABASE_URL` : le serveur refuse de démarrer sans elle.
+
+#### Un démarrage complet
+
+Le sandbox a besoin d'un PostgreSQL, et de rien d'autre : le conteneur de l'API n'écrit sur aucun
+disque, tout l'état vit dans la base.
+
+```bash
+docker network create numflex-net       # une fois
+
+# La base. C'est elle qui porte le volume — l'API n'en a pas besoin.
+docker run -d --name numflex-db --network numflex-net \
+  -e POSTGRES_USER=numflex -e POSTGRES_PASSWORD=numflex -e POSTGRES_DB=numflex \
+  -v numflex-data:/var/lib/postgresql/data \
+  postgres:16-alpine
+
+# L'API. Le .env fournit le socle, -e corrige ce qui dépend du réseau Docker,
+# les arguments finaux tranchent.
+docker run -d --name numflex-api --network numflex-net \
+  -p 8095:8095 \
+  -v "$PWD/.env:/app/.env:ro" \
+  -e DATABASE_URL='postgres://numflex:numflex@numflex-db:5432/numflex?sslmode=disable' \
+  --read-only --cap-drop ALL --security-opt no-new-privileges \
+  --restart unless-stopped \
+  numflex-sandbox:latest \
+  PORT=8095 FIDELITY=contract
+```
+
+| Élément | Ce qu'il fait, et pourquoi |
+|---|---|
+| `-v "$PWD/.env:/app/.env:ro"` | Le fichier de configuration. `/app` est le répertoire de travail de l'image, donc l'endroit où le serveur cherche `.env`. En lecture seule : il n'a rien à y écrire. |
+| `-e DATABASE_URL=…` | Posée en variable parce qu'elle dépend du réseau Docker et non du dépôt — l'hôte de la base y est `numflex-db`, pas `localhost`. Elle l'emporte sur le `.env`. |
+| `PORT=8095 FIDELITY=contract` | Les arguments, **après** le nom de l'image. Ils l'emportent sur tout le reste : de quoi dévier d'un `.env` partagé le temps d'un lancement, sans le modifier. |
+| `-p 8095:8095` | Les deux côtés suivent `PORT` : dans le conteneur, le serveur écoute réellement sur 8095. |
+| `--read-only` | Aucun système de fichiers inscriptible. Le serveur ne fait qu'ouvrir la base et lire ses migrations — aucun `tmpfs` à prévoir. |
+| `--cap-drop ALL --security-opt no-new-privileges` | L'image tourne déjà sous l'UID 10001, sans shell ni binaire suid ; ces deux drapeaux ferment ce qui restait. |
+| `--restart unless-stopped` | Migrations et seed sont idempotents : un redémarrage ne casse ni n'écrase l'état. |
+
+**Aucun volume n'est requis côté API** — pas même pour les migrations, embarquées dans l'image sous
+`/app/migrations`. Le seul montage de l'exemple est le `.env`, et il est facultatif : tout passer
+en `-e` ou en arguments donne le même résultat.
+
+**Plusieurs profils plutôt qu'un `.env`** : monter un répertoire, puis désigner le fichier.
+
+```bash
+docker run -d --name numflex-api --network numflex-net -p 8096:8096 \
+  -v "$PWD/config:/config:ro" \
+  numflex-sandbox:latest --env-file /config/recette.env
+```
+
+`-e ENV_FILE=/config/recette.env` fait la même chose.
+
+**Le CLI `artp`**, dans le même réseau. Il n'est pas le point d'entrée de l'image, donc on le
+réclame :
+
+```bash
+docker run --rm --network numflex-net --entrypoint /usr/local/bin/artp \
+  -e DATABASE_URL='postgres://numflex:numflex@numflex-db:5432/numflex?sslmode=disable' \
+  numflex-sandbox:latest reverse lister
+```
+
+Pour publier :
+
+```bash
+docker login ghcr.io
+make push                                    # ghcr.io/yas/numflex-sandbox:<git describe>
+make push REGISTRY=… VERSION=v0.4.0          # ailleurs, sous une version choisie
+```
+
+`make push` construit et pousse en une passe, pour `linux/amd64` et `linux/arm64` — un manifeste
+multi-architecture ne pouvant pas être chargé dans le démon local, il n'y a pas de `make image`
+préalable. Le constructeur `buildx` dédié est créé au premier appel. La cible refuse de publier
+depuis un arbre de travail modifié : `ALLOW_DIRTY=1` pour passer outre, la version portant alors le
+suffixe `-dirty`.
+
+L'image finale part de `scratch` — deux binaires statiques, les migrations, les racines de
+confiance TLS, rien d'autre : ni shell, ni gestionnaire de paquets, ni CVE de base à suivre. Elle
+tourne sous l'UID 10001. Deux conséquences pratiques : `docker exec … sh` n'existe pas, et l'image
+ne porte **aucun `HEALTHCHECK`** — le sandbox n'expose aucune route de santé, la plateforme réelle
+n'en ayant pas, et la surface doit rester identique. Sonder de l'extérieur, par
+`POST /api/authenticate`.
 
 ### Comptes
 
@@ -90,6 +180,30 @@ l'état courant. Pour repartir à zéro, supprimer le volume Postgres.
 | `OTP_MAX_ATTEMPTS` | `3` | Tentatives de saisie |
 | `REVERSE_AUTO_VALIDATION_SECONDS` | `0` | `0` = validation par le CLI `artp` uniquement |
 | `CORS_ALLOWED_ORIGINS` | — | Origines autorisées, séparées par des virgules ; vide = aucun en-tête CORS, comme la plateforme réelle. `*` autorise tout |
+| `ENV_FILE` | `.env` | Chemin du fichier d'environnement à charger — voir ci-dessous |
+
+### D'où viennent les valeurs
+
+Tout se règle par variables d'environnement, et rien d'autre. Elles peuvent être posées de trois
+façons, de la plus forte à la plus faible :
+
+| Source | Exemple |
+|---|---|
+| **Arguments** du serveur | `docker run numflex-sandbox PORT=9090 FIDELITY=contract` |
+| **Environnement** du processus | `docker run -e PORT=9090`, `environment:` de compose, `export PORT=9090` |
+| **Fichier `.env`** | `docker run -v $PWD/.env:/app/.env:ro`, `--env-file .env`, ou `.env` à la racine en local |
+
+Une source plus forte l'emporte : un `.env` monté fournit le socle, un `-e` corrige une valeur pour
+un lancement, un argument tranche. Le fichier est cherché dans le répertoire courant — `/app` dans
+le conteneur — sauf si `ENV_FILE` ou `--env-file <chemin>` en désigne un autre ; un `ENV_FILE`
+demandé et introuvable est une erreur de démarrage, un `.env` implicite absent ne l'est pas.
+
+`.env.example` liste toutes les variables avec leur défaut. Sa syntaxe est celle d'un `.env`
+usuel — `CLEF=valeur`, `export` toléré, guillemets simples ou doubles, commentaires en début de
+ligne. **Un commentaire occupe sa propre ligne** : hors guillemets, tout ce qui suit le `=`
+appartient à la valeur, `#` compris, pour qu'un secret n'en soit jamais tronqué.
+
+Le `.env` n'est jamais copié dans l'image (`.dockerignore`) : il se monte ou se passe au démarrage.
 
 ### `FIDELITY=real` reproduit les anomalies de la recette, et c'est voulu
 
@@ -200,6 +314,13 @@ export DATABASE_URL='postgres://numflex:numflex@localhost:5432/numflex?sslmode=d
 ./artp reverse valider <id>    # crée la Demande REVERSE, à CONFIRMATION
 ./artp reverse rejeter <id>
 ./artp seed                    # rejoue le seed (idempotent)
+```
+
+Le binaire est aussi dans l'image, à côté du serveur. Comme il n'en est pas le point d'entrée, il
+se réclame explicitement — et lit le même `.env` :
+
+```bash
+docker compose run --rm --entrypoint /usr/local/bin/artp api reverse lister
 ```
 
 `artp` **ne joue pas les migrations** : le serveur est seul propriétaire du cycle de vie du schéma.

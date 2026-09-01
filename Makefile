@@ -28,4 +28,39 @@ swagger:
 swagger-build:
 	python3 scripts/build_swagger.py
 
-.PHONY: up test run swagger swagger-build
+# ─── Image ──────────────────────────────────────────────────────────────────
+# Le nom local est IMAGE:VERSION, le nom publié REGISTRY/IMAGE:VERSION. Chaque
+# variable se surcharge :
+#   make image VERSION=v0.4.0
+#   make push  REGISTRY=ghcr.io/yas VERSION=v0.4.0
+IMAGE     ?= numflex-sandbox
+VERSION   ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+REGISTRY  ?= ghcr.io/yas
+PLATFORMS ?= linux/amd64,linux/arm64
+BUILDER   ?= numflex-builder
+
+# Construit pour l'architecture locale et charge l'image dans le démon.
+image:
+	docker build -t $(IMAGE):$(VERSION) -t $(IMAGE):latest .
+	@docker images $(IMAGE):$(VERSION) --format '  {{.Repository}}:{{.Tag}}  {{.Size}}'
+
+# Construit et publie en une passe. buildx est obligatoire ici : un manifeste
+# multi-architecture ne peut pas être chargé dans le démon local, donc il n'y a
+# pas de `make image` préalable — seul le cache de build est partagé. Le pilote
+# `docker` par défaut ne sait pas produire de multi-arch, d'où le constructeur
+# dédié, créé au premier appel.
+#
+# `docker login $(REGISTRY)` d'abord. ALLOW_DIRTY=1 pour publier depuis un
+# arbre modifié — la version porterait alors le suffixe `-dirty`.
+push:
+	@git diff --quiet HEAD 2>/dev/null || test -n "$(ALLOW_DIRTY)" || \
+	  { echo "arbre de travail modifié : commitez, ou make push ALLOW_DIRTY=1"; exit 1; }
+	@docker buildx inspect $(BUILDER) >/dev/null 2>&1 || \
+	  docker buildx create --name $(BUILDER) --driver docker-container >/dev/null
+	docker buildx build --builder $(BUILDER) --platform $(PLATFORMS) \
+	  --tag $(REGISTRY)/$(IMAGE):$(VERSION) \
+	  --tag $(REGISTRY)/$(IMAGE):latest \
+	  --push .
+	@echo "publié : $(REGISTRY)/$(IMAGE):$(VERSION)"
+
+.PHONY: up test run swagger swagger-build image push
