@@ -18,7 +18,7 @@ func TestAcceptationNominale(t *testing.T) {
 		map[string]any{"idDemande": id, "accepte": true, "commentaire": "Demande conforme"})
 
 	require.Equal(t, http.StatusOK, rep.StatusCode, corps)
-	require.Equal(t, "Étape traitée avec succès", corps["message"])
+	require.Equal(t, "Décision d'acceptation enregistrée", corps["message"])
 
 	// R-10 : la réponse porte l'étape PRÉCÉDANT la transition.
 	data := corps["data"].(map[string]any)

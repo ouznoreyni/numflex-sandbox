@@ -22,21 +22,27 @@ func (d *Deps) demandeDTO(ctx context.Context, id string) (map[string]any, error
 		dateDemande                                    time.Time
 		processus, routageInfo                         sql.NullString
 		dateFinalisation                               sql.NullTime
+		cliNom, cliPrenom, cliLieu, cliPiece, cliNum   sql.NullString
+		cliNaissance                                   sql.NullTime
 	)
 
 	err := d.DB.Pool.QueryRow(ctx, `
 		SELECT dem.numero, dem.type_abonne, dem.type_demande, dem.statut_demande,
 		       dem.etape_actuelle, dem.statut_etape_actuel,
 		       src.id, src.nom, dst.id, dst.nom,
-		       dem.date_demande, dem.processus, dem.routage_info, dem.date_finalisation
+		       dem.date_demande, dem.processus, dem.routage_info, dem.date_finalisation,
+		       cli.nom, cli.prenom, cli.date_naissance, cli.lieu_naissance,
+		       cli.type_piece, cli.numero_piece
 		  FROM demande dem
 		  JOIN operateur src ON src.id = dem.operateur_source_id
 		  JOIN operateur dst ON dst.id = dem.operateur_destinataire_id
+		  LEFT JOIN demande_client cli ON cli.demande_id = dem.id
 		 WHERE dem.id = $1`, id).Scan(
 		&numero, &typeAbonne, &typeDemande, &statutDemande,
 		&etapeActuelle, &statutEtapeActuel,
 		&srcID, &srcNom, &dstID, &dstNom,
-		&dateDemande, &processus, &routageInfo, &dateFinalisation)
+		&dateDemande, &processus, &routageInfo, &dateFinalisation,
+		&cliNom, &cliPrenom, &cliNaissance, &cliLieu, &cliPiece, &cliNum)
 	if err != nil {
 		return nil, err
 	}
@@ -64,7 +70,34 @@ func (d *Deps) demandeDTO(ctx context.Context, id string) (map[string]any, error
 	if dateFinalisation.Valid {
 		out["dateFinalisation"] = d.R.Skew(dateFinalisation.Time)
 	}
+
+	// Le client est rendu dans toutes les captures — création, acceptation,
+	// traitement, a-traiter, in — avec exactement ces six champs, et sans
+	// raisonSociale ni numRC même sur une flotte. Il est absent des seules
+	// réponses de confirmation, que sansClient dépouille.
+	if cliNom.Valid || cliPrenom.Valid || cliNum.Valid {
+		client := map[string]any{
+			"nom":           cliNom.String,
+			"prenom":        cliPrenom.String,
+			"dateNaissance": "",
+			"lieuNaissance": cliLieu.String,
+			"typePiece":     cliPiece.String,
+			"numeroPiece":   cliNum.String,
+		}
+		if cliNaissance.Valid {
+			client["dateNaissance"] = cliNaissance.Time.Format("2006-01-02")
+		}
+		out["client"] = client
+	}
 	return out, nil
+}
+
+// sansClient retire le sous-objet client d'un DTO. Les trois endpoints de
+// confirmation — la file, son détail et le POST — sont les seuls à ne pas le
+// porter ; c'est mesuré sur quatre captures du 2026-08-27, pas déduit.
+func sansClient(dto map[string]any) map[string]any {
+	delete(dto, "client")
+	return dto
 }
 
 // etatNumero lit l'état courant d'un numéro dans le registre et calcule

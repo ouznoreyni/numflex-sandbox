@@ -56,6 +56,13 @@ func (d *Deps) idsDemandes(ctx context.Context, filtre string, args ...any) ([]s
 // l'appelant ne perde jamais le [] : demandeDTO peut échouer avant le premier
 // append.
 func (d *Deps) rendreListe(c *gin.Context, message string, ids []string) {
+	d.rendreListeAvec(c, message, ids, func(dto map[string]any) map[string]any { return dto })
+}
+
+// rendreListeAvec applique une transformation à chaque DTO avant de rendre la
+// liste — la file a-confirmer s'en sert pour retirer le client.
+func (d *Deps) rendreListeAvec(c *gin.Context, message string, ids []string,
+	transforme func(map[string]any) map[string]any) {
 	out := []map[string]any{}
 	for _, id := range ids {
 		dto, err := d.demandeDTO(c, id)
@@ -63,7 +70,7 @@ func (d *Deps) rendreListe(c *gin.Context, message string, ids []string) {
 			d.R.Fail(c, apperr.ErreurInterne("lecture de la demande"))
 			return
 		}
-		out = append(out, dto)
+		out = append(out, transforme(dto))
 	}
 	d.R.OK(c, http.StatusOK, message, out)
 }
@@ -109,8 +116,14 @@ func (d *Deps) getAAccepterDetail(c *gin.Context) {
 // à la source, ACTIVATION et COMPLETION au destinataire, sauf la COMPLETION
 // d'un REVERSE qui revient à l'ARTP (aucun opérateur ne la voit ici).
 func filtreATraiter() string {
+	// ACCEPTATION y figure : la capture « 1.orange1_EN_COURS_Demandes à
+	// traiter_next_ACCEPTATION » montre une demande à cette étape dans la file
+	// de la source. a-traiter répond à « nécessitant une action de votre part »
+	// (§7.7), pas à un sous-ensemble d'étapes — a-accepter n'en est qu'une vue
+	// spécialisée.
 	return `dm.statut_demande = 'EN_COURS' AND (
-	           (dm.etape_actuelle = 'DESACTIVATION' AND dm.operateur_source_id = $1)
+	           (dm.etape_actuelle IN ('ACCEPTATION', 'DESACTIVATION')
+	            AND dm.operateur_source_id = $1)
 	        OR (dm.etape_actuelle IN ('ACTIVATION', 'COMPLETION')
 	            AND dm.operateur_destinataire_id = $1
 	            AND NOT (dm.etape_actuelle = 'COMPLETION' AND dm.type_demande = 'REVERSE'))
@@ -147,7 +160,7 @@ func (d *Deps) getAConfirmer(c *gin.Context) {
 		d.R.Fail(c, apperr.ErreurInterne("lecture des demandes à confirmer"))
 		return
 	}
-	d.rendreListe(c, "Demandes à confirmer récupérées avec succès", ids)
+	d.rendreListeAvec(c, "Demandes à confirmer récupérées avec succès", ids, sansClient)
 }
 
 func (d *Deps) getAConfirmerDetail(c *gin.Context) {
@@ -157,7 +170,7 @@ func (d *Deps) getAConfirmerDetail(c *gin.Context) {
 		d.R.Fail(c, apperr.ErreurInterne("lecture des demandes à confirmer"))
 		return
 	}
-	d.detailParmi(c, ids, c.Param("id"))
+	d.detailParmiAvec(c, ids, c.Param("id"), sansClient)
 }
 
 // idsAConfirmer liste les demandes EN_COURS/CONFIRMATION où l'opérateur donné
@@ -312,9 +325,14 @@ func (d *Deps) detailFiltre(c *gin.Context, filtre, id, operateurID string) {
 // detailParmi réutilise une liste d'ids déjà calculée (a-confirmer, dont le
 // filtre n'est pas une simple clause SQL).
 func (d *Deps) detailParmi(c *gin.Context, ids []string, id string) {
+	d.detailParmiAvec(c, ids, id, func(dto map[string]any) map[string]any { return dto })
+}
+
+func (d *Deps) detailParmiAvec(c *gin.Context, ids []string, id string,
+	transforme func(map[string]any) map[string]any) {
 	for _, x := range ids {
 		if x == id {
-			d.detailUnique(c, id)
+			d.detailUniqueAvec(c, id, transforme)
 			return
 		}
 	}
@@ -322,6 +340,11 @@ func (d *Deps) detailParmi(c *gin.Context, ids []string, id string) {
 }
 
 func (d *Deps) detailUnique(c *gin.Context, id string) {
+	d.detailUniqueAvec(c, id, func(dto map[string]any) map[string]any { return dto })
+}
+
+func (d *Deps) detailUniqueAvec(c *gin.Context, id string,
+	transforme func(map[string]any) map[string]any) {
 	dto, err := d.demandeDTO(c, id)
 	if err != nil {
 		d.R.Fail(c, apperr.ErreurInterne("lecture de la demande"))
@@ -330,7 +353,7 @@ func (d *Deps) detailUnique(c *gin.Context, id string) {
 	// [HYP] Le guide ne documente pas le message de succès d'un détail unitaire ;
 	// ni la brief ni les tests ne le fixent. Choisi par cohérence avec les
 	// messages de liste ("... récupérée(s) avec succès").
-	d.R.OK(c, http.StatusOK, "Demande récupérée avec succès", dto)
+	d.R.OK(c, http.StatusOK, "Demande récupérée avec succès", transforme(dto))
 }
 
 // --- helpers exposés aux tâches suivantes ------------------------------------

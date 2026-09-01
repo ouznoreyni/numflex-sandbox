@@ -112,13 +112,12 @@ func (d *Deps) postAConfirmer(c *gin.Context) {
 		}
 	}
 
-	// La transition planifiée à l'instant n'a pas encore convergé : le DTO
-	// relu ici porte donc toujours CONFIRMATION/EN_COURS, comme mesuré au SIT
-	// pour l'acceptation (R-10).
 	dto, errDTO := d.demandeDTO(c, dm.ID)
 	if errDTO != nil {
 		d.R.Fail(c, apperr.ErreurInterne("relecture de la demande"))
 		return
 	}
-	d.R.OK(c, http.StatusOK, "Étape traitée avec succès", dto)
+	// Sans client : les captures des deux confirmations, orange puis expresso,
+	// n'en portent pas, là où toutes les autres réponses en portent un.
+	d.R.OK(c, http.StatusOK, "Étape traitée avec succès", sansClient(dto))
 }

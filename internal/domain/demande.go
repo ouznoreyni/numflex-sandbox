@@ -29,7 +29,6 @@ const (
 	EtapeEnCours  StatutEtape = "EN_COURS"
 	EtapeTerminee StatutEtape = "TERMINE"
 	EtapeExpiree  StatutEtape = "EXPIRE"
-	EtapeValidee  StatutEtape = "VALIDE"
 )
 
 type TypeDemande string

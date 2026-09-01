@@ -48,7 +48,7 @@ func TestCreationParticulierNominale(t *testing.T) {
 		jeton, corpsParticulier("771000001"))
 
 	require.Equal(t, http.StatusCreated, rep.StatusCode)
-	require.Equal(t, "Demande créée avec succès", corps["message"])
+	require.Equal(t, "Demande particulier créée avec succès", corps["message"])
 
 	data := corps["data"].(map[string]any)
 	require.Regexp(t, `^[0-9a-f]{24}$`, data["id"])

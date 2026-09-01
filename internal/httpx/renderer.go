@@ -21,9 +21,18 @@ func NewRenderer(fid config.Fidelity, skew time.Duration) *Renderer {
 
 func (r *Renderer) Fidelity() config.Fidelity { return r.fid }
 
-// Skew applique la dérive d'horloge serveur mesurée en recette (ANO-015, ~9 min).
-// Elle ne touche que les horodatages rendus ; ceux stockés en base restent justes.
-func (r *Renderer) Skew(t time.Time) time.Time { return t.Add(r.skew) }
+// Skew applique la dérive d'horloge serveur mesurée en recette (ANO-015, ~9 min),
+// et tronque à la milliseconde. Elle ne touche que les horodatages rendus ; ceux
+// stockés en base restent justes et à leur pleine précision.
+//
+// La troncature vient des captures du 2026-08-27 : la plateforme relit ses
+// documents depuis Mongo, dont l'horodatage est milliseconde, et rend donc
+// « 2026-08-27T22:39:23.583Z ». Postgres stocke à la microseconde ; sans
+// troncature le sandbox rendrait un champ plus précis que l'original, et un
+// client qui compare des horodatages au format exact verrait la différence.
+func (r *Renderer) Skew(t time.Time) time.Time {
+	return t.Add(r.skew).Truncate(time.Millisecond)
+}
 
 func (r *Renderer) OK(c *gin.Context, status int, message string, data any) {
 	c.JSON(status, Envelope{Success: true, Code: "SUCCESS", Message: message, Data: data})

@@ -132,7 +132,7 @@ func (d *Deps) postDemandeParticulier(c *gin.Context) {
 		d.R.Fail(c, apperr.ErreurInterne("relecture de la demande"))
 		return
 	}
-	d.R.OK(c, http.StatusCreated, "Demande créée avec succès", dto)
+	d.R.OK(c, http.StatusCreated, "Demande particulier créée avec succès", dto)
 }
 
 // validerParticulier reproduit la validation de la plateforme, y compris son écart
