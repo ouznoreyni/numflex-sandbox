@@ -21,6 +21,19 @@ func NewOTPGateway() *OTPGateway {
 	return &OTPGateway{otps: make(map[string]port.OneTimePassword)}
 }
 
+// Seed pre-loads an OTP directly, bypassing any use-case logic — interactor
+// tests use it to set up a starting state (attempts already spent, an
+// already-consumed code, an expired timestamp) that Execute itself would
+// never produce.
+func (g *OTPGateway) Seed(otp port.OneTimePassword) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.otps == nil {
+		g.otps = make(map[string]port.OneTimePassword)
+	}
+	g.otps[otp.MSISDN] = otp
+}
+
 func (g *OTPGateway) Upsert(_ context.Context, otp port.OneTimePassword) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
