@@ -7,7 +7,11 @@ test: up
 	DATABASE_URL="$(DB_TEST)" \
 	ETAPE_TIMEOUT_SECONDS=0 CONVERGENCE_MIN_SECONDS=0 CONVERGENCE_MAX_SECONDS=0 \
 	COMPLETION_LATENCY_MS=0 CLOCK_SKEW_SECONDS=0 \
-	go test ./... -p 1 -count=1
+	go test -tags=integration ./... -p 1 -count=1
+
+# Tests unitaires seulement — pas de base, pas de Docker, quelques secondes.
+test-unit:
+	go test ./... -count=1
 
 # Le CORS est ouvert a toute origine par defaut, pour que la page Swagger
 # (port 8081) puisse appeler l'API depuis un navigateur. La plateforme reelle
@@ -66,4 +70,4 @@ push:
 	  --push .
 	@echo "publié : $(REGISTRY)/$(IMAGE):latest$(if $(VERSION), et :$(VERSION),)"
 
-.PHONY: up test run swagger swagger-build image push
+.PHONY: up test test-unit run swagger swagger-build image push

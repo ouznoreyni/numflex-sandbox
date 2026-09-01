@@ -1,14 +1,15 @@
-package store
+package store_test
 
 import (
 	"context"
 	"testing"
 
+	"github.com/ouznoreyni/numflex-sandbox/internal/testsupport"
 	"github.com/stretchr/testify/require"
 )
 
 func TestMigrationsEtSchema(t *testing.T) {
-	db := NewTestDB(t)
+	db := testsupport.NewTestDB(t)
 	ctx := context.Background()
 
 	tables := []string{
@@ -26,7 +27,7 @@ func TestMigrationsEtSchema(t *testing.T) {
 }
 
 func TestNewTestDBEstIsolee(t *testing.T) {
-	db := NewTestDB(t)
+	db := testsupport.NewTestDB(t)
 	ctx := context.Background()
 
 	_, err := db.Pool.Exec(ctx,
@@ -34,7 +35,7 @@ func TestNewTestDBEstIsolee(t *testing.T) {
 		 VALUES ('770000001', '123456', now(), 0, false, now())`)
 	require.NoError(t, err)
 
-	db2 := NewTestDB(t)
+	db2 := testsupport.NewTestDB(t)
 	var n int
 	require.NoError(t, db2.Pool.QueryRow(ctx, "SELECT count(*) FROM otp").Scan(&n))
 	require.Equal(t, 0, n, "NewTestDB doit repartir d'une base vide")

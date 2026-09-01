@@ -9,6 +9,7 @@ import (
 	"github.com/ouznoreyni/numflex-sandbox/internal/entity"
 	"github.com/ouznoreyni/numflex-sandbox/internal/seed"
 	"github.com/ouznoreyni/numflex-sandbox/internal/store"
+	"github.com/ouznoreyni/numflex-sandbox/internal/testsupport"
 	"github.com/stretchr/testify/require"
 )
 
@@ -41,7 +42,7 @@ func etatDemande(t *testing.T, db *store.DB, id string) (etape, statutEtape, sta
 
 func moteur(t *testing.T, ajuste ...func(*config.Config)) (*Engine, *store.DB) {
 	t.Helper()
-	db := store.NewTestDB(t)
+	db := testsupport.NewTestDB(t)
 	cfg := &config.Config{EngineTick: time.Millisecond, EtapeTimeout: 0}
 	for _, f := range ajuste {
 		f(cfg)

@@ -1,17 +1,18 @@
-package seed
+package seed_test
 
 import (
 	"context"
 	"testing"
 	"time"
 
-	"github.com/ouznoreyni/numflex-sandbox/internal/store"
+	"github.com/ouznoreyni/numflex-sandbox/internal/seed"
+	"github.com/ouznoreyni/numflex-sandbox/internal/testsupport"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/bcrypt"
 )
 
 func TestOperateursIdentifiantsExacts(t *testing.T) {
-	db := store.NewTestDB(t)
+	db := testsupport.NewTestDB(t)
 	ctx := context.Background()
 
 	attendus := map[string]string{
@@ -33,7 +34,7 @@ func TestOperateursIdentifiantsExacts(t *testing.T) {
 }
 
 func TestMotifsRejetIdentifiantsExacts(t *testing.T) {
-	db := store.NewTestDB(t)
+	db := testsupport.NewTestDB(t)
 	ctx := context.Background()
 
 	attendus := map[string]string{
@@ -53,7 +54,7 @@ func TestMotifsRejetIdentifiantsExacts(t *testing.T) {
 }
 
 func TestComptes(t *testing.T) {
-	db := store.NewTestDB(t)
+	db := testsupport.NewTestDB(t)
 	ctx := context.Background()
 
 	comptes := map[string]struct {
@@ -78,7 +79,7 @@ func TestComptes(t *testing.T) {
 }
 
 func TestVivierNumeros(t *testing.T) {
-	db := store.NewTestDB(t)
+	db := testsupport.NewTestDB(t)
 	ctx := context.Background()
 
 	cas := []struct {
@@ -89,13 +90,13 @@ func TestVivierNumeros(t *testing.T) {
 		agePortageMinJour int
 		agePortageMaxJour int
 	}{
-		{"771000001", OperateurOrange, false, false, 0, 0},
-		{"761000001", OperateurYAS, false, false, 0, 0},
-		{"701000001", OperateurExpresso, false, false, 0, 0},
-		{"772000001", OperateurOrange, true, false, 25, 35},
-		{"773000001", OperateurYAS, true, false, 230, 250},
-		{"774000001", OperateurYAS, true, false, 55, 65},
-		{"775000001", OperateurYAS, true, true, 230, 250},
+		{"771000001", seed.OperateurOrange, false, false, 0, 0},
+		{"761000001", seed.OperateurYAS, false, false, 0, 0},
+		{"701000001", seed.OperateurExpresso, false, false, 0, 0},
+		{"772000001", seed.OperateurOrange, true, false, 25, 35},
+		{"773000001", seed.OperateurYAS, true, false, 230, 250},
+		{"774000001", seed.OperateurYAS, true, false, 55, 65},
+		{"775000001", seed.OperateurYAS, true, true, 230, 250},
 	}
 	for _, c := range cas {
 		var actuel string
@@ -120,11 +121,11 @@ func TestVivierNumeros(t *testing.T) {
 }
 
 func TestSeedIdempotent(t *testing.T) {
-	db := store.NewTestDB(t)
+	db := testsupport.NewTestDB(t)
 	ctx := context.Background()
 
-	require.NoError(t, Run(ctx, db))
-	require.NoError(t, Run(ctx, db))
+	require.NoError(t, seed.Run(ctx, db))
+	require.NoError(t, seed.Run(ctx, db))
 
 	var n int
 	require.NoError(t, db.Pool.QueryRow(ctx, "SELECT count(*) FROM operateur").Scan(&n))

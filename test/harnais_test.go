@@ -21,6 +21,7 @@ import (
 	"github.com/ouznoreyni/numflex-sandbox/internal/httpx"
 	"github.com/ouznoreyni/numflex-sandbox/internal/seed"
 	"github.com/ouznoreyni/numflex-sandbox/internal/store"
+	"github.com/ouznoreyni/numflex-sandbox/internal/testsupport"
 	"github.com/stretchr/testify/require"
 )
 
@@ -36,7 +37,7 @@ type harnais struct {
 // profil déterministe (convergence et latences nulles) sauf réglages explicites.
 func nouveauHarnais(t *testing.T, ajuste ...func(*config.Config)) *harnais {
 	t.Helper()
-	db := store.NewTestDB(t)
+	db := testsupport.NewTestDB(t)
 
 	cfg := &config.Config{
 		Port:           "0",
