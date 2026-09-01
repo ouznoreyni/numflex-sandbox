@@ -35,6 +35,15 @@ func (g *ReferenceGateway) SeedRejectionReason(id, reason string) {
 	g.rejectionReasons = append(g.rejectionReasons, entity.RejectionReason{ID: id, Reason: reason})
 }
 
+// SeedOperator registers one operateur row, read back by Operators — Task 15
+// (porting.ConfirmRequest) is its first caller, needing "every operator on
+// the market" for entity.ExpectedConfirmers.
+func (g *ReferenceGateway) SeedOperator(id, name string) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.operators = append(g.operators, entity.Operator{ID: id, Name: name})
+}
+
 func (g *ReferenceGateway) Operators(_ context.Context) ([]entity.Operator, error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()

@@ -48,59 +48,13 @@ func NewAcceptanceController(
 	}
 }
 
-// requestViewDTO sérialise une demande au format du guide §7.3 — a third
-// deliberate duplicate of CreationController's and QueryController's own
-// (ruling R28): internal/api/dto.go's Deps.demandeDTO still serves
-// annulation.go and traitement.go, so this task cannot consolidate the
-// three copies into one without breaking their compilation. Task 15, which
-// migrates the last of those two callers, is where that consolidation is
-// due.
-func (ctl *AcceptanceController) requestViewDTO(v port.RequestView) map[string]any {
-	out := map[string]any{
-		"id":                    v.ID,
-		"numero":                v.MSISDN,
-		"typeAbonne":            v.SubscriberType,
-		"typeDemande":           v.RequestType,
-		"statutDemande":         v.Status,
-		"etapeActuelle":         v.CurrentStep,
-		"statutEtapeActuel":     v.CurrentStepStatus,
-		"operateurSource":       map[string]any{"id": v.SourceOperatorID, "nom": v.SourceOperatorName},
-		"operateurDestinataire": map[string]any{"id": v.RecipientOperatorID, "nom": v.RecipientOperatorName},
-		"dateDemande":           ctl.clock.Rendered(v.RequestDate),
-		"processus":             nil,
-		"routageInfo":           nil,
-	}
-	if v.Processus != nil {
-		out["processus"] = *v.Processus
-	}
-	if v.RoutingInfo != nil {
-		out["routageInfo"] = *v.RoutingInfo
-	}
-	if v.CompletionDate != nil {
-		out["dateFinalisation"] = ctl.clock.Rendered(*v.CompletionDate)
-	}
-	if v.Client != nil {
-		client := map[string]any{
-			"nom":           v.Client.LastName,
-			"prenom":        v.Client.FirstName,
-			"dateNaissance": "",
-			"lieuNaissance": v.Client.BirthPlace,
-			"typePiece":     v.Client.IDType,
-			"numeroPiece":   v.Client.IDNumber,
-		}
-		if v.Client.BirthDate != nil {
-			client["dateNaissance"] = v.Client.BirthDate.Format("2006-01-02")
-		}
-		out["client"] = client
-	}
-	return out
-}
-
 // repondre renders the response common to both handlers: guide §7.3's
-// shape, under the exact message the contract carries.
+// shape, via the package-level requestViewDTO (request_view.go) — the one
+// shared implementation Task 15 consolidated ruling R28's deliberate
+// duplicates into — under the exact message the contract carries.
 func (ctl *AcceptanceController) repondre(c *gin.Context, view port.RequestView) {
 	render(c, ctl.pres.Success(http.StatusOK, "Décision d'acceptation enregistrée",
-		ctl.requestViewDTO(view)))
+		requestViewDTO(ctl.clock, view)))
 }
 
 // --- Particulier / restitution ----------------------------------------------

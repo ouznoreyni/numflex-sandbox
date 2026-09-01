@@ -2,13 +2,57 @@ package api
 
 import (
 	"context"
+	"errors"
 	"net/http"
+	"regexp"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5"
 	"github.com/ouznoreyni/numflex-sandbox/internal/entity"
 	"github.com/ouznoreyni/numflex-sandbox/internal/framework/identifier"
 )
+
+// motifMSISDN est le format MSISDN du contrat ARTP. Moved here from the
+// deleted internal/api/dto.go (Task 15): postReverseRequest below is its
+// last caller in this package — the OTP and creation controllers
+// (internal/adapter/controller) each carry their own independent copy.
+var motifMSISDN = regexp.MustCompile(`^[0-9]{9}$`)
+
+// etatNumero lit l'état courant d'un numéro dans le registre et calcule
+// RequestInProgress par existence d'une demande EN_COURS qui le référence.
+// Moved here from the deleted internal/api/dto.go (Task 15): with
+// annulation.go, confirmation.go and traitement.go gone, postReverseRequest
+// below is this method's only remaining caller. Un numéro absent du
+// registre ne peut pas appartenir à l'opérateur source déclaré.
+func (d *Deps) etatNumero(ctx context.Context, msisdn string) (entity.NumberState, *entity.Fault) {
+	n := entity.NumberState{MSISDN: msisdn}
+
+	err := d.DB.Pool.QueryRow(ctx,
+		`SELECT operateur_actuel_id, operateur_origine_id, date_dernier_portage, deja_restitue
+		   FROM numero WHERE msisdn = $1`, msisdn).
+		Scan(&n.CurrentOperatorID, &n.OriginOperatorID, &n.LastPortingDate, &n.AlreadyRestituted)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return entity.NumberState{}, entity.IncorrectSourceOperator()
+	}
+	if err != nil {
+		return entity.NumberState{}, entity.InternalError("lecture du numéro")
+	}
+
+	if err := d.DB.Pool.QueryRow(ctx, `
+		SELECT EXISTS (
+		  SELECT 1 FROM demande_numero dn
+		    JOIN demande dm ON dm.id = dn.demande_id
+		   WHERE dn.numero = $1
+		     AND dm.statut_demande = 'EN_COURS'
+		     AND NOT dn.exclu
+		     AND dn.statut <> 'REJETE')`, msisdn).
+		Scan(&n.RequestInProgress); err != nil {
+		return entity.NumberState{}, entity.InternalError("lecture des demandes en cours")
+	}
+
+	return n, nil
+}
 
 // routesReverse câble le §6 du guide : soumission et consultation des
 // demandes de reverse. Aucune route d'annulation — le guide l'exclut

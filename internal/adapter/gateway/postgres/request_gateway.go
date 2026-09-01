@@ -252,3 +252,28 @@ func (g *RequestGateway) Reject(ctx context.Context, requestID, operatorID, reje
 		requestID, now, rejectionReasonID, comment)
 	return err
 }
+
+// Cancel withdraws a request before it has moved — moved verbatim from the
+// deleted internal/api/annulation.go's postAnnuler, which opened its own
+// *pgx.Tx for these same two statements. Unlike Reject, there is no
+// rejection reason and no commentaire to record, but transition_prevue_a is
+// cleared: a request cancelled mid-convergence must not have the engine
+// apply a transition onto a demande that no longer exists as EN_COURS.
+func (g *RequestGateway) Cancel(ctx context.Context, requestID, operatorID string, now time.Time) error {
+	if _, err := g.db.Exec(ctx,
+		`INSERT INTO etape_historique
+		   (demande_id, etape, statut, operateur_id, origine, commentaire, date_debut, date_fin)
+		 SELECT id, etape_actuelle, 'TERMINE', $2, 'ACTION', NULL, date_debut_etape, $3
+		   FROM demande WHERE id = $1`,
+		requestID, operatorID, now); err != nil {
+		return err
+	}
+
+	_, err := g.db.Exec(ctx,
+		`UPDATE demande
+		    SET statut_demande = 'ANNULE', statut_etape_actuel = 'TERMINE',
+		        date_finalisation = $2, transition_prevue_a = NULL
+		  WHERE id = $1`,
+		requestID, now)
+	return err
+}

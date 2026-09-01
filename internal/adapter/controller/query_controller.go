@@ -15,12 +15,10 @@ import (
 // /demandes/a-traiter (+detail), /demandes/a-confirmer (+detail),
 // /demandes/deja-confirmees, /demandes/in, /demandes/out. Each handler
 // drives one boundary and renders []port.RequestView (or a single
-// port.RequestView for a detail route) into the guide §7.3 shape — the
-// requestViewDTO assembly below is a deliberate duplicate of
-// CreationController's, not a new third shape (ruling R28): both exist only
-// until acceptation.go, annulation.go, confirmation.go and traitement.go
-// migrate off internal/api/dto.go's Deps.demandeDTO, their last remaining
-// caller.
+// port.RequestView for a detail route) into the guide §7.3 shape, via the
+// package-level requestViewDTO and sansClient (request_view.go) — the one
+// shared implementation Task 15 consolidated ruling R28's deliberate
+// duplicates into.
 type QueryController struct {
 	own              query.OwnBoundary
 	toAccept         query.ToAcceptBoundary
@@ -56,60 +54,6 @@ func NewQueryController(
 	}
 }
 
-// requestViewDTO sérialise une demande au format du guide §7.3 — the same
-// duplicate of the pre-migration Deps.demandeDTO that
-// CreationController.requestViewDTO already carries, field for field.
-func (ctl *QueryController) requestViewDTO(v port.RequestView) map[string]any {
-	out := map[string]any{
-		"id":                    v.ID,
-		"numero":                v.MSISDN,
-		"typeAbonne":            v.SubscriberType,
-		"typeDemande":           v.RequestType,
-		"statutDemande":         v.Status,
-		"etapeActuelle":         v.CurrentStep,
-		"statutEtapeActuel":     v.CurrentStepStatus,
-		"operateurSource":       map[string]any{"id": v.SourceOperatorID, "nom": v.SourceOperatorName},
-		"operateurDestinataire": map[string]any{"id": v.RecipientOperatorID, "nom": v.RecipientOperatorName},
-		"dateDemande":           ctl.clock.Rendered(v.RequestDate),
-		"processus":             nil,
-		"routageInfo":           nil,
-	}
-	if v.Processus != nil {
-		out["processus"] = *v.Processus
-	}
-	if v.RoutingInfo != nil {
-		out["routageInfo"] = *v.RoutingInfo
-	}
-	if v.CompletionDate != nil {
-		out["dateFinalisation"] = ctl.clock.Rendered(*v.CompletionDate)
-	}
-	if v.Client != nil {
-		client := map[string]any{
-			"nom":           v.Client.LastName,
-			"prenom":        v.Client.FirstName,
-			"dateNaissance": "",
-			"lieuNaissance": v.Client.BirthPlace,
-			"typePiece":     v.Client.IDType,
-			"numeroPiece":   v.Client.IDNumber,
-		}
-		if v.Client.BirthDate != nil {
-			client["dateNaissance"] = v.Client.BirthDate.Format("2006-01-02")
-		}
-		out["client"] = client
-	}
-	return out
-}
-
-// sansClient retire le sous-objet client d'un DTO. Les trois endpoints de
-// confirmation — la file, son détail et le POST — sont les seuls à ne pas le
-// porter ; c'est mesuré sur quatre captures du 2026-08-27, pas déduit. Local
-// duplicate of internal/api/dto.go's sansClient, same reasoning as
-// requestViewDTO above.
-func sansClient(dto map[string]any) map[string]any {
-	delete(dto, "client")
-	return dto
-}
-
 // dtoList maps a slice of views onto their DTOs. It never returns nil: even
 // an empty views slice yields a non-nil, zero-length slice, so the caller's
 // JSON "data" field renders as [] — never null — exactly as
@@ -117,7 +61,7 @@ func sansClient(dto map[string]any) map[string]any {
 func (ctl *QueryController) dtoList(views []port.RequestView, transforme func(map[string]any) map[string]any) []map[string]any {
 	out := make([]map[string]any, 0, len(views))
 	for _, v := range views {
-		out = append(out, transforme(ctl.requestViewDTO(v)))
+		out = append(out, transforme(requestViewDTO(ctl.clock, v)))
 	}
 	return out
 }
@@ -161,7 +105,7 @@ func (ctl *QueryController) AAccepterDetail(c *gin.Context) {
 		return
 	}
 	render(c, ctl.pres.Success(http.StatusOK, "Demande récupérée avec succès",
-		ctl.requestViewDTO(view)))
+		requestViewDTO(ctl.clock, view)))
 }
 
 // --- a-traiter ------------------------------------------------------------
@@ -187,7 +131,7 @@ func (ctl *QueryController) ATraiterDetail(c *gin.Context) {
 		return
 	}
 	render(c, ctl.pres.Success(http.StatusOK, "Demande récupérée avec succès",
-		ctl.requestViewDTO(view)))
+		requestViewDTO(ctl.clock, view)))
 }
 
 // --- a-confirmer ------------------------------------------------------------
@@ -213,7 +157,7 @@ func (ctl *QueryController) AConfirmerDetail(c *gin.Context) {
 		return
 	}
 	render(c, ctl.pres.Success(http.StatusOK, "Demande récupérée avec succès",
-		sansClient(ctl.requestViewDTO(view))))
+		sansClient(requestViewDTO(ctl.clock, view))))
 }
 
 // --- deja-confirmees --------------------------------------------------------

@@ -115,11 +115,19 @@ func NewRouter(d *Deps) *gin.Engine {
 	g.POST("/demandes/acceptation", acceptCtrl.Acceptation)
 	g.POST("/demandes/:id/acceptation", acceptCtrl.AcceptationFlotte)
 
-	d.routesConfirmation(g) // Task 15
-	d.routesTraitement(g)   // Task 16
-	d.routesAnnulation(g)   // Task 17
-	d.routesIncidents(g)    // Task 18
-	d.routesReverse(g)      // Task 19
+	// Task 15 : confirmation, traitement et annulation passent en clean
+	// architecture — un contrôleur qui délègue à trois interactors
+	// (internal/usecase/porting), au-dessus du même RequestGateway que les
+	// sept contrôleurs précédents, plus ConfirmationGateway pour la seule
+	// écriture propre à la confirmation. Construit une seule fois ici,
+	// comme les sept contrôleurs précédents.
+	portingCtrl := d.portingController()
+	g.POST("/demandes/a-confirmer", portingCtrl.Confirmation)
+	g.POST("/demandes/traitement", portingCtrl.Traitement)
+	g.POST("/demandes/:id/annuler", portingCtrl.Annulation)
+
+	d.routesIncidents(g) // Task 18
+	d.routesReverse(g)   // Task 19
 
 	// Hors gateway, et hors contrat ARTP : la purge des données de test. Le
 	// groupe n'est monté que si SANDBOX_ADMIN le demande — sinon la route

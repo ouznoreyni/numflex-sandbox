@@ -15,6 +15,11 @@ type Repositories struct {
 	// number-state read a creation interactor needs happens before the
 	// transaction opens, against the plain pool.
 	Requests RequestGateway
+	// Confirmations carries the single write Task 15's ConfirmRequest makes
+	// — one confirmation row, bound to the same transaction boundary as
+	// every other capability's writes here, though today it coordinates
+	// with nothing else inside the same Do.
+	Confirmations ConfirmationGateway
 	// Reverse, Incidents… are added by later tasks.
 }
 

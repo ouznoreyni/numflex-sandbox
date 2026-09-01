@@ -18,4 +18,5 @@ func TestInMemoryDoublesSatisfyPorts(t *testing.T) {
 	var _ port.IDGenerator = (*inmemory.IDGenerator)(nil)
 	var _ port.ReferenceGateway = (*inmemory.ReferenceGateway)(nil)
 	var _ port.Engine = (*inmemory.Engine)(nil)
+	var _ port.ConfirmationGateway = (*inmemory.ConfirmationGateway)(nil)
 }

@@ -5,6 +5,7 @@ package port
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/ouznoreyni/numflex-sandbox/internal/entity"
@@ -199,6 +200,36 @@ type RequestGateway interface {
 	// numéro by numéro until nothing is left ([HYP], see
 	// internal/usecase/acceptance).
 	Reject(ctx context.Context, requestID, operatorID, rejectionReasonID, comment string, now time.Time) error
+
+	// Cancel withdraws a request before it has moved (§7.11): the same
+	// terminal etape_historique row Reject writes, then the demande row
+	// itself marked ANNULE with nothing left pending — moved verbatim from
+	// the deleted internal/api/annulation.go's postAnnuler, which opened its
+	// own *pgx.Tx for exactly these two statements. Task 15
+	// (internal/usecase/porting) is its first caller.
+	Cancel(ctx context.Context, requestID, operatorID string, now time.Time) error
+}
+
+// ErrAlreadyConfirmed is ConfirmationGateway.Confirm's answer to a replay:
+// operatorID has already confirmed requestID. It is a sentinel rather than a
+// raw SQL error code because the anti-replay guarantee comes from the
+// confirmation table's own primary key (demande_id, operateur_id), not from
+// a pre-check — a pre-check would race two concurrent calls from the same
+// operator — and no *pgconn.PgError may cross into internal/usecase: only
+// the Postgres gateway may know that code 23505 means this.
+var ErrAlreadyConfirmed = errors.New("l'opérateur a déjà confirmé cette demande")
+
+// ConfirmationGateway records one operator's confirmation at the
+// CONFIRMATION step, and counts how many a request has received so far —
+// the two operations POST /demandes/a-confirmer needs beyond
+// entity.ExpectedConfirmers, which decides who must confirm but not how
+// many already have.
+type ConfirmationGateway interface {
+	// Confirm inserts one confirmation row, or returns ErrAlreadyConfirmed
+	// if operatorID already confirmed requestID.
+	Confirm(ctx context.Context, requestID, operatorID, comment string, now time.Time) error
+	// Count answers how many operators have confirmed requestID so far.
+	Count(ctx context.Context, requestID string) (int, error)
 }
 
 // Queue names the three read-only queues that carry a single-id detail

@@ -10,6 +10,7 @@ package routerharness
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -37,10 +38,11 @@ import (
 // the one every capability's moved controller test (Task 9 onward) should
 // use instead of reimplementing it.
 type RouterHarness struct {
-	T   *testing.T
-	Srv *httptest.Server
-	DB  *persistence.DB
-	Cfg *config.Config
+	T      *testing.T
+	Srv    *httptest.Server
+	DB     *persistence.DB
+	Cfg    *config.Config
+	Moteur *engine.Engine
 }
 
 // FiabiliteContrat switches the harness's fidelity mode to "contract" — the
@@ -54,6 +56,25 @@ type RouterHarness struct {
 // place that dependency is allowed to live.
 func FiabiliteContrat(c *config.Config) {
 	c.Fidelity = config.FidelityContract
+}
+
+// Convergence returns an ajuste function that fixes the engine's
+// convergence window to [min, max] — the same reason FiabiliteContrat
+// exists: a controller test cannot name internal/framework/config's
+// *config.Config field directly, only through a func literal built here.
+// A non-zero window makes PlanifierTransition defer the transition (R-10)
+// rather than apply it synchronously within the request.
+func Convergence(min, max time.Duration) func(*config.Config) {
+	return func(c *config.Config) {
+		c.ConvergenceMin, c.ConvergenceMax = min, max
+	}
+}
+
+// CompletionLatency returns an ajuste function that fixes
+// config.CompletionLatency (ANO-005) — the same reason FiabiliteContrat
+// exists.
+func CompletionLatency(d time.Duration) func(*config.Config) {
+	return func(c *config.Config) { c.CompletionLatency = d }
 }
 
 // NewRouterHarness mounts the full router in a deterministic profile.
@@ -87,7 +108,17 @@ func NewRouterHarness(t *testing.T, ajuste ...func(*config.Config)) *RouterHarne
 	srv := httptest.NewServer(api.NewRouter(d))
 	t.Cleanup(srv.Close)
 
-	return &RouterHarness{T: t, Srv: srv, DB: db, Cfg: cfg}
+	return &RouterHarness{T: t, Srv: srv, DB: db, Cfg: cfg, Moteur: mot}
+}
+
+// Converger déclenche un passage du moteur et vérifie qu'aucune transition
+// ne reste due. Les tests pilotent le moteur explicitement plutôt que
+// d'attendre son ticker — celui-ci n'est jamais démarré ici, comme
+// internal/api's own harnais (internal/api/testutil_test.go) ne le démarre
+// pas non plus.
+func (h *RouterHarness) Converger() {
+	h.T.Helper()
+	require.NoError(h.T, h.Moteur.Tick(context.Background()))
 }
 
 // Brut exécute une requête HTTP brute, sans décoder la réponse.

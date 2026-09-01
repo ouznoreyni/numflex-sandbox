@@ -41,6 +41,8 @@ type RequestGateway struct {
 	FailCreate       error
 	FailReject       error // fails Reject, the seam acceptance's atomicity test uses
 	FailRejectNumber error // fails RejectNumber, same seam for the fleet path
+	FailCancel       error // fails Cancel, the same seam for porting.CancelRequest
+	FailSetComment   error // fails SetComment, the same seam for porting.ProcessStep
 }
 
 // NewRequestGateway returns an empty double, ready to use.
@@ -203,6 +205,9 @@ func (g *RequestGateway) ByID(_ context.Context, id string) (entity.PortingReque
 func (g *RequestGateway) SetComment(_ context.Context, id, comment string) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
+	if g.FailSetComment != nil {
+		return g.FailSetComment
+	}
 	g.comments[id] = comment
 	return nil
 }
@@ -249,6 +254,22 @@ func (g *RequestGateway) Reject(_ context.Context, requestID, _, rejectionReason
 	g.demandes[requestID] = pr
 	g.comments[requestID] = comment
 	g.rejectionReasons[requestID] = rejectionReasonID
+	return nil
+}
+
+// Cancel — moved verbatim in shape from Reject above (Task 15): a
+// cancellation has no rejection reason and no commentaire, but does move
+// the request to RequestCancelled rather than RequestRejected.
+func (g *RequestGateway) Cancel(_ context.Context, requestID, _ string, _ time.Time) error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.FailCancel != nil {
+		return g.FailCancel
+	}
+	pr := g.demandes[requestID]
+	pr.Status = entity.RequestCancelled
+	pr.CurrentStepStatus = entity.StepCompleted
+	g.demandes[requestID] = pr
 	return nil
 }
 

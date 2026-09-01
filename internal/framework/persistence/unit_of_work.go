@@ -42,8 +42,9 @@ func (u *unitOfWork) Do(ctx context.Context, fn func(port.Repositories) error) (
 	}()
 
 	repos := port.Repositories{
-		OTP:      postgres.NewOTPGateway(tx),
-		Requests: postgres.NewRequestGateway(tx),
+		OTP:           postgres.NewOTPGateway(tx),
+		Requests:      postgres.NewRequestGateway(tx),
+		Confirmations: postgres.NewConfirmationGateway(tx),
 	}
 	err = fn(repos)
 	return err

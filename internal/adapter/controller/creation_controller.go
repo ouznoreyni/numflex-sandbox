@@ -96,7 +96,7 @@ func (ctl *CreationController) Particulier(c *gin.Context) {
 	}
 
 	render(c, ctl.pres.Success(http.StatusCreated, "Demande particulier créée avec succès",
-		ctl.requestViewDTO(view)))
+		requestViewDTO(ctl.clock, view)))
 }
 
 // validerParticulier reproduit la validation de la plateforme, y compris son
@@ -134,51 +134,6 @@ func validerParticulier(r demandeParticulierRequest) []entity.FieldFault {
 		})
 	}
 	return champs
-}
-
-// requestViewDTO sérialise une demande au format du guide §7.3, commun à
-// particulier et restitution. Tous les horodatages passent par ctl.clock : la
-// dérive n'existe qu'au rendu, jamais en base — le même principe que
-// l'ancien Deps.demandeDTO appliquait via d.R.Skew().
-func (ctl *CreationController) requestViewDTO(v port.RequestView) map[string]any {
-	out := map[string]any{
-		"id":                    v.ID,
-		"numero":                v.MSISDN,
-		"typeAbonne":            v.SubscriberType,
-		"typeDemande":           v.RequestType,
-		"statutDemande":         v.Status,
-		"etapeActuelle":         v.CurrentStep,
-		"statutEtapeActuel":     v.CurrentStepStatus,
-		"operateurSource":       map[string]any{"id": v.SourceOperatorID, "nom": v.SourceOperatorName},
-		"operateurDestinataire": map[string]any{"id": v.RecipientOperatorID, "nom": v.RecipientOperatorName},
-		"dateDemande":           ctl.clock.Rendered(v.RequestDate),
-		"processus":             nil,
-		"routageInfo":           nil,
-	}
-	if v.Processus != nil {
-		out["processus"] = *v.Processus
-	}
-	if v.RoutingInfo != nil {
-		out["routageInfo"] = *v.RoutingInfo
-	}
-	if v.CompletionDate != nil {
-		out["dateFinalisation"] = ctl.clock.Rendered(*v.CompletionDate)
-	}
-	if v.Client != nil {
-		client := map[string]any{
-			"nom":           v.Client.LastName,
-			"prenom":        v.Client.FirstName,
-			"dateNaissance": "",
-			"lieuNaissance": v.Client.BirthPlace,
-			"typePiece":     v.Client.IDType,
-			"numeroPiece":   v.Client.IDNumber,
-		}
-		if v.Client.BirthDate != nil {
-			client["dateNaissance"] = v.Client.BirthDate.Format("2006-01-02")
-		}
-		out["client"] = client
-	}
-	return out
 }
 
 // --- Entreprise (flotte) ------------------------------------------------------
@@ -319,5 +274,5 @@ func (ctl *CreationController) Restitution(c *gin.Context) {
 	}
 
 	render(c, ctl.pres.Success(http.StatusCreated, "Demande de restitution créée avec succès",
-		ctl.requestViewDTO(view)))
+		requestViewDTO(ctl.clock, view)))
 }

@@ -196,11 +196,22 @@ package postgres
 // in internal/adapter/gateway/postgres/query_gateway.go itself, not
 // repeated here. It also reads:
 //
-// Table confirmation — read-only, joined or EXISTS-checked by ToConfirm and
-// AlreadyConfirmed; nothing in port.QueryGateway writes it (a confirmation
-// is recorded by a capability not yet migrated).
+// Table confirmation — joined or EXISTS-checked, read-only, by
+// QueryGateway's ToConfirm and AlreadyConfirmed. Task 15
+// (port.ConfirmationGateway, in confirmation_gateway.go) is the table's only
+// writer, one row per (demande, operateur) pair; QueryGateway still never
+// writes it.
 //
-//	SQL column     Notes
-//	----------     -----
-//	demande_id     joined to demande.id
-//	operateur_id   the confirming operator
+//	Go field (ConfirmationGateway.Confirm)   SQL column     Notes
+//	---------------------------------------  ----------     -----
+//	requestID                                demande_id     joined to demande.id;
+//	                                                        primary key with operateur_id —
+//	                                                        the anti-replay guarantee
+//	                                                        Confirm's 23505 branch reads
+//	operatorID                               operateur_id   the confirming operator
+//	comment                                  commentaire    NULLIF('') ⇒ NULL
+//	now                                      date_conf
+//
+// Task 15's other write, port.RequestGateway.Cancel, touches only columns
+// this file already maps for the table demande and etape_historique blocks
+// above (Reject's own), plus clearing transition_prevue_a — no new column.
