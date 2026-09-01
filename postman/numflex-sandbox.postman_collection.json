@@ -38,7 +38,7 @@
                 }
               }
             },
-            "description": "Authentifie un compte du seed et rend id_token. Le script de test enregistre automatiquement {{token}}."
+            "description": "Authentifie un compte du seed et rend id_token. Le script de test enregistre automatiquement {{token}}.\n\nChanger username/password pour basculer de compte : orange/orange2026, yas/yas2026, expresso/expresso2026. Plusieurs requêtes de cette collection exigent un opérateur autre que yas — leur description le précise."
           },
           "event": [
             {
@@ -68,7 +68,17 @@
                 "authenticate"
               ]
             },
-            "description": "204 No Content si le jeton {{token}} est valide."
+            "description": "204 No Content si le jeton {{token}} est valide. 401 ACCES_INTERDIT si l'en-tête Authorization est absent.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            }
           },
           "response": []
         }
@@ -381,7 +391,8 @@
                       "language": "json"
                     }
                   }
-                }
+                },
+                "description": "Compte orange — seul l'opérateur d'origine du numéro peut demander sa restitution, et il en devient le destinataire. 773000001 vient d'ORANGE et a été porté il y a 8 mois."
               },
               "response": []
             }
@@ -420,7 +431,8 @@
                       "language": "json"
                     }
                   }
-                }
+                },
+                "description": "Compte orange — seul l'opérateur source (origine du numéro) peut soumettre un reverse. La validation et le rejet sont réservés à l'ARTP, hors API : voir le CLI artp."
               },
               "response": []
             },
@@ -451,7 +463,8 @@
                       "value": "20"
                     }
                   ]
-                }
+                },
+                "description": "Compte orange — les demandes de reverse soumises par l'appelant."
               },
               "response": []
             }
@@ -498,7 +511,8 @@
                     "demandes",
                     "a-accepter"
                   ]
-                }
+                },
+                "description": "Compte orange — c'est la file de l'opérateur source."
               },
               "response": []
             },
@@ -520,7 +534,8 @@
                     "a-accepter",
                     "{{idDemande}}"
                   ]
-                }
+                },
+                "description": "Compte orange — c'est la file de l'opérateur source."
               },
               "response": []
             },
@@ -648,7 +663,8 @@
                     "demandes",
                     "in"
                   ]
-                }
+                },
+                "description": "Compte yas — portages TERMINE dont l'appelant est le destinataire."
               },
               "response": []
             },
@@ -669,7 +685,8 @@
                     "demandes",
                     "out"
                   ]
-                }
+                },
+                "description": "Compte orange — portages TERMINE dont l'appelant est la source."
               },
               "response": []
             }
@@ -709,7 +726,8 @@
                       "language": "json"
                     }
                   }
-                }
+                },
+                "description": "Compte orange — l'ACCEPTATION est réservée à l'opérateur source. Identification par idDemande, plus par numero (rupture v2)."
               },
               "response": []
             },
@@ -745,7 +763,8 @@
                       "language": "json"
                     }
                   }
-                }
+                },
+                "description": "Compte orange — acceptation d'une flotte par l'opérateur source. numerosRejetes permet le rejet partiel : la demande peut réussir en portant moins de numéros que demandé (BR-006)."
               },
               "response": []
             }
@@ -785,7 +804,8 @@
                       "language": "json"
                     }
                   }
-                }
+                },
+                "description": "Compte orange ou expresso — sur un PORTAGE la CONFIRMATION est attendue de tous les opérateurs sauf le destinataire. Sur une RESTITUTION ou un REVERSE, le destinataire confirme aussi."
               },
               "response": []
             }
@@ -825,7 +845,8 @@
                       "language": "json"
                     }
                   }
-                }
+                },
+                "description": "Le responsable dépend de l'étape courante : compte orange à DESACTIVATION, compte yas à ACTIVATION et COMPLETION. Ne jamais envoyer le champ etape — retiré en v2, il est accepté et ignoré en silence (ANO-018). COMPLETION répond en ~30 s (ANO-005)."
               },
               "response": []
             }
