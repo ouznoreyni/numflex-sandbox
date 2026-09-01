@@ -1,0 +1,15 @@
+DROP TABLE incident;
+DROP TABLE reverse_request;
+DROP TABLE otp;
+DROP TABLE confirmation;
+DROP TABLE etape_historique;
+DROP TABLE demande_client;
+DROP TABLE demande_numero;
+DROP TABLE demande;
+DROP TABLE numero;
+DROP TABLE type_incident;
+DROP TABLE processus;
+DROP TABLE type_demande;
+DROP TABLE motif_rejet;
+DROP TABLE utilisateur;
+DROP TABLE operateur;

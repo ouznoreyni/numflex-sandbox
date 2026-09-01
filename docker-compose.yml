@@ -1,0 +1,49 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: numflex
+      POSTGRES_PASSWORD: numflex
+      POSTGRES_DB: numflex
+    ports: ["5432:5432"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U numflex"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+  postgres-test:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: numflex
+      POSTGRES_PASSWORD: numflex
+      POSTGRES_DB: numflex_test
+    ports: ["5433:5432"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U numflex"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+  api:
+    build:
+      context: .
+    image: numflex-sandbox:latest
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # Le .env du dépôt, s'il existe, alimente le conteneur ; il n'est pas requis.
+    env_file:
+      - path: .env
+        required: false
+    # Ce bloc l'emporte sur le fichier — c'est voulu : ces deux valeurs doivent
+    # être vraies *dans le réseau compose*, où la base ne s'appelle pas
+    # localhost. Tout le reste de la configuration se règle par le .env.
+    environment:
+      DATABASE_URL: postgres://numflex:numflex@postgres:5432/numflex?sslmode=disable
+      # Permet à la page Swagger (make swagger, port 8081) d'appeler l'API
+      # depuis un navigateur. La plateforme réelle n'envoie pas de CORS.
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:8081}
+    # PORT est lu depuis le même .env, côté hôte comme côté conteneur : les deux
+    # extrémités de la publication restent alignées si on le change.
+    ports: ["${PORT:-8080}:${PORT:-8080}"]

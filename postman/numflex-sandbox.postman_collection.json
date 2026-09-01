@@ -1,0 +1,1209 @@
+{
+  "info": {
+    "_postman_id": "5c092150-a3de-4b58-91fb-4cd7de51f3c3",
+    "name": "NumFlex Sandbox",
+    "description": "Collection calquée sur celle de l'ARTP pour l'API Gateway NumFlex. Basculer entre ce sandbox et la recette ARTP ne demande que de changer la variable d'environnement baseUrl.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "authentication",
+      "item": [
+        {
+          "name": "POST /api/authenticate",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/authenticate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "authenticate"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"yas\",\n  \"password\": \"yas2026\",\n  \"rememberMe\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Authentifie un compte du seed et rend id_token. Le script de test enregistre automatiquement {{token}}.\n\nChanger username/password pour basculer de compte : orange/orange2026, yas/yas2026, expresso/expresso2026. Plusieurs requêtes de cette collection exigent un opérateur autre que yas — leur description le précise."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set(\"token\", pm.response.json().id_token);"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "GET /api/authenticate",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/authenticate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "authenticate"
+              ]
+            },
+            "description": "204 No Content si le jeton {{token}} est valide. 401 ACCES_INTERDIT si l'en-tête Authorization est absent.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "gateway",
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{token}}",
+            "type": "string"
+          }
+        ]
+      },
+      "item": [
+        {
+          "name": "7.1 Référentiels",
+          "item": [
+            {
+              "name": "GET /operateurs",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/gateway/v1/operateurs",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "gateway",
+                    "v1",
+                    "operateurs"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "GET /motifs-rejet",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/gateway/v1/motifs-rejet",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "gateway",
+                    "v1",
+                    "motifs-rejet"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "GET /types-demande",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/gateway/v1/types-demande",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "gateway",
+                    "v1",
+                    "types-demande"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "GET /processus",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/gateway/v1/processus",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "gateway",
+                    "v1",
+                    "processus"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "GET /types-incident",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/gateway/v1/types-incident",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "gateway",
+                    "v1",
+                    "types-incident"
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "7.2 OTP",
+          "item": [
+            {
+              "name": "POST /otp/send",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/gateway/v1/otp/send",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "gateway",
+                    "v1",
+                    "otp",
+                    "send"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"numero\": \"771000001\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "POST /otp/verify",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/gateway/v1/otp/verify",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "gateway",
+                    "v1",
+                    "otp",
+                    "verify"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"numero\": \"771000001\",\n  \"otpCode\": \"123456\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "7.3 Demande particulier",
+          "item": [
+            {
+              "name": "POST /demandes/particulier",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/gateway/v1/demandes/particulier",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "gateway",
+                    "v1",
+                    "demandes",
+                    "particulier"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"numero\": \"771000001\",\n  \"otpCode\": \"123456\",\n  \"operateurSourceId\": \"6a21745ce6c37b5b5b487ec1\",\n  \"operateurDestinataireId\": \"6a2174c3e6c37b5b5b487ec4\",\n  \"typePortabilite\": \"PREPAID\",\n  \"client\": {\n    \"nom\": \"Ngome\",\n    \"prenom\": \"Laye\",\n    \"dateNaissance\": \"1980-05-15\",\n    \"lieuNaissance\": \"Dakar\",\n    \"typePiece\": \"CNI\",\n    \"numeroPiece\": \"1234567890123\"\n  }\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "7.4 Demande entreprise (flotte)",
+          "item": [
+            {
+              "name": "POST /demandes/entreprise",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/gateway/v1/demandes/entreprise",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "gateway",
+                    "v1",
+                    "demandes",
+                    "entreprise"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"numeroPorteurFlotte\": \"771000002\",\n  \"otpCode\": \"123456\",\n  \"operateurSourceId\": \"6a21745ce6c37b5b5b487ec1\",\n  \"operateurDestinataireId\": \"6a2174c3e6c37b5b5b487ec4\",\n  \"typePortabilite\": \"POSTPAID\",\n  \"numerosFlotte\": [\"771000002\", \"771000003\", \"771000004\"],\n  \"client\": {\n    \"raisonSociale\": \"Entreprise SARL\",\n    \"numRC\": \"123456789\",\n    \"prenom\": \"Ousmane\",\n    \"nom\": \"Diallo\",\n    \"dateNaissance\": \"1975-03-20\",\n    \"typePiece\": \"CNI\",\n    \"numeroPiece\": \"1234567890123\"\n  }\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "7.5 Restitution",
+          "item": [
+            {
+              "name": "POST /demandes/restitution",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/gateway/v1/demandes/restitution",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "gateway",
+                    "v1",
+                    "demandes",
+                    "restitution"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"numero\": \"773000001\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "description": "Compte orange — seul l'opérateur d'origine du numéro peut demander sa restitution, et il en devient le destinataire. 773000001 vient d'ORANGE et a été porté il y a 8 mois."
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "7.6 Reverse",
+          "item": [
+            {
+              "name": "POST /reverse-requests",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/gateway/v1/reverse-requests",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "gateway",
+                    "v1",
+                    "reverse-requests"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"numero\": \"773000001\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "description": "Compte orange — seul l'opérateur source (origine du numéro) peut soumettre un reverse. La validation et le rejet sont réservés à l'ARTP, hors API : voir le CLI artp."
+              },
+              "response": []
+            },
+            {
+              "name": "GET /reverse-requests/mes-demandes",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/gateway/v1/reverse-requests/mes-demandes?page=0&size=20",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "gateway",
+                    "v1",
+                    "reverse-requests",
+                    "mes-demandes"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "0"
+                    },
+                    {
+                      "key": "size",
+                      "value": "20"
+                    }
+                  ]
+                },
+                "description": "Compte orange — les demandes de reverse soumises par l'appelant."
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "7.7 Consultation",
+          "item": [
+            {
+              "name": "GET /demandes/mes-demandes",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/gateway/v1/demandes/mes-demandes",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "gateway",
+                    "v1",
+                    "demandes",
+                    "mes-demandes"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "GET /demandes/a-accepter",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/gateway/v1/demandes/a-accepter",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "gateway",
+                    "v1",
+                    "demandes",
+                    "a-accepter"
+                  ]
+                },
+                "description": "Compte orange — c'est la file de l'opérateur source."
+              },
+              "response": []
+            },
+            {
+              "name": "GET /demandes/a-accepter/{id}",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/gateway/v1/demandes/a-accepter/{{idDemande}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "gateway",
+                    "v1",
+                    "demandes",
+                    "a-accepter",
+                    "{{idDemande}}"
+                  ]
+                },
+                "description": "Compte orange — c'est la file de l'opérateur source."
+              },
+              "response": []
+            },
+            {
+              "name": "GET /demandes/a-traiter",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/gateway/v1/demandes/a-traiter",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "gateway",
+                    "v1",
+                    "demandes",
+                    "a-traiter"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "GET /demandes/a-traiter/{id}",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/gateway/v1/demandes/a-traiter/{{idDemande}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "gateway",
+                    "v1",
+                    "demandes",
+                    "a-traiter",
+                    "{{idDemande}}"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "GET /demandes/a-confirmer",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/gateway/v1/demandes/a-confirmer",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "gateway",
+                    "v1",
+                    "demandes",
+                    "a-confirmer"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "GET /demandes/a-confirmer/{id}",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/gateway/v1/demandes/a-confirmer/{{idDemande}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "gateway",
+                    "v1",
+                    "demandes",
+                    "a-confirmer",
+                    "{{idDemande}}"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "GET /demandes/deja-confirmees",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/gateway/v1/demandes/deja-confirmees",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "gateway",
+                    "v1",
+                    "demandes",
+                    "deja-confirmees"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "GET /demandes/in",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/gateway/v1/demandes/in",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "gateway",
+                    "v1",
+                    "demandes",
+                    "in"
+                  ]
+                },
+                "description": "Compte yas — portages TERMINE dont l'appelant est le destinataire."
+              },
+              "response": []
+            },
+            {
+              "name": "GET /demandes/out",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/gateway/v1/demandes/out",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "gateway",
+                    "v1",
+                    "demandes",
+                    "out"
+                  ]
+                },
+                "description": "Compte orange — portages TERMINE dont l'appelant est la source."
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "7.8 Acceptation",
+          "item": [
+            {
+              "name": "POST /demandes/acceptation",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/gateway/v1/demandes/acceptation",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "gateway",
+                    "v1",
+                    "demandes",
+                    "acceptation"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"idDemande\": \"{{idDemande}}\",\n  \"accepte\": true,\n  \"commentaire\": \"Demande conforme\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "description": "Compte orange — l'ACCEPTATION est réservée à l'opérateur source. Identification par idDemande, plus par numero (rupture v2)."
+              },
+              "response": []
+            },
+            {
+              "name": "POST /demandes/{id}/acceptation",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/gateway/v1/demandes/{{idDemande}}/acceptation",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "gateway",
+                    "v1",
+                    "demandes",
+                    "{{idDemande}}",
+                    "acceptation"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"accepte\": true,\n  \"commentaire\": \"Tous les numéros conformes\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "description": "Compte orange — acceptation d'une flotte par l'opérateur source. numerosRejetes permet le rejet partiel : la demande peut réussir en portant moins de numéros que demandé (BR-006)."
+              },
+              "response": []
+            },
+            {
+              "name": "POST /demandes/acceptation (rejet)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/gateway/v1/demandes/acceptation",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "gateway",
+                    "v1",
+                    "demandes",
+                    "acceptation"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"idDemande\": \"{{idDemande}}\",\n  \"accepte\": false,\n  \"motifRejetId\": \"{{motifRejetId}}\",\n  \"commentaire\": \"Contrat non résilié\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "description": "Compte orange — rejet d'une demande particulier ou de restitution. motifRejetId est obligatoire dès que accepte vaut false, sinon MOTIF_REJET_OBLIGATOIRE. Récupérer un id via GET /motifs-rejet."
+              },
+              "response": []
+            },
+            {
+              "name": "POST /demandes/{id}/acceptation (acceptation partielle)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/gateway/v1/demandes/{{idDemande}}/acceptation",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "gateway",
+                    "v1",
+                    "demandes",
+                    "{{idDemande}}",
+                    "acceptation"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"accepte\": true,\n  \"numerosRejetes\": [\n    { \"numero\": \"771000003\", \"motifRejetId\": \"{{motifRejetId}}\" }\n  ],\n  \"commentaire\": \"Numéro 771000003 non conforme\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "description": "Compte orange — la flotte est acceptée en portant moins de numéros que demandé. Les numéros rejetés ressortent dans numerosExclus (BR-006)."
+              },
+              "response": []
+            },
+            {
+              "name": "POST /demandes/{id}/acceptation (rejet total)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/gateway/v1/demandes/{{idDemande}}/acceptation",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "gateway",
+                    "v1",
+                    "demandes",
+                    "{{idDemande}}",
+                    "acceptation"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"accepte\": false,\n  \"motifRejetId\": \"{{motifRejetId}}\",\n  \"commentaire\": \"Dossier incomplet\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "description": "Compte orange — la flotte entière est rejetée ; la demande passe en REJETE."
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "7.9 Confirmation",
+          "item": [
+            {
+              "name": "POST /demandes/a-confirmer",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/gateway/v1/demandes/a-confirmer",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "gateway",
+                    "v1",
+                    "demandes",
+                    "a-confirmer"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"idDemande\": \"{{idDemande}}\",\n  \"commentaire\": \"Portage confirmé\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "description": "Compte orange ou expresso — sur un PORTAGE la CONFIRMATION est attendue de tous les opérateurs sauf le destinataire. Sur une RESTITUTION ou un REVERSE, le destinataire confirme aussi."
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "7.10 Traitement",
+          "item": [
+            {
+              "name": "POST /demandes/traitement",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/gateway/v1/demandes/traitement",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "gateway",
+                    "v1",
+                    "demandes",
+                    "traitement"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"idDemande\": \"{{idDemande}}\",\n  \"commentaire\": \"Numéro désactivé\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "description": "Le responsable dépend de l'étape courante : compte orange à DESACTIVATION, compte yas à ACTIVATION et COMPLETION. Ne jamais envoyer le champ etape — retiré en v2, il est accepté et ignoré en silence (ANO-018). COMPLETION répond en ~30 s (ANO-005)."
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "7.11 Annulation",
+          "item": [
+            {
+              "name": "POST /demandes/{id}/annuler",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/gateway/v1/demandes/{{idDemande}}/annuler",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "gateway",
+                    "v1",
+                    "demandes",
+                    "{{idDemande}}",
+                    "annuler"
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "7.12 Incidents",
+          "item": [
+            {
+              "name": "POST /incidents/gateway",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/gateway/v1/incidents/gateway",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "gateway",
+                    "v1",
+                    "incidents",
+                    "gateway"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"commentaire\": \"Timeout de connexion à l'API gateway numFlex\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "POST /incidents/gateway/{id}/resoudre",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/gateway/v1/incidents/gateway/{{idIncident}}/resoudre",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "gateway",
+                    "v1",
+                    "incidents",
+                    "gateway",
+                    "{{idIncident}}",
+                    "resoudre"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"commentaire\": \"Service rétabli\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "GET /incidents/gateway/mes-incidents",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/gateway/v1/incidents/gateway/mes-incidents?page=0&size=20",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "gateway",
+                    "v1",
+                    "incidents",
+                    "gateway",
+                    "mes-incidents"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "0"
+                    },
+                    {
+                      "key": "size",
+                      "value": "20"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "POST /incidents/interne",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/gateway/v1/incidents/interne",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "gateway",
+                    "v1",
+                    "incidents",
+                    "interne"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"commentaire\": \"Panne du système de routage interne, portages bloqués\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "POST /incidents/interne/{id}/resoudre",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/gateway/v1/incidents/interne/{{idIncident}}/resoudre",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "gateway",
+                    "v1",
+                    "incidents",
+                    "interne",
+                    "{{idIncident}}",
+                    "resoudre"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"commentaire\": \"Service rétabli\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "GET /incidents/interne/mes-incidents",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/gateway/v1/incidents/interne/mes-incidents?page=0&size=20",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "gateway",
+                    "v1",
+                    "incidents",
+                    "interne",
+                    "mes-incidents"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "0"
+                    },
+                    {
+                      "key": "size",
+                      "value": "20"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "variable": []
+}

@@ -1,0 +1,23 @@
+# Le contexte est envoyé au démon à chaque build : n'y laisser que ce qui entre
+# dans la compilation.
+.git
+.gitignore
+.idea
+.superpowers
+docs
+postman
+scripts
+test
+bin
+*.log
+README.md
+Makefile
+docker-compose.yml
+Dockerfile
+.dockerignore
+**/*_test.go
+
+# Jamais dans l'image : un .env se monte ou se passe au démarrage, il ne se
+# cuit pas dans une couche que tout porteur de l'image peut lire.
+.env
+.env.*
