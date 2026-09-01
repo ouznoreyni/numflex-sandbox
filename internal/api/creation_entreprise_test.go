@@ -5,9 +5,9 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/ouznoreyni/numflex-sandbox/internal/config"
+	"github.com/ouznoreyni/numflex-sandbox/internal/seed"
 	"github.com/stretchr/testify/require"
-	"github.com/yas/numflex-sandbox/internal/config"
-	"github.com/yas/numflex-sandbox/internal/seed"
 )
 
 func corpsEntreprise(porteur string, flotte []string) map[string]any {

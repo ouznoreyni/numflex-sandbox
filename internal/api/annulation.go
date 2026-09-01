@@ -5,8 +5,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/yas/numflex-sandbox/internal/apperr"
-	"github.com/yas/numflex-sandbox/internal/domain"
+	"github.com/ouznoreyni/numflex-sandbox/internal/apperr"
+	"github.com/ouznoreyni/numflex-sandbox/internal/domain"
 )
 
 func (d *Deps) routesAnnulation(g *gin.RouterGroup) {

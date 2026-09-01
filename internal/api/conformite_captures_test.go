@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ouznoreyni/numflex-sandbox/internal/config"
 	"github.com/stretchr/testify/require"
-	"github.com/yas/numflex-sandbox/internal/config"
 )
 
 // Ce fichier fige les réponses réellement enregistrées contre la plateforme

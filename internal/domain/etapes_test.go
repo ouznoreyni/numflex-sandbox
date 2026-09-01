@@ -3,8 +3,8 @@ package domain
 import (
 	"testing"
 
+	"github.com/ouznoreyni/numflex-sandbox/internal/apperr"
 	"github.com/stretchr/testify/require"
-	"github.com/yas/numflex-sandbox/internal/apperr"
 )
 
 const (

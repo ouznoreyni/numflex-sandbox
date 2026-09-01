@@ -1,4 +1,4 @@
-module github.com/yas/numflex-sandbox
+module github.com/ouznoreyni/numflex-sandbox
 
 go 1.25.0
 

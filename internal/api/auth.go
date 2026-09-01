@@ -5,9 +5,9 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/yas/numflex-sandbox/internal/apperr"
-	"github.com/yas/numflex-sandbox/internal/auth"
-	"github.com/yas/numflex-sandbox/internal/httpx"
+	"github.com/ouznoreyni/numflex-sandbox/internal/apperr"
+	"github.com/ouznoreyni/numflex-sandbox/internal/auth"
+	"github.com/ouznoreyni/numflex-sandbox/internal/httpx"
 	"golang.org/x/crypto/bcrypt"
 )
 

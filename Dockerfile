@@ -76,4 +76,4 @@ ENTRYPOINT ["/usr/local/bin/server"]
 
 LABEL org.opencontainers.image.title="numflex-sandbox" \
       org.opencontainers.image.description="Double local de l'API Gateway NumFlex de l'ARTP (guide v2)" \
-      org.opencontainers.image.source="https://github.com/yas/numflex-sandbox"
+      org.opencontainers.image.source="https://github.com/ouznoreyni/numflex-sandbox"

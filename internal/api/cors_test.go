@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/ouznoreyni/numflex-sandbox/internal/config"
 	"github.com/stretchr/testify/require"
-	"github.com/yas/numflex-sandbox/internal/config"
 )
 
 // Le CORS est une commodité de bac à sable, pas un trait du contrat : une

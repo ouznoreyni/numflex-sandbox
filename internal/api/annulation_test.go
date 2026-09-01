@@ -4,8 +4,8 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/ouznoreyni/numflex-sandbox/internal/config"
 	"github.com/stretchr/testify/require"
-	"github.com/yas/numflex-sandbox/internal/config"
 )
 
 func TestAnnulationParLeCreateur(t *testing.T) {

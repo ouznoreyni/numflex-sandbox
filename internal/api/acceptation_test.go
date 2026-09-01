@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/ouznoreyni/numflex-sandbox/internal/seed"
 	"github.com/stretchr/testify/require"
-	"github.com/yas/numflex-sandbox/internal/seed"
 )
 
 func TestAcceptationNominale(t *testing.T) {

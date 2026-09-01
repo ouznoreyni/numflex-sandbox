@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/yas/numflex-sandbox/internal/oid"
-	"github.com/yas/numflex-sandbox/internal/store"
+	"github.com/ouznoreyni/numflex-sandbox/internal/oid"
+	"github.com/ouznoreyni/numflex-sandbox/internal/store"
 )
 
 // ValiderReverse est un acte de l'ARTP, hors périmètre de l'API gateway (§6).

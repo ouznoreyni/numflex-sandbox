@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/yas/numflex-sandbox/internal/apperr"
-	"github.com/yas/numflex-sandbox/internal/config"
+	"github.com/ouznoreyni/numflex-sandbox/internal/apperr"
+	"github.com/ouznoreyni/numflex-sandbox/internal/config"
 )
 
 type Renderer struct {
