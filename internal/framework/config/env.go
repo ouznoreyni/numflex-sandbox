@@ -7,33 +7,32 @@ import (
 	"strings"
 )
 
-// Le fichier .env et les arguments de démarrage ne sont qu'un moyen de *poser*
-// des variables d'environnement : Load() reste seule à les interpréter, et la
-// liste des réglages ne se dédouble pas. Précédence, du plus fort au plus
-// faible :
+// The .env file and the startup arguments are only ways to *set* environment
+// variables: Load() alone still interprets them, and the list of settings is
+// never duplicated. Precedence, strongest first:
 //
-//  1. les arguments du binaire — docker run image PORT=9090
-//  2. l'environnement du processus — docker run -e, `environment:` de compose
-//  3. le fichier .env — -v ./.env:/app/.env, ou --env-file / ENV_FILE
-//  4. les défauts de Load()
+//  1. the binary's arguments — docker run image PORT=9090
+//  2. the process environment — docker run -e, compose's `environment:`
+//  3. the .env file — -v ./.env:/app/.env, or --env-file / ENV_FILE
+//  4. Load()'s defaults
 //
-// Un conteneur n'a donc besoin que de DATABASE_URL, d'où qu'elle vienne.
+// A container therefore only ever needs DATABASE_URL, wherever it comes from.
 
-// CheminFichierEnv donne le fichier à charger, et dit s'il a été demandé
-// explicitement. Une demande explicite non satisfaite est une erreur ;
-// l'absence du `.env` implicite est le cas normal.
-func CheminFichierEnv() (chemin string, explicite bool) {
+// EnvFilePath gives the file to load, and says whether it was requested
+// explicitly. An explicit request that is not satisfied is an error; the
+// absence of the implicit `.env` is the normal case.
+func EnvFilePath() (chemin string, explicite bool) {
 	if v, ok := os.LookupEnv("ENV_FILE"); ok && v != "" {
 		return v, true
 	}
 	return ".env", false
 }
 
-// ChargerFichierEnv applique les affectations du fichier d'environnement sans
-// écraser ce qui est déjà posé : une variable passée au conteneur l'emporte
-// toujours sur le fichier.
-func ChargerFichierEnv() error {
-	chemin, explicite := CheminFichierEnv()
+// LoadEnvFile applies the environment file's assignments without
+// overwriting what is already set: a variable passed to the container
+// always wins over the file.
+func LoadEnvFile() error {
+	chemin, explicite := EnvFilePath()
 	f, err := os.Open(chemin)
 	if err != nil {
 		if os.IsNotExist(err) && !explicite {
@@ -52,8 +51,8 @@ func ChargerFichierEnv() error {
 		if clef == "" {
 			continue
 		}
-		// Une valeur vide compte pour absente, comme dans str() : `-e PORT=`
-		// ne masque donc pas le fichier.
+		// An empty value counts as absent, as in str(): `-e PORT=` therefore
+		// does not shadow the file.
 		if v, ok := os.LookupEnv(clef); ok && v != "" {
 			continue
 		}
@@ -64,12 +63,12 @@ func ChargerFichierEnv() error {
 	return sc.Err()
 }
 
-// AppliquerArguments interprète les arguments de démarrage, qui l'emportent
-// sur l'environnement comme sur le fichier :
+// ApplyArguments interprets the startup arguments, which win over both the
+// environment and the file:
 //
-//	--env-file <chemin>    choisit le fichier d'environnement
-//	CLEF=valeur            pose une variable
-func AppliquerArguments(args []string) error {
+//	--env-file <chemin>    picks the environment file
+//	CLEF=valeur            sets a variable
+func ApplyArguments(args []string) error {
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		switch {
@@ -100,7 +99,7 @@ func AppliquerArguments(args []string) error {
 	return nil
 }
 
-// analyserLigne rend une clef vide pour les lignes vides et les commentaires.
+// analyserLigne returns an empty key for blank lines and comments.
 func analyserLigne(ligne string) (string, string, error) {
 	l := strings.TrimSpace(ligne)
 	if l == "" || strings.HasPrefix(l, "#") {
@@ -134,10 +133,10 @@ func clefValide(clef string) bool {
 	return true
 }
 
-// deciter retire les guillemets encadrants et, pour les guillemets doubles,
-// interprète les échappements usuels. Hors guillemets la valeur est prise
-// telle quelle : un `#` appartient à la valeur — un secret en contient
-// volontiers — et un commentaire doit donc occuper sa propre ligne.
+// deciter strips surrounding quotes and, for double quotes, interprets the
+// usual escapes. Outside quotes the value is taken as-is: a `#` belongs to
+// the value — a secret happily contains one — so a comment must occupy its
+// own line.
 func deciter(v string) string {
 	if len(v) < 2 {
 		return v

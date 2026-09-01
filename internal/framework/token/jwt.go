@@ -1,6 +1,6 @@
-// Package auth émet et vérifie les jetons du sandbox. HS512, 24 h, comme mesuré
-// en recette ARTP.
-package auth
+// Package token issues and verifies the sandbox's tokens. HS512, 24h, as
+// measured at SIT.
+package token
 
 import (
 	"fmt"
@@ -9,7 +9,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-func Emettre(secret string, ttl time.Duration, username string, roles []string) (string, error) {
+func Issue(secret string, ttl time.Duration, username string, roles []string) (string, error) {
 	maintenant := time.Now()
 	t := jwt.NewWithClaims(jwt.SigningMethodHS512, jwt.MapClaims{
 		"sub":  username,
@@ -20,7 +20,7 @@ func Emettre(secret string, ttl time.Duration, username string, roles []string) 
 	return t.SignedString([]byte(secret))
 }
 
-func Verifier(secret, jeton string) (string, error) {
+func Verify(secret, jeton string) (string, error) {
 	t, err := jwt.Parse(jeton, func(t *jwt.Token) (any, error) {
 		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("algorithme inattendu : %v", t.Header["alg"])

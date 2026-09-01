@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/ouznoreyni/numflex-sandbox/internal/framework/persistence"
-	"github.com/ouznoreyni/numflex-sandbox/internal/seed"
+	"github.com/ouznoreyni/numflex-sandbox/internal/framework/seed"
 )
 
 const truncateSQL = `TRUNCATE

@@ -32,19 +32,19 @@ type Config struct {
 	OTPMaxAttempts        int
 	ReverseAutoValidation time.Duration
 
-	// SandboxAdmin ouvre /api/sandbox/v1 — la purge des données de test. Hors
-	// contrat ARTP, donc faux par défaut : à false la route n'est pas
-	// enregistrée du tout et répond 404, comme n'importe quel chemin inconnu.
-	// La gateway, elle, garde ses 33 routes dans les deux cas.
+	// SandboxAdmin opens /api/sandbox/v1 — the test-data purge. Outside the
+	// ARTP contract, so false by default: at false the route is not
+	// registered at all and answers 404, like any unknown path. The gateway,
+	// on the other hand, keeps its 33 routes either way.
 	SandboxAdmin bool
 
-	// CORSAllowedOrigins est une commodité de bac à sable, pas un trait du
-	// contrat : elle n'existe que pour qu'une page servie sur un autre port —
-	// Swagger, un back-office en développement — puisse appeler l'API depuis un
-	// navigateur. Le défaut est `*`, toute origine autorisée, pour que ça marche
-	// sans rien configurer. La gateway réelle, elle, est consommée de serveur à
-	// serveur et n'émet aucun en-tête CORS : poser CORS_ALLOWED_ORIGINS à vide
-	// retrouve ce comportement.
+	// CORSAllowedOrigins is a sandbox convenience, not a trait of the
+	// contract: it exists only so that a page served on another port —
+	// Swagger, a back-office in development — can call the API from a
+	// browser. The default is `*`, every origin allowed, so it works without
+	// any configuration. The real gateway, consumed server-to-server, emits
+	// no CORS header at all: setting CORS_ALLOWED_ORIGINS to empty restores
+	// that behaviour.
 	CORSAllowedOrigins []string
 }
 
@@ -57,9 +57,9 @@ func Load() (*Config, error) {
 		OTPStaticCode: str("OTP_STATIC_CODE", "123456"),
 	}
 
-	// Seule variable où la chaîne vide se distingue de l'absence, parce
-	// qu'ici les deux ont un sens opposé : non posée, le CORS est ouvert à
-	// toute origine ; posée vide, il est éteint.
+	// The one variable where an empty string differs from being unset,
+	// because here the two carry opposite meanings: not set, CORS is open to
+	// every origin; set empty, it is switched off.
 	origines := "*"
 	if v, ok := os.LookupEnv("CORS_ALLOWED_ORIGINS"); ok {
 		origines = v
@@ -124,8 +124,8 @@ func str(clef, defaut string) string {
 	return defaut
 }
 
-// liste découpe une valeur séparée par des virgules en ignorant les entrées
-// vides — "a, ,b" donne ["a" "b"], "" donne nil.
+// liste splits a comma-separated value, ignoring empty entries — "a, ,b"
+// gives ["a" "b"], "" gives nil.
 func liste(v string) []string {
 	var out []string
 	for _, part := range strings.Split(v, ",") {

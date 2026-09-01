@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ouznoreyni/numflex-sandbox/internal/config"
 	"github.com/ouznoreyni/numflex-sandbox/internal/engine"
+	"github.com/ouznoreyni/numflex-sandbox/internal/framework/config"
 	"github.com/ouznoreyni/numflex-sandbox/internal/framework/persistence"
 	"github.com/ouznoreyni/numflex-sandbox/internal/httpx"
 	"github.com/ouznoreyni/numflex-sandbox/internal/testsupport"

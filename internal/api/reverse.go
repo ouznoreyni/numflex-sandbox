@@ -7,7 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/ouznoreyni/numflex-sandbox/internal/entity"
-	"github.com/ouznoreyni/numflex-sandbox/internal/oid"
+	"github.com/ouznoreyni/numflex-sandbox/internal/framework/identifier"
 )
 
 // routesReverse câble le §6 du guide : soumission et consultation des
@@ -60,7 +60,7 @@ func (d *Deps) postReverseRequest(c *gin.Context) {
 		return
 	}
 
-	id := oid.New()
+	id := identifier.New()
 	maintenant := time.Now()
 	if _, err := d.DB.Pool.Exec(c,
 		`INSERT INTO reverse_request (id, numero, operateur_id, statut, date_demande)

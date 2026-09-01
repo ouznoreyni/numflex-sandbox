@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ouznoreyni/numflex-sandbox/internal/seed"
+	"github.com/ouznoreyni/numflex-sandbox/internal/framework/seed"
 	"github.com/ouznoreyni/numflex-sandbox/internal/testsupport"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/bcrypt"

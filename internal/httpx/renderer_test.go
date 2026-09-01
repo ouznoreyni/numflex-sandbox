@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/ouznoreyni/numflex-sandbox/internal/config"
 	"github.com/ouznoreyni/numflex-sandbox/internal/entity"
+	"github.com/ouznoreyni/numflex-sandbox/internal/framework/config"
 	"github.com/stretchr/testify/require"
 )
 

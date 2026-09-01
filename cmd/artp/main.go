@@ -15,10 +15,10 @@ import (
 	"os"
 	"time"
 
-	"github.com/ouznoreyni/numflex-sandbox/internal/config"
 	"github.com/ouznoreyni/numflex-sandbox/internal/engine"
+	"github.com/ouznoreyni/numflex-sandbox/internal/framework/config"
 	"github.com/ouznoreyni/numflex-sandbox/internal/framework/persistence"
-	"github.com/ouznoreyni/numflex-sandbox/internal/seed"
+	"github.com/ouznoreyni/numflex-sandbox/internal/framework/seed"
 )
 
 func main() {
@@ -35,7 +35,7 @@ func executer(args []string) error {
 
 	// Pas d'arguments CLEF=valeur ici : ils entreraient en collision avec les
 	// sous-commandes. Le fichier .env — ou ENV_FILE — reste lu.
-	if err := config.ChargerFichierEnv(); err != nil {
+	if err := config.LoadEnvFile(); err != nil {
 		return err
 	}
 	cfg, err := config.Load()

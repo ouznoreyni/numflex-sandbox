@@ -1,4 +1,4 @@
-package oid
+package identifier
 
 import (
 	"regexp"
@@ -23,4 +23,11 @@ func TestNewUnicite(t *testing.T) {
 		require.Falsef(t, vus[id], "collision sur %q", id)
 		vus[id] = true
 	}
+}
+
+// TestGeneratorNewIDDelegatesToNew pins that Generator, the port.IDGenerator
+// implementation, produces the same shape as the free function.
+func TestGeneratorNewIDDelegatesToNew(t *testing.T) {
+	id := NewGenerator().NewID()
+	require.Truef(t, motif.MatchString(id), "identifiant non conforme : %q", id)
 }

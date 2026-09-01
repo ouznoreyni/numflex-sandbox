@@ -12,7 +12,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/ouznoreyni/numflex-sandbox/internal/entity"
-	"github.com/ouznoreyni/numflex-sandbox/internal/oid"
+	"github.com/ouznoreyni/numflex-sandbox/internal/framework/identifier"
 )
 
 // routesIncidents câble les six routes du §7.12 : deux familles (gateway,
@@ -78,7 +78,7 @@ func (d *Deps) declarerIncident(segment string, figeSysteme bool) gin.HandlerFun
 			}
 		}
 
-		id := oid.New()
+		id := identifier.New()
 		maintenant := time.Now()
 		_, err = d.DB.Pool.Exec(c,
 			`INSERT INTO incident

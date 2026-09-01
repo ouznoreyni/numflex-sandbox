@@ -5,8 +5,8 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/ouznoreyni/numflex-sandbox/internal/auth"
 	"github.com/ouznoreyni/numflex-sandbox/internal/entity"
+	"github.com/ouznoreyni/numflex-sandbox/internal/framework/token"
 	"github.com/ouznoreyni/numflex-sandbox/internal/httpx"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -43,7 +43,7 @@ func (d *Deps) postAuthenticate(c *gin.Context) {
 		return
 	}
 
-	jeton, err := auth.Emettre(d.Cfg.JWTSecret, d.Cfg.JWTTTL, req.Username, roles)
+	jeton, err := token.Issue(d.Cfg.JWTSecret, d.Cfg.JWTTTL, req.Username, roles)
 	if err != nil {
 		d.R.Fail(c, entity.InternalError("émission du jeton impossible"))
 		return
@@ -69,7 +69,7 @@ func (d *Deps) Authentifier() gin.HandlerFunc {
 			return
 		}
 
-		username, err := auth.Verifier(d.Cfg.JWTSecret, strings.TrimSpace(entete[7:]))
+		username, err := token.Verify(d.Cfg.JWTSecret, strings.TrimSpace(entete[7:]))
 		if err != nil {
 			c.Status(http.StatusUnauthorized)
 			c.Abort()

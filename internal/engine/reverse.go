@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
+	"github.com/ouznoreyni/numflex-sandbox/internal/framework/identifier"
 	"github.com/ouznoreyni/numflex-sandbox/internal/framework/persistence"
-	"github.com/ouznoreyni/numflex-sandbox/internal/oid"
 )
 
 // ValiderReverse est un acte de l'ARTP, hors périmètre de l'API gateway (§6).
@@ -35,7 +35,7 @@ func ValiderReverse(ctx context.Context, db *persistence.DB, reverseID string) e
 		return err
 	}
 
-	id := oid.New()
+	id := identifier.New()
 	maintenant := time.Now()
 	if _, err := tx.Exec(ctx,
 		`INSERT INTO demande

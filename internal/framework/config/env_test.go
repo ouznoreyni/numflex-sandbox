@@ -15,7 +15,7 @@ func ecrireEnv(t *testing.T, contenu string) string {
 	return chemin
 }
 
-func TestChargerFichierEnvPoseLesValeurs(t *testing.T) {
+func TestLoadEnvFilePoseLesValeurs(t *testing.T) {
 	t.Setenv("ENV_FILE", ecrireEnv(t, `
 # un commentaire
 PORT=9090
@@ -28,7 +28,7 @@ OTP_STATIC_CODE='000000'
 	t.Setenv("JWT_SECRET", "")
 	t.Setenv("OTP_STATIC_CODE", "")
 
-	if err := ChargerFichierEnv(); err != nil {
+	if err := LoadEnvFile(); err != nil {
 		t.Fatalf("chargement : %v", err)
 	}
 	for clef, attendu := range map[string]string{
@@ -46,11 +46,11 @@ OTP_STATIC_CODE='000000'
 // L'environnement du conteneur l'emporte sur le fichier : c'est ce qui permet
 // à `docker run -e` et au bloc `environment:` de compose de surcharger un .env
 // monté.
-func TestChargerFichierEnvNEcrasePas(t *testing.T) {
+func TestLoadEnvFileNEcrasePas(t *testing.T) {
 	t.Setenv("ENV_FILE", ecrireEnv(t, "PORT=9090\n"))
 	t.Setenv("PORT", "7000")
 
-	if err := ChargerFichierEnv(); err != nil {
+	if err := LoadEnvFile(); err != nil {
 		t.Fatalf("chargement : %v", err)
 	}
 	if got := os.Getenv("PORT"); got != "7000" {
@@ -58,36 +58,36 @@ func TestChargerFichierEnvNEcrasePas(t *testing.T) {
 	}
 }
 
-func TestChargerFichierEnvImpliciteAbsent(t *testing.T) {
+func TestLoadEnvFileImpliciteAbsent(t *testing.T) {
 	t.Setenv("ENV_FILE", "")
 	t.Chdir(t.TempDir())
 
-	if err := ChargerFichierEnv(); err != nil {
+	if err := LoadEnvFile(); err != nil {
 		t.Fatalf("un .env implicite absent n'est pas une erreur : %v", err)
 	}
 }
 
-func TestChargerFichierEnvExpliciteAbsent(t *testing.T) {
+func TestLoadEnvFileExpliciteAbsent(t *testing.T) {
 	t.Setenv("ENV_FILE", filepath.Join(t.TempDir(), "introuvable.env"))
 
-	if err := ChargerFichierEnv(); err == nil {
+	if err := LoadEnvFile(); err == nil {
 		t.Fatal("un ENV_FILE demandé et absent doit être une erreur")
 	}
 }
 
-func TestChargerFichierEnvLigneInvalide(t *testing.T) {
+func TestLoadEnvFileLigneInvalide(t *testing.T) {
 	t.Setenv("ENV_FILE", ecrireEnv(t, "PORT 9090\n"))
 
-	if err := ChargerFichierEnv(); err == nil {
+	if err := LoadEnvFile(); err == nil {
 		t.Fatal("une ligne sans = doit être une erreur")
 	}
 }
 
-func TestAppliquerArguments(t *testing.T) {
+func TestApplyArguments(t *testing.T) {
 	t.Setenv("PORT", "7000")
 	t.Setenv("ENV_FILE", "")
 
-	if err := AppliquerArguments([]string{"--env-file", "/config/recette.env", "PORT=9090"}); err != nil {
+	if err := ApplyArguments([]string{"--env-file", "/config/recette.env", "PORT=9090"}); err != nil {
 		t.Fatalf("arguments : %v", err)
 	}
 	if got := os.Getenv("PORT"); got != "9090" {
@@ -98,14 +98,14 @@ func TestAppliquerArguments(t *testing.T) {
 	}
 }
 
-func TestAppliquerArgumentsRefuse(t *testing.T) {
+func TestApplyArgumentsRefuse(t *testing.T) {
 	for _, args := range [][]string{
 		{"--env-file"},
 		{"-v"},
 		{"PORT"},
 		{"1PORT=9090"},
 	} {
-		if err := AppliquerArguments(args); err == nil {
+		if err := ApplyArguments(args); err == nil {
 			t.Errorf("%v aurait dû être refusé", args)
 		}
 	}

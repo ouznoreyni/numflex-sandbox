@@ -1,3 +1,7 @@
+// Package seed populates a fresh database with the operators, rejection
+// reasons, request types, processes, incident types, accounts and number
+// pool the sandbox needs from its first startup. Run is idempotent — every
+// statement is an INSERT ... ON CONFLICT DO NOTHING.
 package seed
 
 import (
@@ -9,7 +13,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-// Identifiants relevés en recette ARTP — ObjectId MongoDB, non modifiables.
+// Identifiers recorded at ARTP SIT — MongoDB ObjectId, not to be changed.
 const (
 	OperateurOrange   = "6a21745ce6c37b5b5b487ec1"
 	OperateurYAS      = "6a2174c3e6c37b5b5b487ec4"
@@ -29,7 +33,7 @@ const (
 	ProcessusPrepaid  = "6a217686e6c37b5b5b487ee8"
 	ProcessusPostpaid = "6a217689e6c37b5b5b487ee9"
 
-	// Identifiants du guide v2 §7.1 — seules valeurs publiées.
+	// Identifiers from guide v2 §7.1 — the only published values.
 	TypeIncidentGateway   = "65abc456def001"
 	TypeIncidentTechnique = "65abc456def002"
 )
@@ -38,7 +42,7 @@ func Run(ctx context.Context, db *persistence.DB) error {
 	operateurs := []struct{ id, nom, prefixe string }{
 		{OperateurOrange, "ORANGE", "191"},
 		{OperateurYAS, "YAS", "192"},
-		// [HYP] Préfixe EXPRESSO non observé en recette ; 191 et 192 le sont.
+		// [HYP] EXPRESSO's routing prefix was not observed at SIT; 191 and 192 were.
 		{OperateurExpresso, "EXPRESSO", "193"},
 	}
 	for _, o := range operateurs {
@@ -124,12 +128,13 @@ func Run(ctx context.Context, db *persistence.DB) error {
 		}
 	}
 
-	return seedNumeros(ctx, db)
+	return seedNumbers(ctx, db)
 }
 
-// seedNumeros installe le vivier décrit au §10 de la spec : dix numéros par tranche,
-// chaque tranche rendant exerçable une règle précise dès le premier démarrage.
-func seedNumeros(ctx context.Context, db *persistence.DB) error {
+// seedNumbers installs the pool described in spec §10: ten numbers per
+// range, each range making one precise rule exercisable from the first
+// startup.
+func seedNumbers(ctx context.Context, db *persistence.DB) error {
 	jours := func(n int) *time.Time {
 		t := time.Now().AddDate(0, 0, -n)
 		return &t

@@ -5,9 +5,9 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/ouznoreyni/numflex-sandbox/internal/config"
 	"github.com/ouznoreyni/numflex-sandbox/internal/engine"
-	"github.com/ouznoreyni/numflex-sandbox/internal/seed"
+	"github.com/ouznoreyni/numflex-sandbox/internal/framework/config"
+	"github.com/ouznoreyni/numflex-sandbox/internal/framework/seed"
 	"github.com/stretchr/testify/require"
 )
 

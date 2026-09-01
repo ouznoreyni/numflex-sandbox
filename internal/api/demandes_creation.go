@@ -7,7 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/ouznoreyni/numflex-sandbox/internal/entity"
-	"github.com/ouznoreyni/numflex-sandbox/internal/oid"
+	"github.com/ouznoreyni/numflex-sandbox/internal/framework/identifier"
 )
 
 // routesCreation est complétée au fil des tâches : /demandes/restitution en
@@ -72,7 +72,7 @@ func (d *Deps) postDemandeParticulier(c *gin.Context) {
 		return
 	}
 
-	id := oid.New()
+	id := identifier.New()
 	maintenant := time.Now()
 
 	tx, err2 := d.DB.Pool.Begin(c)
@@ -251,7 +251,7 @@ func (d *Deps) postDemandeEntreprise(c *gin.Context) {
 		return
 	}
 
-	id := oid.New()
+	id := identifier.New()
 	maintenant := time.Now()
 
 	tx, err2 := d.DB.Pool.Begin(c)
@@ -421,7 +421,7 @@ func (d *Deps) postDemandeRestitution(c *gin.Context) {
 		return
 	}
 
-	id := oid.New()
+	id := identifier.New()
 	maintenant := time.Now()
 
 	tx, err2 := d.DB.Pool.Begin(c)

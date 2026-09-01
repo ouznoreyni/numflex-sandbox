@@ -6,21 +6,21 @@ import (
 	"os"
 
 	"github.com/ouznoreyni/numflex-sandbox/internal/api"
-	"github.com/ouznoreyni/numflex-sandbox/internal/config"
 	"github.com/ouznoreyni/numflex-sandbox/internal/engine"
+	"github.com/ouznoreyni/numflex-sandbox/internal/framework/config"
 	"github.com/ouznoreyni/numflex-sandbox/internal/framework/persistence"
+	"github.com/ouznoreyni/numflex-sandbox/internal/framework/seed"
 	"github.com/ouznoreyni/numflex-sandbox/internal/httpx"
-	"github.com/ouznoreyni/numflex-sandbox/internal/seed"
 )
 
 func main() {
 	// Les arguments l'emportent sur l'environnement, qui l'emporte sur le
 	// fichier .env : un conteneur se règle indifféremment par `-e`, par un
 	// `.env` monté, ou par des arguments `CLEF=valeur`.
-	if err := config.AppliquerArguments(os.Args[1:]); err != nil {
+	if err := config.ApplyArguments(os.Args[1:]); err != nil {
 		log.Fatalf("arguments : %v", err)
 	}
-	if err := config.ChargerFichierEnv(); err != nil {
+	if err := config.LoadEnvFile(); err != nil {
 		log.Fatalf("configuration : %v", err)
 	}
 
