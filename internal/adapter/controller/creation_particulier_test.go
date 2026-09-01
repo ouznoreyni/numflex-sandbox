@@ -1,20 +1,36 @@
-package api
+package controller_test
+
+// These 8 test functions are moved, unchanged in assertion, from the
+// deleted internal/api/creation_particulier_test.go (Task 12). They still
+// exercise the real, live router — routerharness.NewRouterHarness wraps
+// api.NewRouter, wired exactly as cmd/server/main.go wires it — so a green
+// run here proves a real HTTP request to /demandes/particulier goes through
+// the new CreationController, port.UnitOfWork and the creation interactors,
+// not through any leftover handler.
 
 import (
 	"net/http"
 	"testing"
 
-	"github.com/ouznoreyni/numflex-sandbox/internal/framework/config"
-	"github.com/ouznoreyni/numflex-sandbox/internal/framework/seed"
+	"github.com/ouznoreyni/numflex-sandbox/internal/testsupport/routerharness"
 	"github.com/stretchr/testify/require"
+)
+
+// Identifiants d'opérateurs du seed de recette (internal/framework/seed) —
+// recopiés en littéral plutôt qu'importés : un test de contrôleur ne peut
+// pas importer internal/framework (règle de dépendance), et
+// reference_controller_test.go établit déjà ce précédent.
+const (
+	operateurOrange = "6a21745ce6c37b5b5b487ec1"
+	operateurYAS    = "6a2174c3e6c37b5b5b487ec4"
 )
 
 func corpsParticulier(numero string) map[string]any {
 	return map[string]any{
 		"numero":                  numero,
 		"otpCode":                 "123456",
-		"operateurSourceId":       seed.OperateurOrange,
-		"operateurDestinataireId": seed.OperateurYAS,
+		"operateurSourceId":       operateurOrange,
+		"operateurDestinataireId": operateurYAS,
 		"typePortabilite":         "PREPAID",
 		"client": map[string]any{
 			"nom": "Diallo", "prenom": "Mamadou",
@@ -25,26 +41,26 @@ func corpsParticulier(numero string) map[string]any {
 }
 
 // creerPortage envoie l'OTP puis crée une demande particulier ORANGE → YAS.
-func (h *harnais) creerPortage(numero string) string {
-	h.t.Helper()
-	jeton := h.jeton("yas", "yas2026")
-	h.appel(http.MethodPost, "/api/gateway/v1/otp/send", jeton, map[string]any{"numero": numero})
+func creerPortage(h *routerharness.RouterHarness, numero string) string {
+	h.T.Helper()
+	jeton := h.Jeton("yas", "yas2026")
+	h.Appel(http.MethodPost, "/api/gateway/v1/otp/send", jeton, map[string]any{"numero": numero})
 
-	rep, corps := h.appel(http.MethodPost, "/api/gateway/v1/demandes/particulier",
+	rep, corps := h.Appel(http.MethodPost, "/api/gateway/v1/demandes/particulier",
 		jeton, corpsParticulier(numero))
-	require.Equal(h.t, http.StatusCreated, rep.StatusCode, corps)
+	require.Equal(h.T, http.StatusCreated, rep.StatusCode, corps)
 
 	data := corps["data"].(map[string]any)
 	return data["id"].(string)
 }
 
 func TestCreationParticulierNominale(t *testing.T) {
-	h := nouveauHarnais(t)
-	jeton := h.jeton("yas", "yas2026")
-	h.appel(http.MethodPost, "/api/gateway/v1/otp/send", jeton,
+	h := routerharness.NewRouterHarness(t)
+	jeton := h.Jeton("yas", "yas2026")
+	h.Appel(http.MethodPost, "/api/gateway/v1/otp/send", jeton,
 		map[string]any{"numero": "771000001"})
 
-	rep, corps := h.appel(http.MethodPost, "/api/gateway/v1/demandes/particulier",
+	rep, corps := h.Appel(http.MethodPost, "/api/gateway/v1/demandes/particulier",
 		jeton, corpsParticulier("771000001"))
 
 	require.Equal(t, http.StatusCreated, rep.StatusCode)
@@ -61,7 +77,7 @@ func TestCreationParticulierNominale(t *testing.T) {
 	require.Equal(t, "191", data["routageInfo"], "routage initial de la source")
 
 	src := data["operateurSource"].(map[string]any)
-	require.Equal(t, seed.OperateurOrange, src["id"])
+	require.Equal(t, operateurOrange, src["id"])
 	require.Equal(t, "ORANGE", src["nom"])
 	dst := data["operateurDestinataire"].(map[string]any)
 	require.Equal(t, "YAS", dst["nom"])
@@ -69,15 +85,15 @@ func TestCreationParticulierNominale(t *testing.T) {
 
 func TestCreationParticulierLieuNaissanceObligatoire(t *testing.T) {
 	// TC-050 / ANO-010 : le guide le documente facultatif, la plateforme le rejette.
-	h := nouveauHarnais(t)
-	jeton := h.jeton("yas", "yas2026")
-	h.appel(http.MethodPost, "/api/gateway/v1/otp/send", jeton,
+	h := routerharness.NewRouterHarness(t)
+	jeton := h.Jeton("yas", "yas2026")
+	h.Appel(http.MethodPost, "/api/gateway/v1/otp/send", jeton,
 		map[string]any{"numero": "771000002"})
 
 	c := corpsParticulier("771000002")
 	delete(c["client"].(map[string]any), "lieuNaissance")
 
-	rep, corps := h.appel(http.MethodPost, "/api/gateway/v1/demandes/particulier", jeton, c)
+	rep, corps := h.Appel(http.MethodPost, "/api/gateway/v1/demandes/particulier", jeton, c)
 
 	require.Equal(t, http.StatusBadRequest, rep.StatusCode)
 	champs := corps["fieldErrors"].([]any)
@@ -86,12 +102,12 @@ func TestCreationParticulierLieuNaissanceObligatoire(t *testing.T) {
 }
 
 func TestCreationParticulierDoitEtreLeDestinataire(t *testing.T) {
-	h := nouveauHarnais(t)
-	jetonOrange := h.jeton("orange", "orange2026")
-	h.appel(http.MethodPost, "/api/gateway/v1/otp/send", jetonOrange,
+	h := routerharness.NewRouterHarness(t)
+	jetonOrange := h.Jeton("orange", "orange2026")
+	h.Appel(http.MethodPost, "/api/gateway/v1/otp/send", jetonOrange,
 		map[string]any{"numero": "771000003"})
 
-	rep, _ := h.appel(http.MethodPost, "/api/gateway/v1/demandes/particulier",
+	rep, _ := h.Appel(http.MethodPost, "/api/gateway/v1/demandes/particulier",
 		jetonOrange, corpsParticulier("771000003"))
 
 	require.Equal(t, http.StatusInternalServerError, rep.StatusCode)
@@ -99,13 +115,13 @@ func TestCreationParticulierDoitEtreLeDestinataire(t *testing.T) {
 
 func TestCreationParticulierDelaiPortageSePresenteCommeUnePanne(t *testing.T) {
 	// ANO-002.
-	h := nouveauHarnais(t)
-	jeton := h.jeton("yas", "yas2026")
-	h.appel(http.MethodPost, "/api/gateway/v1/otp/send", jeton,
+	h := routerharness.NewRouterHarness(t)
+	jeton := h.Jeton("yas", "yas2026")
+	h.Appel(http.MethodPost, "/api/gateway/v1/otp/send", jeton,
 		map[string]any{"numero": "772000001"})
 
 	c := corpsParticulier("772000001")
-	rep, corps := h.appel(http.MethodPost, "/api/gateway/v1/demandes/particulier", jeton, c)
+	rep, corps := h.Appel(http.MethodPost, "/api/gateway/v1/demandes/particulier", jeton, c)
 
 	require.Equal(t, http.StatusInternalServerError, rep.StatusCode)
 	require.Equal(t, "Unexpected runtime exception", corps["detail"])
@@ -113,20 +129,20 @@ func TestCreationParticulierDelaiPortageSePresenteCommeUnePanne(t *testing.T) {
 }
 
 func TestCreationParticulierSansOTP(t *testing.T) {
-	h := nouveauHarnais(t)
-	rep, corps := h.appel(http.MethodPost, "/api/gateway/v1/demandes/particulier",
-		h.jeton("yas", "yas2026"), corpsParticulier("771000004"))
+	h := routerharness.NewRouterHarness(t)
+	rep, corps := h.Appel(http.MethodPost, "/api/gateway/v1/demandes/particulier",
+		h.Jeton("yas", "yas2026"), corpsParticulier("771000004"))
 
 	require.Equal(t, http.StatusInternalServerError, rep.StatusCode)
 	require.Equal(t, "Aucun OTP actif pour ce numéro", corps["detail"])
 }
 
 func TestCreationParticulierConsommeLOTP(t *testing.T) {
-	h := nouveauHarnais(t)
-	h.creerPortage("771000005")
+	h := routerharness.NewRouterHarness(t)
+	creerPortage(h, "771000005")
 
-	rep, corps := h.appel(http.MethodPost, "/api/gateway/v1/otp/verify",
-		h.jeton("yas", "yas2026"),
+	rep, corps := h.Appel(http.MethodPost, "/api/gateway/v1/otp/verify",
+		h.Jeton("yas", "yas2026"),
 		map[string]any{"numero": "771000005", "otpCode": "123456"})
 
 	require.Equal(t, http.StatusInternalServerError, rep.StatusCode)
@@ -134,25 +150,25 @@ func TestCreationParticulierConsommeLOTP(t *testing.T) {
 }
 
 func TestCreationParticulierDemandeDejaEnCours(t *testing.T) {
-	h := nouveauHarnais(t)
-	h.creerPortage("771000006")
+	h := routerharness.NewRouterHarness(t)
+	creerPortage(h, "771000006")
 
-	jeton := h.jeton("yas", "yas2026")
-	h.appel(http.MethodPost, "/api/gateway/v1/otp/send", jeton,
+	jeton := h.Jeton("yas", "yas2026")
+	h.Appel(http.MethodPost, "/api/gateway/v1/otp/send", jeton,
 		map[string]any{"numero": "771000006"})
-	rep, _ := h.appel(http.MethodPost, "/api/gateway/v1/demandes/particulier",
+	rep, _ := h.Appel(http.MethodPost, "/api/gateway/v1/demandes/particulier",
 		jeton, corpsParticulier("771000006"))
 
 	require.Equal(t, http.StatusInternalServerError, rep.StatusCode)
 }
 
 func TestCreationParticulierEnModeContratRendUnCodeMetier(t *testing.T) {
-	h := nouveauHarnais(t, func(c *config.Config) { c.Fidelity = config.FidelityContract })
-	jeton := h.jeton("yas", "yas2026")
-	h.appel(http.MethodPost, "/api/gateway/v1/otp/send", jeton,
+	h := routerharness.NewRouterHarness(t, routerharness.FiabiliteContrat)
+	jeton := h.Jeton("yas", "yas2026")
+	h.Appel(http.MethodPost, "/api/gateway/v1/otp/send", jeton,
 		map[string]any{"numero": "772000002"})
 
-	rep, corps := h.appel(http.MethodPost, "/api/gateway/v1/demandes/particulier",
+	rep, corps := h.Appel(http.MethodPost, "/api/gateway/v1/demandes/particulier",
 		jeton, corpsParticulier("772000002"))
 
 	require.Equal(t, http.StatusConflict, rep.StatusCode)

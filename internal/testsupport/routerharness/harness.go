@@ -43,6 +43,19 @@ type RouterHarness struct {
 	Cfg *config.Config
 }
 
+// FiabiliteContrat switches the harness's fidelity mode to "contract" — the
+// adjustment TestCreationParticulierEnModeContratRendUnCodeMetier and
+// TestFlotteVideRenvoieFlotteVide need. It exists here, rather than being
+// written inline as func(c *config.Config) { c.Fidelity = ... } at the call
+// site, because a controller's own test package cannot import
+// internal/framework/config directly (test/architecture_test.go's
+// dependency rule applies to _test.go files too): routerharness already
+// imports config for NewRouterHarness's own signature, so this is the one
+// place that dependency is allowed to live.
+func FiabiliteContrat(c *config.Config) {
+	c.Fidelity = config.FidelityContract
+}
+
 // NewRouterHarness mounts the full router in a deterministic profile.
 // ajuste lets a test override a default config value before the router is
 // built.

@@ -80,7 +80,15 @@ func NewRouter(d *Deps) *gin.Engine {
 	g.POST("/otp/send", otpCtrl.Send)
 	g.POST("/otp/verify", otpCtrl.Verify)
 
-	d.routesCreation(g)     // Tasks 10-12
+	// Task 12 : les trois routes de création de demande passent en clean
+	// architecture — un contrôleur qui délègue à trois interactors, le
+	// premier consommateur usecase du port.UnitOfWork de la Task 5.
+	// Construit une seule fois ici, comme les quatre contrôleurs précédents.
+	creationCtrl := d.creationController()
+	g.POST("/demandes/particulier", creationCtrl.Particulier)
+	g.POST("/demandes/entreprise", creationCtrl.Entreprise)
+	g.POST("/demandes/restitution", creationCtrl.Restitution)
+
 	d.routesLecture(g)      // Task 13
 	d.routesAcceptation(g)  // Task 14
 	d.routesConfirmation(g) // Task 15

@@ -12,4 +12,8 @@ import (
 func TestInMemoryDoublesSatisfyPorts(t *testing.T) {
 	var _ port.OTPGateway = (*inmemory.OTPGateway)(nil)
 	var _ port.Clock = inmemory.FixedClock{}
+	var _ port.NumberGateway = (*inmemory.NumberGateway)(nil)
+	var _ port.RequestGateway = (*inmemory.RequestGateway)(nil)
+	var _ port.UnitOfWork = (*inmemory.UnitOfWork)(nil)
+	var _ port.IDGenerator = (*inmemory.IDGenerator)(nil)
 }

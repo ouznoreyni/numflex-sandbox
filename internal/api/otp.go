@@ -1,12 +1,9 @@
 package api
 
 import (
-	"context"
-
 	"github.com/ouznoreyni/numflex-sandbox/internal/adapter/controller"
 	"github.com/ouznoreyni/numflex-sandbox/internal/adapter/gateway/postgres"
 	"github.com/ouznoreyni/numflex-sandbox/internal/adapter/presenter"
-	"github.com/ouznoreyni/numflex-sandbox/internal/entity"
 	"github.com/ouznoreyni/numflex-sandbox/internal/framework/clock"
 	"github.com/ouznoreyni/numflex-sandbox/internal/framework/config"
 	"github.com/ouznoreyni/numflex-sandbox/internal/usecase/otp"
@@ -44,16 +41,4 @@ func (d *Deps) otpController() *controller.OTPController {
 	}
 
 	return controller.NewOTPController(send, verify, pres)
-}
-
-// verifierOTP is the bridge internal/api/demandes_creation.go still calls
-// (individual and fleet creation, Task 12 moves both) — kept per R1 so this
-// task does not have to touch demandes_creation.go. It delegates to the
-// VerifyOTP interactor rather than re-implementing the check: no SQL, no
-// business rule left in this package.
-func (d *Deps) verifierOTP(ctx context.Context, numero, code string) *entity.Fault {
-	gw := postgres.NewOTPGateway(d.DB.Pool)
-	clk := clock.New(d.Cfg.ClockSkew)
-	interactor := otp.NewVerifyOTP(gw, clk, d.Cfg.OTPMaxAttempts)
-	return interactor.Execute(ctx, otp.VerifyOTPInput{MSISDN: numero, Code: code})
 }

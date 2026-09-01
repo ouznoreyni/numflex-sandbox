@@ -12,6 +12,7 @@ import (
 	"github.com/ouznoreyni/numflex-sandbox/internal/engine"
 	"github.com/ouznoreyni/numflex-sandbox/internal/framework/config"
 	"github.com/ouznoreyni/numflex-sandbox/internal/framework/persistence"
+	"github.com/ouznoreyni/numflex-sandbox/internal/framework/seed"
 	"github.com/ouznoreyni/numflex-sandbox/internal/httpx"
 	"github.com/ouznoreyni/numflex-sandbox/internal/testsupport"
 	"github.com/stretchr/testify/require"
@@ -126,6 +127,63 @@ func (h *harnais) appel(methode, chemin, jeton string, corps any) (*http.Respons
 	var decode map[string]any
 	_ = json.NewDecoder(rep.Body).Decode(&decode)
 	return rep, decode
+}
+
+// corpsParticulier construit le corps d'une demande particulier valide,
+// ORANGE → YAS — partagé par creerPortage et par les tests qui ont encore
+// besoin de construire ce corps eux-mêmes (déplacé depuis
+// internal/api/creation_particulier_test.go, supprimé en Task 12 : cette
+// copie ne sert plus qu'aux autres capacités du paquet api, pas encore
+// migrées, qui utilisent creerPortage pour amorcer leurs fixtures).
+func corpsParticulier(numero string) map[string]any {
+	return map[string]any{
+		"numero":                  numero,
+		"otpCode":                 "123456",
+		"operateurSourceId":       seed.OperateurOrange,
+		"operateurDestinataireId": seed.OperateurYAS,
+		"typePortabilite":         "PREPAID",
+		"client": map[string]any{
+			"nom": "Diallo", "prenom": "Mamadou",
+			"dateNaissance": "1975-03-20", "lieuNaissance": "Dakar",
+			"typePiece": "CNI", "numeroPiece": "1234567890123",
+		},
+	}
+}
+
+// corpsEntreprise construit le corps d'une demande flotte valide, ORANGE →
+// YAS — déplacé depuis internal/api/creation_entreprise_test.go, supprimé en
+// Task 12, pour les tests d'autres capacités (acceptation) qui en ont
+// encore besoin pour amorcer une flotte.
+func corpsEntreprise(porteur string, flotte []string) map[string]any {
+	return map[string]any{
+		"numeroPorteurFlotte":     porteur,
+		"otpCode":                 "123456",
+		"operateurSourceId":       seed.OperateurOrange,
+		"operateurDestinataireId": seed.OperateurYAS,
+		"typePortabilite":         "POSTPAID",
+		"numerosFlotte":           flotte,
+		"client": map[string]any{
+			"raisonSociale": "Entreprise SARL", "numRC": "123456789",
+			"prenom": "Ousmane", "nom": "Diallo", "dateNaissance": "1975-03-20",
+			"typePiece": "CNI", "numeroPiece": "1234567890123",
+		},
+	}
+}
+
+// creerPortage envoie l'OTP puis crée une demande particulier ORANGE → YAS,
+// via le routeur vivant — donc désormais via CreationController (Task 12),
+// pas différemment qu'avant pour les appelants de cette méthode.
+func (h *harnais) creerPortage(numero string) string {
+	h.t.Helper()
+	jeton := h.jeton("yas", "yas2026")
+	h.appel(http.MethodPost, "/api/gateway/v1/otp/send", jeton, map[string]any{"numero": numero})
+
+	rep, corps := h.appel(http.MethodPost, "/api/gateway/v1/demandes/particulier",
+		jeton, corpsParticulier(numero))
+	require.Equal(h.t, http.StatusCreated, rep.StatusCode, corps)
+
+	data := corps["data"].(map[string]any)
+	return data["id"].(string)
 }
 
 // liste exécute un GET authentifié dont data est un tableau.

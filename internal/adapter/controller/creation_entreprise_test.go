@@ -1,12 +1,14 @@
-package api
+package controller_test
+
+// These 8 test functions are moved, unchanged in assertion, from the
+// deleted internal/api/creation_entreprise_test.go (Task 12).
 
 import (
 	"context"
 	"net/http"
 	"testing"
 
-	"github.com/ouznoreyni/numflex-sandbox/internal/framework/config"
-	"github.com/ouznoreyni/numflex-sandbox/internal/framework/seed"
+	"github.com/ouznoreyni/numflex-sandbox/internal/testsupport/routerharness"
 	"github.com/stretchr/testify/require"
 )
 
@@ -14,8 +16,8 @@ func corpsEntreprise(porteur string, flotte []string) map[string]any {
 	return map[string]any{
 		"numeroPorteurFlotte":     porteur,
 		"otpCode":                 "123456",
-		"operateurSourceId":       seed.OperateurOrange,
-		"operateurDestinataireId": seed.OperateurYAS,
+		"operateurSourceId":       operateurOrange,
+		"operateurDestinataireId": operateurYAS,
 		"typePortabilite":         "POSTPAID",
 		"numerosFlotte":           flotte,
 		"client": map[string]any{
@@ -27,12 +29,12 @@ func corpsEntreprise(porteur string, flotte []string) map[string]any {
 }
 
 func TestFlotteNominale(t *testing.T) {
-	h := nouveauHarnais(t)
-	jeton := h.jeton("yas", "yas2026")
-	h.appel(http.MethodPost, "/api/gateway/v1/otp/send", jeton,
+	h := routerharness.NewRouterHarness(t)
+	jeton := h.Jeton("yas", "yas2026")
+	h.Appel(http.MethodPost, "/api/gateway/v1/otp/send", jeton,
 		map[string]any{"numero": "771000001"})
 
-	rep, corps := h.appel(http.MethodPost, "/api/gateway/v1/demandes/entreprise", jeton,
+	rep, corps := h.Appel(http.MethodPost, "/api/gateway/v1/demandes/entreprise", jeton,
 		corpsEntreprise("771000001", []string{"771000001", "771000002", "771000003"}))
 
 	require.Equal(t, http.StatusCreated, rep.StatusCode, corps)
@@ -48,14 +50,14 @@ func TestFlotteNominale(t *testing.T) {
 
 func TestFlotteExclusionPartielle(t *testing.T) {
 	// BR-006 / invariant 11 : la flotte réussit avec moins de numéros que demandé.
-	h := nouveauHarnais(t)
-	h.creerPortage("771000009") // ce numéro a désormais une demande en cours
+	h := routerharness.NewRouterHarness(t)
+	creerPortage(h, "771000009") // ce numéro a désormais une demande en cours
 
-	jeton := h.jeton("yas", "yas2026")
-	h.appel(http.MethodPost, "/api/gateway/v1/otp/send", jeton,
+	jeton := h.Jeton("yas", "yas2026")
+	h.Appel(http.MethodPost, "/api/gateway/v1/otp/send", jeton,
 		map[string]any{"numero": "771000001"})
 
-	rep, corps := h.appel(http.MethodPost, "/api/gateway/v1/demandes/entreprise", jeton,
+	rep, corps := h.Appel(http.MethodPost, "/api/gateway/v1/demandes/entreprise", jeton,
 		corpsEntreprise("771000001", []string{"771000001", "771000002", "771000009"}))
 
 	require.Equal(t, http.StatusCreated, rep.StatusCode)
@@ -73,12 +75,12 @@ func TestFlotteExclusionPartielle(t *testing.T) {
 }
 
 func TestFlotteVide(t *testing.T) {
-	h := nouveauHarnais(t)
-	jeton := h.jeton("yas", "yas2026")
-	h.appel(http.MethodPost, "/api/gateway/v1/otp/send", jeton,
+	h := routerharness.NewRouterHarness(t)
+	jeton := h.Jeton("yas", "yas2026")
+	h.Appel(http.MethodPost, "/api/gateway/v1/otp/send", jeton,
 		map[string]any{"numero": "771000001"})
 
-	rep, corps := h.appel(http.MethodPost, "/api/gateway/v1/demandes/entreprise", jeton,
+	rep, corps := h.Appel(http.MethodPost, "/api/gateway/v1/demandes/entreprise", jeton,
 		corpsEntreprise("771000001", []string{}))
 
 	// En fidélité real, FLOTTE_VIDE sort en problem-with-message : c'est une
@@ -91,25 +93,25 @@ func TestFlotteVide(t *testing.T) {
 }
 
 func TestFlotteOperateursMixtes(t *testing.T) {
-	h := nouveauHarnais(t)
-	jeton := h.jeton("yas", "yas2026")
-	h.appel(http.MethodPost, "/api/gateway/v1/otp/send", jeton,
+	h := routerharness.NewRouterHarness(t)
+	jeton := h.Jeton("yas", "yas2026")
+	h.Appel(http.MethodPost, "/api/gateway/v1/otp/send", jeton,
 		map[string]any{"numero": "771000001"})
 
-	rep, _ := h.appel(http.MethodPost, "/api/gateway/v1/demandes/entreprise", jeton,
+	rep, _ := h.Appel(http.MethodPost, "/api/gateway/v1/demandes/entreprise", jeton,
 		corpsEntreprise("771000001", []string{"771000001", "701000001"}))
 
 	require.Equal(t, http.StatusInternalServerError, rep.StatusCode)
 }
 
 func TestFlotteAucunNumeroEligible(t *testing.T) {
-	h := nouveauHarnais(t)
-	jeton := h.jeton("yas", "yas2026")
-	h.appel(http.MethodPost, "/api/gateway/v1/otp/send", jeton,
+	h := routerharness.NewRouterHarness(t)
+	jeton := h.Jeton("yas", "yas2026")
+	h.Appel(http.MethodPost, "/api/gateway/v1/otp/send", jeton,
 		map[string]any{"numero": "772000001"})
 
 	// Tranche 772 : portée il y a 30 jours, donc sous le délai de 3 mois.
-	rep, corps := h.appel(http.MethodPost, "/api/gateway/v1/demandes/entreprise", jeton,
+	rep, corps := h.Appel(http.MethodPost, "/api/gateway/v1/demandes/entreprise", jeton,
 		corpsEntreprise("772000001", []string{"772000001", "772000002"}))
 
 	require.Equal(t, http.StatusInternalServerError, rep.StatusCode)
@@ -117,19 +119,19 @@ func TestFlotteAucunNumeroEligible(t *testing.T) {
 		corps["detail"])
 
 	var n int
-	require.NoError(t, h.db.Pool.QueryRow(context.Background(),
+	require.NoError(t, h.DB.Pool.QueryRow(context.Background(),
 		"SELECT count(*) FROM demande").Scan(&n))
 	require.Equal(t, 0, n, "aucune demande ne doit être créée")
 }
 
 func TestFlotteUnSeulOTPCouvreToutLaFlotte(t *testing.T) {
-	h := nouveauHarnais(t)
-	jeton := h.jeton("yas", "yas2026")
+	h := routerharness.NewRouterHarness(t)
+	jeton := h.Jeton("yas", "yas2026")
 	// OTP envoyé uniquement sur le porteur.
-	h.appel(http.MethodPost, "/api/gateway/v1/otp/send", jeton,
+	h.Appel(http.MethodPost, "/api/gateway/v1/otp/send", jeton,
 		map[string]any{"numero": "771000001"})
 
-	rep, _ := h.appel(http.MethodPost, "/api/gateway/v1/demandes/entreprise", jeton,
+	rep, _ := h.Appel(http.MethodPost, "/api/gateway/v1/demandes/entreprise", jeton,
 		corpsEntreprise("771000001", []string{"771000001", "771000002", "771000003"}))
 
 	require.Equal(t, http.StatusCreated, rep.StatusCode)
@@ -139,14 +141,14 @@ func TestFlotteExclusionLibereLeNumeroPourUneNouvelleDemande(t *testing.T) {
 	// Un numéro exclu d'une flotte ne doit plus être compté comme "en cours" une
 	// fois que la demande qui le bloquait réellement se termine — sinon la ligne
 	// exclue laissée par la flotte elle-même le bloque indéfiniment (Task 13+).
-	h := nouveauHarnais(t)
-	idBlocage := h.creerPortage("771000009") // demande réelle, encore EN_COURS
+	h := routerharness.NewRouterHarness(t)
+	idBlocage := creerPortage(h, "771000009") // demande réelle, encore EN_COURS
 
-	jeton := h.jeton("yas", "yas2026")
-	h.appel(http.MethodPost, "/api/gateway/v1/otp/send", jeton,
+	jeton := h.Jeton("yas", "yas2026")
+	h.Appel(http.MethodPost, "/api/gateway/v1/otp/send", jeton,
 		map[string]any{"numero": "771000001"})
 
-	rep, corps := h.appel(http.MethodPost, "/api/gateway/v1/demandes/entreprise", jeton,
+	rep, corps := h.Appel(http.MethodPost, "/api/gateway/v1/demandes/entreprise", jeton,
 		corpsEntreprise("771000001", []string{"771000001", "771000002", "771000009"}))
 	require.Equal(t, http.StatusCreated, rep.StatusCode, corps)
 	data := corps["data"].(map[string]any)
@@ -154,13 +156,13 @@ func TestFlotteExclusionLibereLeNumeroPourUneNouvelleDemande(t *testing.T) {
 
 	// La demande qui bloquait réellement 771000009 se termine : plus rien ne le
 	// concerne, y compris la ligne exclue de la flotte ci-dessus.
-	_, err := h.db.Pool.Exec(context.Background(),
+	_, err := h.DB.Pool.Exec(context.Background(),
 		"UPDATE demande SET statut_demande = 'TERMINE' WHERE id = $1", idBlocage)
 	require.NoError(t, err)
 
-	h.appel(http.MethodPost, "/api/gateway/v1/otp/send", jeton,
+	h.Appel(http.MethodPost, "/api/gateway/v1/otp/send", jeton,
 		map[string]any{"numero": "771000009"})
-	rep2, corps2 := h.appel(http.MethodPost, "/api/gateway/v1/demandes/particulier", jeton,
+	rep2, corps2 := h.Appel(http.MethodPost, "/api/gateway/v1/demandes/particulier", jeton,
 		corpsParticulier("771000009"))
 
 	require.Equal(t, http.StatusCreated, rep2.StatusCode, corps2)
@@ -170,12 +172,12 @@ func TestFlotteExclusionLibereLeNumeroPourUneNouvelleDemande(t *testing.T) {
 // catalogue pour ce cas précis (« La liste des numéros de flotte est vide »).
 // Le traiter comme une violation de bean validation le rendrait inatteignable.
 func TestFlotteVideRenvoieFlotteVide(t *testing.T) {
-	h := nouveauHarnais(t, func(c *config.Config) { c.Fidelity = config.FidelityContract })
-	jeton := h.jeton("yas", "yas2026")
-	h.appel(http.MethodPost, "/api/gateway/v1/otp/send", jeton,
+	h := routerharness.NewRouterHarness(t, routerharness.FiabiliteContrat)
+	jeton := h.Jeton("yas", "yas2026")
+	h.Appel(http.MethodPost, "/api/gateway/v1/otp/send", jeton,
 		map[string]any{"numero": "771000001"})
 
-	rep, corps := h.appel(http.MethodPost, "/api/gateway/v1/demandes/entreprise", jeton,
+	rep, corps := h.Appel(http.MethodPost, "/api/gateway/v1/demandes/entreprise", jeton,
 		corpsEntreprise("771000001", []string{}))
 
 	require.Equal(t, http.StatusBadRequest, rep.StatusCode)
