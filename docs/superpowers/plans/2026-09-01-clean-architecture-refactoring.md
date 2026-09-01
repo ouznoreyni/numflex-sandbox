@@ -439,7 +439,7 @@ git commit -m "feat: les ports, leurs doubles en memoire, et make test qui compi
 **Files:**
 - Create: `internal/adapter/presenter/presenter.go`, `real.go`, `contract.go`, `view_model.go`
 - Test: `internal/adapter/presenter/real_test.go`, `contract_test.go` (move the 15 assertions of `internal/httpx/renderer_test.go`)
-- Delete at the end of Task 22: `internal/httpx/`
+- Delete at the end of Task 18: `internal/httpx/`
 
 **Interfaces:**
 - Produces:
