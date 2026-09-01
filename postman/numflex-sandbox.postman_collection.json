@@ -345,7 +345,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"numeroPorteurFlotte\": \"771000002\",\n  \"otpCode\": \"123456\",\n  \"operateurSourceId\": \"6a21745ce6c37b5b5b487ec1\",\n  \"operateurDestinataireId\": \"6a2174c3e6c37b5b5b487ec4\",\n  \"typePortabilite\": \"POSTPAID\",\n  \"numerosFlotte\": [\n    \"771000002\",\n    \"771000003\"\n  ],\n  \"client\": {\n    \"raisonSociale\": \"SARL Exemple\",\n    \"numRC\": \"SN-DKR-2020-B-1234\",\n    \"nom\": \"Diallo\",\n    \"prenom\": \"Mamadou\",\n    \"dateNaissance\": \"1975-03-20\",\n    \"lieuNaissance\": \"Dakar\",\n    \"typePiece\": \"CNI\",\n    \"numeroPiece\": \"1234567890123\"\n  }\n}",
+                  "raw": "{\n  \"numeroPorteurFlotte\": \"771000002\",\n  \"otpCode\": \"123456\",\n  \"operateurSourceId\": \"6a21745ce6c37b5b5b487ec1\",\n  \"operateurDestinataireId\": \"6a2174c3e6c37b5b5b487ec4\",\n  \"typePortabilite\": \"POSTPAID\",\n  \"numerosFlotte\": [\"771000002\", \"771000003\", \"771000004\"],\n  \"client\": {\n    \"raisonSociale\": \"Entreprise SARL\",\n    \"numRC\": \"123456789\",\n    \"prenom\": \"Ousmane\",\n    \"nom\": \"Diallo\",\n    \"dateNaissance\": \"1975-03-20\",\n    \"typePiece\": \"CNI\",\n    \"numeroPiece\": \"1234567890123\"\n  }\n}",
                   "options": {
                     "raw": {
                       "language": "json"
@@ -720,7 +720,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"idDemande\": \"{{idDemande}}\",\n  \"accepte\": true,\n  \"motifRejetId\": \"\",\n  \"commentaire\": \"\"\n}",
+                  "raw": "{\n  \"idDemande\": \"{{idDemande}}\",\n  \"accepte\": true,\n  \"commentaire\": \"Demande conforme\"\n}",
                   "options": {
                     "raw": {
                       "language": "json"
@@ -757,7 +757,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"accepte\": true,\n  \"numerosRejetes\": [],\n  \"motifRejetId\": \"\",\n  \"commentaire\": \"\"\n}",
+                  "raw": "{\n  \"accepte\": true,\n  \"commentaire\": \"Tous les numéros conformes\"\n}",
                   "options": {
                     "raw": {
                       "language": "json"
@@ -765,6 +765,116 @@
                   }
                 },
                 "description": "Compte orange — acceptation d'une flotte par l'opérateur source. numerosRejetes permet le rejet partiel : la demande peut réussir en portant moins de numéros que demandé (BR-006)."
+              },
+              "response": []
+            },
+            {
+              "name": "POST /demandes/acceptation (rejet)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/gateway/v1/demandes/acceptation",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "gateway",
+                    "v1",
+                    "demandes",
+                    "acceptation"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"idDemande\": \"{{idDemande}}\",\n  \"accepte\": false,\n  \"motifRejetId\": \"{{motifRejetId}}\",\n  \"commentaire\": \"Contrat non résilié\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "description": "Compte orange — rejet d'une demande particulier ou de restitution. motifRejetId est obligatoire dès que accepte vaut false, sinon MOTIF_REJET_OBLIGATOIRE. Récupérer un id via GET /motifs-rejet."
+              },
+              "response": []
+            },
+            {
+              "name": "POST /demandes/{id}/acceptation (acceptation partielle)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/gateway/v1/demandes/{{idDemande}}/acceptation",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "gateway",
+                    "v1",
+                    "demandes",
+                    "{{idDemande}}",
+                    "acceptation"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"accepte\": true,\n  \"numerosRejetes\": [\n    { \"numero\": \"771000003\", \"motifRejetId\": \"{{motifRejetId}}\" }\n  ],\n  \"commentaire\": \"Numéro 771000003 non conforme\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "description": "Compte orange — la flotte est acceptée en portant moins de numéros que demandé. Les numéros rejetés ressortent dans numerosExclus (BR-006)."
+              },
+              "response": []
+            },
+            {
+              "name": "POST /demandes/{id}/acceptation (rejet total)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/gateway/v1/demandes/{{idDemande}}/acceptation",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "gateway",
+                    "v1",
+                    "demandes",
+                    "{{idDemande}}",
+                    "acceptation"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"accepte\": false,\n  \"motifRejetId\": \"{{motifRejetId}}\",\n  \"commentaire\": \"Dossier incomplet\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "description": "Compte orange — la flotte entière est rejetée ; la demande passe en REJETE."
               },
               "response": []
             }
@@ -798,7 +908,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"idDemande\": \"{{idDemande}}\",\n  \"commentaire\": \"\"\n}",
+                  "raw": "{\n  \"idDemande\": \"{{idDemande}}\",\n  \"commentaire\": \"Portage confirmé\"\n}",
                   "options": {
                     "raw": {
                       "language": "json"
@@ -839,7 +949,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"idDemande\": \"{{idDemande}}\",\n  \"commentaire\": \"\"\n}",
+                  "raw": "{\n  \"idDemande\": \"{{idDemande}}\",\n  \"commentaire\": \"Numéro désactivé\"\n}",
                   "options": {
                     "raw": {
                       "language": "json"
@@ -907,7 +1017,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"commentaire\": \"Incident de test\"\n}",
+                  "raw": "{\n  \"commentaire\": \"Timeout de connexion à l'API gateway numFlex\"\n}",
                   "options": {
                     "raw": {
                       "language": "json"
@@ -944,7 +1054,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"commentaire\": \"Résolu\"\n}",
+                  "raw": "{\n  \"commentaire\": \"Service rétabli\"\n}",
                   "options": {
                     "raw": {
                       "language": "json"
@@ -1011,7 +1121,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"commentaire\": \"Incident interne de test\"\n}",
+                  "raw": "{\n  \"commentaire\": \"Panne du système de routage interne, portages bloqués\"\n}",
                   "options": {
                     "raw": {
                       "language": "json"
@@ -1048,7 +1158,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"commentaire\": \"Résolu\"\n}",
+                  "raw": "{\n  \"commentaire\": \"Service rétabli\"\n}",
                   "options": {
                     "raw": {
                       "language": "json"

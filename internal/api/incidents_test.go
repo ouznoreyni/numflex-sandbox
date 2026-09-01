@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"github.com/yas/numflex-sandbox/internal/config"
 	"github.com/yas/numflex-sandbox/internal/seed"
 )
 
@@ -75,10 +76,12 @@ func TestResolutionParLeMauvaisSegment(t *testing.T) {
 	rep, corps2 := h.appel(http.MethodPost, "/api/gateway/v1/incidents/gateway/"+id+"/resoudre",
 		h.jeton("orange", "orange2026"), map[string]any{"commentaire": "rétabli"})
 
+	// Le bon endpoint est porté par le detail du problem+json, pas par un
+	// fieldErrors : `id` est une variable de chemin, pas un champ de DTO, et une
+	// pile Spring ne rend une constraint-violation que pour la bean validation.
+	// L'exigence du guide (§7.12) porte sur l'indication, pas sur son support.
 	require.Equal(t, http.StatusBadRequest, rep.StatusCode)
-	champs := corps2["fieldErrors"].([]any)
-	require.Contains(t, champs[0].(map[string]any)["message"],
-		"/api/gateway/v1/incidents/interne")
+	require.Contains(t, corps2["detail"], "/api/gateway/v1/incidents/interne")
 }
 
 func TestUnSeulIncidentInterneOuvertParOperateur(t *testing.T) {
@@ -137,4 +140,30 @@ func TestDeclarationSansTypeIncidentId(t *testing.T) {
 	require.Equal(t, http.StatusCreated, rep.StatusCode)
 	// Le typeIncidentId fourni est ignoré : c'est l'endpoint qui décide.
 	require.Equal(t, seed.TypeIncidentGateway, corps["data"].(map[string]any)["typeIncidentId"])
+}
+
+// TestResolutionParLeMauvaisSegmentIndiqueLeBonEndpoint — §7.12 du guide :
+// « Résoudre un incident via le mauvais segment renvoie une erreur
+// VALIDATION_ECHOUEE indiquant le bon endpoint. » Le code seul ne suffit pas :
+// c'est l'indication de l'endpoint que le guide promet, et elle doit atteindre
+// le client, pas rester dans un fieldError que l'enveloppe de contrat jette.
+func TestResolutionParLeMauvaisSegmentIndiqueLeBonEndpoint(t *testing.T) {
+	h := nouveauHarnais(t, func(c *config.Config) { c.Fidelity = config.FidelityContract })
+	jeton := h.jeton("orange", "orange2026")
+
+	_, corps := h.appel(http.MethodPost, "/api/gateway/v1/incidents/gateway", jeton,
+		map[string]any{"commentaire": "Timeout de connexion à l'API gateway numFlex"})
+	incidentID := corps["data"].(map[string]any)["id"].(string)
+
+	// L'incident est de catégorie Gateway : le résoudre via /interne est un
+	// mauvais segment.
+	rep, corps := h.appel(http.MethodPost,
+		"/api/gateway/v1/incidents/interne/"+incidentID+"/resoudre", jeton,
+		map[string]any{"commentaire": "Service rétabli"})
+
+	require.Equal(t, http.StatusBadRequest, rep.StatusCode)
+	require.Equal(t, "VALIDATION_ECHOUEE", corps["code"])
+	require.Equal(t,
+		"Cet incident se résout via POST /api/gateway/v1/incidents/gateway/{id}/resoudre.",
+		corps["message"])
 }

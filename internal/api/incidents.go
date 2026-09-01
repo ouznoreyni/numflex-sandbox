@@ -145,10 +145,12 @@ func (d *Deps) resoudreIncident(segment string) gin.HandlerFunc {
 			segmentAttendu = "interne"
 		}
 		if segmentAttendu != segment {
-			d.R.Fail(c, apperr.Validation(apperr.FieldError{
-				ObjectName: "incidentDTO", Field: "id",
-				Message: "Cet incident se résout via POST " + cheminResolution(segmentAttendu),
-			}))
+			// §7.12 : « renvoie une erreur VALIDATION_ECHOUEE indiquant le bon
+			// endpoint ». L'indication doit atteindre le client — portée par un
+			// fieldError, elle serait perdue, l'enveloppe de contrat (§8) ne
+			// transportant que success, code, message et data.
+			d.R.Fail(c, apperr.ValidationEchouee(
+				"Cet incident se résout via POST "+cheminResolution(segmentAttendu)+"."))
 			return
 		}
 

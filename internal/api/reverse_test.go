@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"github.com/yas/numflex-sandbox/internal/config"
 	"github.com/yas/numflex-sandbox/internal/engine"
 	"github.com/yas/numflex-sandbox/internal/seed"
 )
@@ -108,4 +109,47 @@ func TestReverseAtteintTermineParLesVraisEndpoints(t *testing.T) {
 		`SELECT operateur_actuel_id FROM numero WHERE msisdn = '773000001'`).
 		Scan(&operateurActuel))
 	require.Equal(t, seed.OperateurOrange, operateurActuel)
+}
+
+// TestCompletionDUnReverseToujoursRefuseeAuxOperateurs — §7.9 du guide : une
+// tentative de COMPLETION sur un REVERSE renvoie DEMANDE_ACCES_REFUSE avec le
+// message documenté. Le moteur joue l'ARTP et complète la demande dès que
+// toutes les confirmations sont là ; si le refus n'était rendu que tant que la
+// demande est EN_COURS, la fenêtre serait d'un tick et le message documenté
+// deviendrait inatteignable en pratique — l'opérateur recevrait un
+// ETAPE_INVALIDE générique à la place.
+func TestCompletionDUnReverseToujoursRefuseeAuxOperateurs(t *testing.T) {
+	h := nouveauHarnais(t, func(c *config.Config) { c.Fidelity = config.FidelityContract })
+
+	_, corps := h.appel(http.MethodPost, "/api/gateway/v1/reverse-requests",
+		h.jeton("orange", "orange2026"), map[string]any{"numero": "773000001"})
+	reverseID := corps["data"].(map[string]any)["id"].(string)
+	require.NoError(t, engine.ValiderReverse(context.Background(), h.db, reverseID))
+
+	var demandeID string
+	require.NoError(t, h.db.Pool.QueryRow(context.Background(),
+		`SELECT demande_id FROM reverse_request WHERE id = $1`, reverseID).Scan(&demandeID))
+
+	for _, compte := range [][2]string{
+		{"orange", "orange2026"}, {"yas", "yas2026"}, {"expresso", "expresso2026"},
+	} {
+		h.appel(http.MethodPost, "/api/gateway/v1/demandes/a-confirmer",
+			h.jeton(compte[0], compte[1]), map[string]any{"idDemande": demandeID})
+	}
+	h.converger()
+	h.converger()
+	require.Equal(t, "COMPLETION", h.etape(demandeID))
+
+	// Destinataire comme source : le refus est le même, et il est celui du guide.
+	for _, compte := range [][2]string{{"orange", "orange2026"}, {"yas", "yas2026"}} {
+		rep, corpsRefus := h.appel(http.MethodPost, "/api/gateway/v1/demandes/traitement",
+			h.jeton(compte[0], compte[1]), map[string]any{"idDemande": demandeID})
+
+		require.Equal(t, http.StatusForbidden, rep.StatusCode, compte[0])
+		require.Equal(t, "DEMANDE_ACCES_REFUSE", corpsRefus["code"], compte[0])
+		require.Equal(t,
+			"La complétion (COMPLETION) d'une demande REVERSE est réservée à l'ARTP, "+
+				"une fois que tous les opérateurs ont confirmé.",
+			corpsRefus["message"], compte[0])
+	}
 }

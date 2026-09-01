@@ -52,6 +52,17 @@ func EndpointEtape(e Etape) string {
 
 // PeutTraiter décide si un opérateur peut appeler /demandes/traitement maintenant.
 func PeutTraiter(d Demande, operateurID string) *apperr.Error {
+	// Le refus de la COMPLETION d'un REVERSE précède le contrôle de statut, et
+	// c'est délibéré : le guide §7.9 énonce ce message comme la réponse à toute
+	// tentative, sans le conditionner à l'état de la demande. Le moteur jouant
+	// l'ARTP, il complète le REVERSE dès la dernière confirmation — placé après
+	// le contrôle de statut, ce refus n'aurait qu'un tick de fenêtre et
+	// l'opérateur recevrait presque toujours un ETAPE_INVALIDE générique.
+	if ResponsableEtape(d.EtapeActuelle, d.TypeDemande) == RoleARTP {
+		return apperr.DemandeAccesRefuse(
+			"La complétion (COMPLETION) d'une demande REVERSE est réservée à l'ARTP, une fois que tous les opérateurs ont confirmé.")
+	}
+
 	if d.StatutDemande != StatutEnCours {
 		return apperr.EtapeInvalide(fmt.Sprintf(
 			"Cette demande n'est plus en cours (statut : %s).", d.StatutDemande))
@@ -68,9 +79,6 @@ func PeutTraiter(d Demande, operateurID string) *apperr.Error {
 	}
 
 	switch ResponsableEtape(d.EtapeActuelle, d.TypeDemande) {
-	case RoleARTP:
-		return apperr.DemandeAccesRefuse(
-			"La complétion (COMPLETION) d'une demande REVERSE est réservée à l'ARTP, une fois que tous les opérateurs ont confirmé.")
 	case RoleSource:
 		if operateurID != d.OperateurSourceID {
 			return apperr.DemandeAccesRefuse(fmt.Sprintf(
