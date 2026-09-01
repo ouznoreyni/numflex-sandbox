@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/ouznoreyni/numflex-sandbox/internal/framework/config"
+	"github.com/ouznoreyni/numflex-sandbox/internal/framework/persistence"
 	"github.com/stretchr/testify/require"
 )
 
@@ -81,7 +82,11 @@ func TestLeCORSNAjouteAucuneRoute(t *testing.T) {
 			f(cfg)
 		}
 		gin.SetMode(gin.ReleaseMode)
-		return len(NewRouter(&Deps{Cfg: cfg}).Routes())
+		// DB non nil mais vide : le test ne fait aucune requête, mais NewRouter
+		// construit désormais le contrôleur OTP une seule fois, à la
+		// construction du routeur — comme cmd/server/main.go, qui fournit
+		// toujours un *persistence.DB réel, jamais nil.
+		return len(NewRouter(&Deps{Cfg: cfg, DB: &persistence.DB{}}).Routes())
 	}
 
 	sans := compter()
