@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"github.com/yas/numflex-sandbox/internal/config"
 	"github.com/yas/numflex-sandbox/internal/seed"
 )
 
@@ -80,8 +81,13 @@ func TestFlotteVide(t *testing.T) {
 	rep, corps := h.appel(http.MethodPost, "/api/gateway/v1/demandes/entreprise", jeton,
 		corpsEntreprise("771000001", []string{}))
 
+	// En fidélité real, FLOTTE_VIDE sort en problem-with-message : c'est une
+	// validation métier, pas une violation de bean validation, donc pas de
+	// fieldErrors — et aucun champ code (ANO-001). Le message reste lisible.
 	require.Equal(t, http.StatusBadRequest, rep.StatusCode)
-	require.Contains(t, corps, "fieldErrors")
+	require.NotContains(t, corps, "fieldErrors")
+	require.NotContains(t, corps, "code")
+	require.Equal(t, "La liste des numéros de flotte est vide", corps["detail"])
 }
 
 func TestFlotteOperateursMixtes(t *testing.T) {
@@ -158,4 +164,21 @@ func TestFlotteExclusionLibereLeNumeroPourUneNouvelleDemande(t *testing.T) {
 		corpsParticulier("771000009"))
 
 	require.Equal(t, http.StatusCreated, rep2.StatusCode, corps2)
+}
+
+// TestFlotteVideRenvoieFlotteVide — §9 du guide : le code FLOTTE_VIDE existe au
+// catalogue pour ce cas précis (« La liste des numéros de flotte est vide »).
+// Le traiter comme une violation de bean validation le rendrait inatteignable.
+func TestFlotteVideRenvoieFlotteVide(t *testing.T) {
+	h := nouveauHarnais(t, func(c *config.Config) { c.Fidelity = config.FidelityContract })
+	jeton := h.jeton("yas", "yas2026")
+	h.appel(http.MethodPost, "/api/gateway/v1/otp/send", jeton,
+		map[string]any{"numero": "771000001"})
+
+	rep, corps := h.appel(http.MethodPost, "/api/gateway/v1/demandes/entreprise", jeton,
+		corpsEntreprise("771000001", []string{}))
+
+	require.Equal(t, http.StatusBadRequest, rep.StatusCode)
+	require.Equal(t, "FLOTTE_VIDE", corps["code"])
+	require.Equal(t, "La liste des numéros de flotte est vide", corps["message"])
 }

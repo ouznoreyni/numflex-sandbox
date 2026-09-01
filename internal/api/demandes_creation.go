@@ -201,6 +201,12 @@ func (d *Deps) postDemandeEntreprise(c *gin.Context) {
 		d.R.Fail(c, apperr.Validation(champs...))
 		return
 	}
+	// §9 : le catalogue réserve un code à ce cas précis. Le traiter comme une
+	// violation de bean validation le rendrait inatteignable.
+	if len(req.NumerosFlotte) == 0 {
+		d.R.Fail(c, apperr.FlotteVide())
+		return
+	}
 
 	appelant := Appelant(c)
 	if req.OperateurDestinataireID != appelant.OperateurID {
@@ -337,7 +343,7 @@ func (d *Deps) postDemandeEntreprise(c *gin.Context) {
 // validerEntreprise reproduit la validation de forme d'une demande flotte : les
 // mêmes champs obligatoires qu'une demande particulier, mais numeroPorteurFlotte
 // à la place de numero, raisonSociale/numRC à la place d'une identité seule, et
-// numerosFlotte qui ne doit jamais être vide.
+// numerosFlotte dont la vacuité relève du code FLOTTE_VIDE, hors de cette fonction.
 func validerEntreprise(r reqEntreprise) []apperr.FieldError {
 	var champs []apperr.FieldError
 	obligatoire := func(champ, valeur string) {
@@ -370,12 +376,8 @@ func validerEntreprise(r reqEntreprise) []apperr.FieldError {
 			Message: "doit valoir PREPAID ou POSTPAID",
 		})
 	}
-	if len(r.NumerosFlotte) == 0 {
-		champs = append(champs, apperr.FieldError{
-			ObjectName: "demandeEntrepriseDTO", Field: "numerosFlotte",
-			Message: "ne doit pas être vide",
-		})
-	}
+	// numerosFlotte vide n'est pas traité ici : le guide lui réserve le code
+	// FLOTTE_VIDE (§9), rendu par le handler.
 	return champs
 }
 
