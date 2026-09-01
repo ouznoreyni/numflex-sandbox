@@ -80,3 +80,70 @@ func (g *ReverseGateway) Own(ctx context.Context, operatorID string, page, size 
 	}
 	return ids, nil
 }
+
+// LockPending reads a reverse request's number, operator and status with a
+// row lock — moved verbatim from the deleted internal/engine/reverse.go's
+// ValiderReverse, whose own SELECT ... FOR UPDATE opened every validation
+// directly against a *pgx.Tx.
+func (g *ReverseGateway) LockPending(ctx context.Context, id string) (msisdn, operatorID, status string, err error) {
+	err = g.db.QueryRow(ctx,
+		`SELECT numero, operateur_id, statut FROM reverse_request WHERE id = $1 FOR UPDATE`,
+		id).Scan(&msisdn, &operatorID, &status)
+	return msisdn, operatorID, status, err
+}
+
+// MarkValidated records that id was validated into demandeID — moved
+// verbatim from ValiderReverse's own final tx.Exec.
+func (g *ReverseGateway) MarkValidated(ctx context.Context, id, demandeID string, now time.Time) error {
+	_, err := g.db.Exec(ctx,
+		`UPDATE reverse_request SET statut='VALIDE', date_decision=$2, demande_id=$3
+		  WHERE id = $1`, id, now, demandeID)
+	return err
+}
+
+// Reject marks id REJETE without creating any Demande — moved verbatim from
+// the deleted internal/engine/reverse.go's RejeterReverse.
+func (g *ReverseGateway) Reject(ctx context.Context, id string) error {
+	_, err := g.db.Exec(ctx,
+		`UPDATE reverse_request SET statut='REJETE', date_decision=now()
+		  WHERE id = $1 AND statut = 'EN_ATTENTE'`, id)
+	return err
+}
+
+// CurrentOperatorFor reads a number's current holder — the one field
+// ValiderReverse needs from the registry, kept here (rather than on
+// NumberGateway) so it stays inside the same transaction as LockPending's
+// own lock.
+func (g *ReverseGateway) CurrentOperatorFor(ctx context.Context, msisdn string) (string, error) {
+	var operateurActuel string
+	err := g.db.QueryRow(ctx,
+		`SELECT operateur_actuel_id FROM numero WHERE msisdn = $1`, msisdn).Scan(&operateurActuel)
+	return operateurActuel, err
+}
+
+// OverdueForAutoValidation lists the ids EN_ATTENTE for more than
+// delaySeconds — validerReversesAutomatiquement's own SELECT, moved
+// verbatim.
+func (g *ReverseGateway) OverdueForAutoValidation(ctx context.Context, delaySeconds float64) ([]string, error) {
+	rows, err := g.db.Query(ctx,
+		`SELECT id FROM reverse_request
+		  WHERE statut = 'EN_ATTENTE' AND date_demande + make_interval(secs => $1) <= now()`,
+		delaySeconds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	ids := []string{}
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return ids, nil
+}

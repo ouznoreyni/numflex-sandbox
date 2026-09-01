@@ -18,8 +18,8 @@ import (
 	"time"
 
 	"github.com/ouznoreyni/numflex-sandbox/internal/api"
-	"github.com/ouznoreyni/numflex-sandbox/internal/engine"
 	"github.com/ouznoreyni/numflex-sandbox/internal/framework/config"
+	"github.com/ouznoreyni/numflex-sandbox/internal/framework/engine"
 	"github.com/ouznoreyni/numflex-sandbox/internal/framework/persistence"
 	"github.com/ouznoreyni/numflex-sandbox/internal/httpx"
 	"github.com/ouznoreyni/numflex-sandbox/internal/testsupport"
@@ -124,6 +124,15 @@ func NewRouterHarness(t *testing.T, ajuste ...func(*config.Config)) *RouterHarne
 func (h *RouterHarness) Converger() {
 	h.T.Helper()
 	require.NoError(h.T, h.Moteur.Tick(context.Background()))
+}
+
+// ValiderReverse rejoue l'acte de l'ARTP — engine.ValiderReverse, exposé ici
+// pour la même raison que FiabiliteContrat : un test de contrôleur ne peut
+// pas importer internal/framework/engine directement (couche 2 vers couche
+// 3, que test/architecture_test.go interdirait).
+func (h *RouterHarness) ValiderReverse(reverseID string) {
+	h.T.Helper()
+	require.NoError(h.T, engine.ValiderReverse(context.Background(), h.DB, reverseID))
 }
 
 // Brut exécute une requête HTTP brute, sans décoder la réponse.

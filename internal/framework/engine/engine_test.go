@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ouznoreyni/numflex-sandbox/internal/adapter/gateway/postgres"
 	"github.com/ouznoreyni/numflex-sandbox/internal/entity"
 	"github.com/ouznoreyni/numflex-sandbox/internal/framework/config"
 	"github.com/ouznoreyni/numflex-sandbox/internal/framework/persistence"
@@ -265,4 +266,69 @@ func TestTransfertRegistreExclutNumerosExclusEtRejetes(t *testing.T) {
 
 	require.Equal(t, seed.OperateurOrange, operateurActuel("771000003"), "un numéro rejeté ne doit pas être transféré")
 	require.Equal(t, "191", routageNumero("771000003"))
+}
+
+// TestAnnulationPendantConvergenceEnCours pins the outcome of a race Task 17
+// inherited rather than introduced: porting.CancelRequestInteractor reads a
+// request (entity.CanCancel) outside any lock, before opening its own
+// port.UnitOfWork.Do; RequestGateway.Cancel's own UPDATE carries no WHERE
+// condition on the current step. If a scheduled convergence applies in the
+// window between that read and Cancel's write, Cancel proceeds on stale
+// information. This test reproduces the worst-case interleaving
+// deterministically — no goroutines needed, since the bug is a
+// read-then-write ordering problem, not a data race in the Go sense — by
+// applying the due convergence first and only then issuing the same write
+// porting.CancelRequestInteractor.Execute would have issued from its own
+// stale read.
+//
+// The result: the request ends up ANNULE (cancelled) while sitting at
+// DESACTIVATION — a step nobody ever processed — with a spurious
+// etape_historique row claiming DESACTIVATION was itself terminated by an
+// "ACTION" origin cancellation. This is a real defect, pre-existing this
+// task (Cancel's SQL is unchanged in shape), and is reported rather than
+// fixed here — see the task-17 report.
+func TestAnnulationPendantConvergenceEnCours(t *testing.T) {
+	e, db := moteur(t)
+	insererDemande(t, db, "d1", entity.StepAcceptance, time.Second)
+
+	// Un opérateur accepte la demande avec une fenêtre de convergence non
+	// nulle : la transition est planifiée, déjà due.
+	_, err := db.Pool.Exec(context.Background(),
+		`UPDATE demande SET transition_prevue_a = now() - interval '1 second' WHERE id = 'd1'`)
+	require.NoError(t, err)
+
+	// L'interactor de CancelRequest lirait ici la demande, la trouverait
+	// encore à ACCEPTATION (entity.CanCancel l'autoriserait) — read reproduced
+	// implicitly: nothing about the state below has changed yet.
+	etape, _, statut := etatDemande(t, db, "d1")
+	require.Equal(t, "ACCEPTATION", etape)
+	require.Equal(t, "EN_COURS", statut)
+
+	// ... puis, avant que Cancel n'écrive, le moteur fait converger la
+	// transition planifiée.
+	require.NoError(t, e.Tick(context.Background()))
+	etape, _, statut = etatDemande(t, db, "d1")
+	require.Equal(t, "DESACTIVATION", etape, "la convergence a fait avancer la demande")
+	require.Equal(t, "EN_COURS", statut)
+
+	// ... et enfin Cancel écrit, sans revérifier l'étape courante — le même
+	// appel que porting.CancelRequestInteractor.Execute ferait à travers
+	// port.UnitOfWork.Do, ici fait directement pour isoler la course de
+	// l'autorisation qui la précède.
+	gw := postgres.NewRequestGateway(db.Pool)
+	require.NoError(t, gw.Cancel(context.Background(), "d1", seed.OperateurOrange, time.Now()))
+
+	etape, statutEtape, statutDemande := etatDemande(t, db, "d1")
+	require.Equal(t, "ANNULE", statutDemande, "Cancel a bien écrasé l'état, sans revérifier l'étape")
+	require.Equal(t, "DESACTIVATION", etape, "mais l'étape n'a jamais bougé : demande incohérente")
+	require.Equal(t, "TERMINE", statutEtape)
+
+	// La ligne d'historique écrite par Cancel porte l'étape DESACTIVATION —
+	// alors que personne n'a jamais traité cette étape.
+	var origine, historiqueStatut string
+	require.NoError(t, db.Pool.QueryRow(context.Background(),
+		`SELECT origine, statut FROM etape_historique
+		  WHERE demande_id = 'd1' AND etape = 'DESACTIVATION'`).Scan(&origine, &historiqueStatut))
+	require.Equal(t, "ACTION", origine)
+	require.Equal(t, "TERMINE", historiqueStatut)
 }

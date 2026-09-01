@@ -144,3 +144,16 @@ func (g *IncidentGateway) Own(ctx context.Context, operatorID string, systemLock
 	}
 	return ids, nil
 }
+
+// MarketFrozen answers whether any operator has an EN_COURS, fige_systeme
+// incident open — BR-012, moved verbatim from the deleted
+// internal/engine/engine.go's own PlaceGelee. Lit la colonne dénormalisée
+// incident.fige_systeme — la même que consulte l'index unique partiel du
+// §7.12 — plutôt que de rejoindre type_incident, pour n'avoir qu'une seule
+// source de vérité sur ce qui gèle le système.
+func (g *IncidentGateway) MarketFrozen(ctx context.Context) (bool, error) {
+	var n int
+	err := g.db.QueryRow(ctx,
+		`SELECT count(*) FROM incident WHERE statut = 'EN_COURS' AND fige_systeme`).Scan(&n)
+	return n > 0, err
+}

@@ -15,8 +15,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/ouznoreyni/numflex-sandbox/internal/engine"
 	"github.com/ouznoreyni/numflex-sandbox/internal/framework/config"
+	"github.com/ouznoreyni/numflex-sandbox/internal/framework/engine"
 	"github.com/ouznoreyni/numflex-sandbox/internal/framework/persistence"
 	"github.com/ouznoreyni/numflex-sandbox/internal/framework/seed"
 )

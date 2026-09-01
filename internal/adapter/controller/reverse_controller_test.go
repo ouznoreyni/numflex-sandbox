@@ -13,7 +13,6 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/ouznoreyni/numflex-sandbox/internal/engine"
 	"github.com/ouznoreyni/numflex-sandbox/internal/testsupport/routerharness"
 	"github.com/stretchr/testify/require"
 )
@@ -97,7 +96,7 @@ func TestReverseAtteintTermineParLesVraisEndpoints(t *testing.T) {
 
 	// 2. Acte de l'ARTP, hors API : validation — crée la Demande REVERSE à
 	// CONFIRMATION.
-	require.NoError(t, engine.ValiderReverse(context.Background(), h.DB, reverseID))
+	h.ValiderReverse(reverseID)
 
 	var demandeID string
 	require.NoError(t, h.DB.Pool.QueryRow(context.Background(),
@@ -140,7 +139,7 @@ func TestCompletionDUnReverseToujoursRefuseeAuxOperateurs(t *testing.T) {
 	_, corps := h.Appel(http.MethodPost, "/api/gateway/v1/reverse-requests",
 		h.Jeton("orange", "orange2026"), map[string]any{"numero": "773000001"})
 	reverseID := corps["data"].(map[string]any)["id"].(string)
-	require.NoError(t, engine.ValiderReverse(context.Background(), h.DB, reverseID))
+	h.ValiderReverse(reverseID)
 
 	var demandeID string
 	require.NoError(t, h.DB.Pool.QueryRow(context.Background(),

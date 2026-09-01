@@ -277,3 +277,216 @@ func (g *RequestGateway) Cancel(ctx context.Context, requestID, operatorID strin
 		requestID, now)
 	return err
 }
+
+// LockForTransition reads a request's transition-relevant fields with a row
+// lock — moved verbatim from the deleted internal/engine/transitions.go's
+// AppliquerTransition, whose own SELECT ... FOR UPDATE opened every
+// transition directly against a *pgx.Tx.
+func (g *RequestGateway) LockForTransition(ctx context.Context, id string) (entity.PortingRequest, bool, error) {
+	var dm entity.PortingRequest
+	var etape, statutDem, typeDem string
+	err := g.db.QueryRow(ctx,
+		`SELECT etape_actuelle, statut_demande, type_demande,
+		        operateur_source_id, operateur_destinataire_id, numero
+		   FROM demande WHERE id = $1 FOR UPDATE`, id).
+		Scan(&etape, &statutDem, &typeDem, &dm.SourceOperatorID, &dm.RecipientOperatorID, &dm.MSISDN)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return entity.PortingRequest{}, false, nil
+	}
+	if err != nil {
+		return entity.PortingRequest{}, false, err
+	}
+	dm.ID = id
+	dm.CurrentStep = entity.Step(etape)
+	dm.Status = entity.RequestStatus(statutDem)
+	dm.RequestType = entity.RequestType(typeDem)
+	return dm, true, nil
+}
+
+// CloseCurrentStep writes the etape_historique row that closes id's current
+// step — AppliquerTransition's own first tx.Exec.
+func (g *RequestGateway) CloseCurrentStep(ctx context.Context, id string, closedStatus entity.StepStatus, origin string, now time.Time) error {
+	_, err := g.db.Exec(ctx,
+		`INSERT INTO etape_historique (demande_id, etape, statut, origine, date_debut, date_fin)
+		 SELECT id, etape_actuelle, $2, $3, date_debut_etape, $4 FROM demande WHERE id = $1`,
+		id, string(closedStatus), origin, now)
+	return err
+}
+
+// CompleteRequest marks id TERMINE — AppliquerTransition's own COMPLETION
+// branch.
+func (g *RequestGateway) CompleteRequest(ctx context.Context, id string, closedStatus entity.StepStatus, now time.Time) error {
+	_, err := g.db.Exec(ctx,
+		`UPDATE demande
+		    SET statut_demande = 'TERMINE', statut_etape_actuel = $2,
+		        date_finalisation = $3, transition_prevue_a = NULL
+		  WHERE id = $1`, id, string(closedStatus), now)
+	return err
+}
+
+// AdvanceStep moves id to its next step, EN_COURS — AppliquerTransition's
+// own non-terminal branch.
+func (g *RequestGateway) AdvanceStep(ctx context.Context, id string, next entity.Step, now time.Time) error {
+	_, err := g.db.Exec(ctx,
+		`UPDATE demande
+		    SET etape_actuelle = $2, statut_etape_actuel = 'EN_COURS',
+		        date_debut_etape = $3, transition_prevue_a = NULL
+		  WHERE id = $1`, id, string(next), now)
+	return err
+}
+
+// TransferToRegistry inscrit le changement d'opérateur au registre national
+// — transfererAuRegistre, moved verbatim. C'est le constat central du SIT :
+// quand une étape expire, ce transfert a lieu alors qu'aucun HLR n'a été
+// touché. Le filtre NOT exclu AND statut <> 'REJETE' est la garantie
+// centrale : sans lui, un numéro exclu ou rejeté serait transféré vers un
+// opérateur que l'abonné n'a jamais accepté (TestTransfertRegistreExclutNumerosExclusEtRejetes).
+func (g *RequestGateway) TransferToRegistry(ctx context.Context, id, recipientOperatorID string) error {
+	_, err := g.db.Exec(ctx,
+		`UPDATE numero SET operateur_actuel_id = $2, date_dernier_portage = now()
+		  WHERE msisdn IN (SELECT numero FROM demande_numero
+		                    WHERE demande_id = $1 AND NOT exclu AND statut <> 'REJETE')`,
+		id, recipientOperatorID)
+	return err
+}
+
+// ApplyRouting finalise le routage numéro par numéro (§7.10) — recalculerRoutage,
+// minus its two RoutingPrefix reads, already made by the caller.
+func (g *RequestGateway) ApplyRouting(ctx context.Context, id, sourcePrefix, recipientPrefix string) error {
+	if _, err := g.db.Exec(ctx,
+		`UPDATE demande_numero
+		    SET routage_info = CASE WHEN statut = 'REJETE' OR exclu THEN $2 ELSE $3 END
+		  WHERE demande_id = $1`, id, sourcePrefix, recipientPrefix); err != nil {
+		return err
+	}
+	_, err := g.db.Exec(ctx, `UPDATE demande SET routage_info = $2 WHERE id = $1`, id, recipientPrefix)
+	return err
+}
+
+// ApplyEndOfRequestRestitution : pour une RESTITUTION ou un REVERSE, le
+// numéro rejoint son opérateur d'origine et routageInfo n'apparaît qu'ici
+// (§7.10) — effetsFinDeDemande, minus its own RoutingPrefix read, already
+// made by the caller.
+func (g *RequestGateway) ApplyEndOfRequestRestitution(ctx context.Context, id, msisdn, recipientOperatorID, recipientPrefix string) error {
+	if _, err := g.db.Exec(ctx,
+		`UPDATE numero
+		    SET operateur_actuel_id = $2, date_dernier_portage = now(), deja_restitue = true
+		  WHERE msisdn = $1`, msisdn, recipientOperatorID); err != nil {
+		return err
+	}
+	_, err := g.db.Exec(ctx, `UPDATE demande SET routage_info = $2 WHERE id = $1`, id, recipientPrefix)
+	return err
+}
+
+// ScheduleTransitionAt marks id's current step processed and fixes the
+// instant its transition will actually apply. L'échéance est calculée par
+// la base, pas par Go : c'est le now() de Postgres que DueConvergences
+// relira, et deux horloges pour une même comparaison produisent une
+// intermittence (le conteneur Postgres et le process Go ne s'accordent pas
+// à la milliseconde près) — commit 94af3f2.
+func (g *RequestGateway) ScheduleTransitionAt(ctx context.Context, id string, delaySeconds float64) error {
+	_, err := g.db.Exec(ctx,
+		`UPDATE demande SET transition_prevue_a = now() + make_interval(secs => $2)
+		  WHERE id = $1`, id, delaySeconds)
+	return err
+}
+
+// DueConvergences lists the ids whose deferred transition has come due —
+// appliquerConvergencesDues's own SELECT, moved verbatim.
+func (g *RequestGateway) DueConvergences(ctx context.Context) ([]string, error) {
+	rows, err := g.db.Query(ctx,
+		`SELECT id FROM demande
+		  WHERE statut_demande = 'EN_COURS'
+		    AND transition_prevue_a IS NOT NULL
+		    AND transition_prevue_a <= now()`)
+	if err != nil {
+		return nil, err
+	}
+	return scanIDs(rows)
+}
+
+// OverdueSteps lists the ids whose current step has run past timeoutSeconds
+// without a pending transition — expirerEtapes's own SELECT, moved verbatim.
+func (g *RequestGateway) OverdueSteps(ctx context.Context, timeoutSeconds float64, asOf time.Time) ([]string, error) {
+	rows, err := g.db.Query(ctx,
+		`SELECT id FROM demande
+		  WHERE statut_demande = 'EN_COURS'
+		    AND transition_prevue_a IS NULL
+		    AND date_debut_etape + make_interval(secs => $1) <= $2`,
+		timeoutSeconds, asOf)
+	if err != nil {
+		return nil, err
+	}
+	return scanIDs(rows)
+}
+
+// CreateAtConfirmation inserts a new request directly at CONFIRMATION —
+// ValiderReverse's own INSERT (§6), moved verbatim: a REVERSE never goes
+// through ACCEPTATION or DESACTIVATION/ACTIVATION.
+func (g *RequestGateway) CreateAtConfirmation(ctx context.Context, in port.CreateRequestInput) error {
+	_, err := g.db.Exec(ctx,
+		`INSERT INTO demande
+		   (id, numero, type_abonne, type_demande, statut_demande, etape_actuelle,
+		    statut_etape_actuel, operateur_source_id, operateur_destinataire_id,
+		    createur_operateur_id, date_demande, date_debut_etape)
+		 VALUES ($1,$2,$3,$4,'EN_COURS','CONFIRMATION','EN_COURS',$5,$6,$7,$8,$8)`,
+		in.ID, in.MSISDN, in.SubscriberType, in.RequestType,
+		in.SourceOperatorID, in.RecipientOperatorID, in.CreatorOperatorID, in.RequestDate)
+	return err
+}
+
+// PendingReverseCompletions lists the REVERSE requests
+// completerReversesConfirmes must catch up — moved verbatim; see that
+// function's own deleted doc comment (internal/engine/reverse.go) for why
+// both branches of the OR are necessary.
+func (g *RequestGateway) PendingReverseCompletions(ctx context.Context) ([]port.PendingReverseCompletion, error) {
+	rows, err := g.db.Query(ctx,
+		`SELECT d.id, d.etape_actuelle FROM demande d
+		  WHERE d.type_demande = 'REVERSE'
+		    AND d.statut_demande = 'EN_COURS'
+		    AND d.transition_prevue_a IS NULL
+		    AND (
+		         d.etape_actuelle = 'COMPLETION'
+		      OR (d.etape_actuelle = 'CONFIRMATION'
+		          AND (SELECT count(*) FROM confirmation c WHERE c.demande_id = d.id)
+		              >= (SELECT count(*) FROM operateur))
+		    )`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := []port.PendingReverseCompletion{}
+	for rows.Next() {
+		var c port.PendingReverseCompletion
+		var etape string
+		if err := rows.Scan(&c.RequestID, &etape); err != nil {
+			return nil, err
+		}
+		c.CurrentStep = entity.Step(etape)
+		out = append(out, c)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// scanIDs drains rows of a single text column into a slice — the shape
+// DueConvergences and OverdueSteps both need, moved verbatim from the
+// deleted internal/engine/engine.go's own repeated inline loop.
+func scanIDs(rows pgx.Rows) ([]string, error) {
+	defer rows.Close()
+	ids := []string{}
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return ids, nil
+}

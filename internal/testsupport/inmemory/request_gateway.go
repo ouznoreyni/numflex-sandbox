@@ -310,3 +310,96 @@ func (g *RequestGateway) NumberRejectionReason(requestID, msisdn string) string 
 	defer g.mu.Unlock()
 	return g.numberMotif[requestID][msisdn]
 }
+
+// --- Platform engine (Task 17) ----------------------------------------------
+//
+// The methods below back internal/usecase/platform, exercised at the
+// integration level (internal/framework/engine, against real Postgres); no
+// use-case-level unit test drives them today. They operate on the same
+// demandes map ByID/Seed already use, kept just correct enough to satisfy
+// port.RequestGateway rather than mirroring every SQL side effect (routage,
+// registry transfer) that has no equivalent map here.
+
+func (g *RequestGateway) LockForTransition(_ context.Context, id string) (entity.PortingRequest, bool, error) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	pr, ok := g.demandes[id]
+	return pr, ok, nil
+}
+
+func (g *RequestGateway) CloseCurrentStep(_ context.Context, id string, closedStatus entity.StepStatus, _ string, _ time.Time) error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	pr := g.demandes[id]
+	pr.CurrentStepStatus = closedStatus
+	g.demandes[id] = pr
+	return nil
+}
+
+func (g *RequestGateway) CompleteRequest(_ context.Context, id string, closedStatus entity.StepStatus, _ time.Time) error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	pr := g.demandes[id]
+	pr.Status = entity.RequestCompleted
+	pr.CurrentStepStatus = closedStatus
+	pr.PendingTransition = false
+	g.demandes[id] = pr
+	return nil
+}
+
+func (g *RequestGateway) AdvanceStep(_ context.Context, id string, next entity.Step, _ time.Time) error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	pr := g.demandes[id]
+	pr.CurrentStep = next
+	pr.CurrentStepStatus = entity.StepInProgress
+	pr.PendingTransition = false
+	g.demandes[id] = pr
+	return nil
+}
+
+func (g *RequestGateway) TransferToRegistry(_ context.Context, _, _ string) error { return nil }
+
+func (g *RequestGateway) ApplyRouting(_ context.Context, _, _, _ string) error { return nil }
+
+func (g *RequestGateway) ApplyEndOfRequestRestitution(_ context.Context, _, _, _, _ string) error {
+	return nil
+}
+
+func (g *RequestGateway) ScheduleTransitionAt(_ context.Context, id string, _ float64) error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	pr := g.demandes[id]
+	pr.PendingTransition = true
+	g.demandes[id] = pr
+	return nil
+}
+
+func (g *RequestGateway) DueConvergences(_ context.Context) ([]string, error) {
+	return nil, nil
+}
+
+func (g *RequestGateway) OverdueSteps(_ context.Context, _ float64, _ time.Time) ([]string, error) {
+	return nil, nil
+}
+
+func (g *RequestGateway) CreateAtConfirmation(_ context.Context, in port.CreateRequestInput) error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.FailCreate != nil {
+		return g.FailCreate
+	}
+	g.requests[in.ID] = in
+	g.demandes[in.ID] = entity.PortingRequest{
+		ID: in.ID, MSISDN: in.MSISDN,
+		RequestType: entity.RequestType(in.RequestType), SubscriberType: entity.SubscriberType(in.SubscriberType),
+		Status: entity.RequestInProgress, CurrentStep: entity.StepConfirmation, CurrentStepStatus: entity.StepInProgress,
+		SourceOperatorID: in.SourceOperatorID, RecipientOperatorID: in.RecipientOperatorID,
+		CreatorOperatorID: in.CreatorOperatorID,
+	}
+	return nil
+}
+
+func (g *RequestGateway) PendingReverseCompletions(_ context.Context) ([]port.PendingReverseCompletion, error) {
+	return nil, nil
+}

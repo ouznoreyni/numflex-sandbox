@@ -285,3 +285,68 @@ package postgres
 //	RestoreNumbers      numero.operateur_actuel_id set back to
 //	                    operateur_origine_id, date_dernier_portage and
 //	                    deja_restitue cleared, for the given msisdns.
+
+// Task 17 (internal/usecase/platform, internal/framework/engine) adds no new
+// table: every method below reads or writes columns this file already maps
+// above, split out of the deleted internal/engine/{engine,transitions,reverse}.go
+// so the same writes now run through port.RequestGateway / port.ReverseGateway
+// / port.IncidentGateway instead of a raw *pgx.Tx.
+//
+//	RequestGateway.LockForTransition        demande, FOR UPDATE — the six
+//	                                         columns port.RequestGateway.ByID
+//	                                         already maps above, minus
+//	                                         transition_prevue_a.
+//	RequestGateway.CloseCurrentStep         etape_historique — same shape as
+//	                                         Reject's own row (§161 block
+//	                                         above), origine parameterized
+//	                                         instead of fixed 'ACTION'.
+//	RequestGateway.CompleteRequest          demande.{statut_demande,
+//	                                         statut_etape_actuel,
+//	                                         date_finalisation,
+//	                                         transition_prevue_a}.
+//	RequestGateway.AdvanceStep              demande.{etape_actuelle,
+//	                                         statut_etape_actuel,
+//	                                         date_debut_etape,
+//	                                         transition_prevue_a}.
+//	RequestGateway.TransferToRegistry       numero.{operateur_actuel_id,
+//	                                         date_dernier_portage}, filtered
+//	                                         through demande_numero
+//	                                         (NOT exclu AND statut <> 'REJETE').
+//	RequestGateway.ApplyRouting             demande_numero.routage_info and
+//	                                         demande.routage_info.
+//	RequestGateway.ApplyEndOfRequestRestitution  numero.{operateur_actuel_id,
+//	                                              date_dernier_portage,
+//	                                              deja_restitue} plus
+//	                                              demande.routage_info.
+//	RequestGateway.ScheduleTransitionAt     demande.transition_prevue_a —
+//	                                         now() + make_interval(secs=>$2),
+//	                                         computed database-side
+//	                                         (commit 94af3f2).
+//	RequestGateway.DueConvergences          demande.id WHERE statut_demande
+//	                                         = 'EN_COURS' AND
+//	                                         transition_prevue_a <= now().
+//	RequestGateway.OverdueSteps             demande.id WHERE statut_demande
+//	                                         = 'EN_COURS' AND
+//	                                         transition_prevue_a IS NULL AND
+//	                                         date_debut_etape +
+//	                                         make_interval(...) <= asOf.
+//	RequestGateway.CreateAtConfirmation     demande — same columns as Create
+//	                                         above, etape_actuelle fixed
+//	                                         'CONFIRMATION' instead of
+//	                                         'ACCEPTATION', processus and
+//	                                         routage_info left NULL.
+//	RequestGateway.PendingReverseCompletions  demande joined against
+//	                                           confirmation and operateur —
+//	                                           see reverse_request block
+//	                                           below.
+//	ReverseGateway.LockPending, MarkValidated, Reject, OverdueForAutoValidation
+//	                                         reverse_request — same columns
+//	                                         as the block above; MarkValidated
+//	                                         also writes demande_id.
+//	ReverseGateway.CurrentOperatorFor       numero.operateur_actuel_id —
+//	                                         read only, no write.
+//	IncidentGateway.MarketFrozen            incident.{statut,fige_systeme} —
+//	                                         same columns as the block above,
+//	                                         read only, unfiltered on
+//	                                         operateur_id: BR-012 freezes the
+//	                                         whole market, not one operator.

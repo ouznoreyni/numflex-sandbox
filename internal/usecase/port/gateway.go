@@ -208,6 +208,99 @@ type RequestGateway interface {
 	// own *pgx.Tx for exactly these two statements. Task 15
 	// (internal/usecase/porting) is its first caller.
 	Cancel(ctx context.Context, requestID, operatorID string, now time.Time) error
+
+	// LockForTransition reads a request's transition-relevant fields — the
+	// same six columns AppliquerTransition used to SELECT ... FOR UPDATE
+	// directly against a *pgx.Tx — with a row lock, so two attempts to
+	// transition the same request (one due convergence racing another, or
+	// racing a Cancel) serialize on the row rather than both deciding from
+	// a stale read. found is false when id no longer exists. Task 17
+	// (internal/usecase/platform) is its only caller, always inside a
+	// port.UnitOfWork.Do.
+	LockForTransition(ctx context.Context, id string) (entity.PortingRequest, bool, error)
+
+	// CloseCurrentStep writes the etape_historique row that closes id's
+	// current step — status is entity.StepCompleted (nominal) or
+	// entity.StepExpired (ANO-006), origin is "ACTION" or "EXPIRATION".
+	// Moved from AppliquerTransition's own first tx.Exec.
+	CloseCurrentStep(ctx context.Context, id string, closedStatus entity.StepStatus, origin string, now time.Time) error
+
+	// CompleteRequest marks id TERMINE — AppliquerTransition's own COMPLETION
+	// branch, once entity.NextStep says there is nothing beyond the step
+	// just closed.
+	CompleteRequest(ctx context.Context, id string, closedStatus entity.StepStatus, now time.Time) error
+
+	// AdvanceStep moves id to its next step, EN_COURS, clearing any pending
+	// transition — AppliquerTransition's own non-terminal branch.
+	AdvanceStep(ctx context.Context, id string, next entity.Step, now time.Time) error
+
+	// TransferToRegistry writes the change of operator to the national
+	// registry for every number of id that was neither excluded nor
+	// rejected — transfererAuRegistre, ACTIVATION's own exit effect for a
+	// PORTAGE (§7.10). This filter is load-bearing: including an excluded or
+	// rejected number here would transfer a number the operator never
+	// agreed to port (see TestTransfertRegistreExclutNumerosExclusEtRejetes).
+	TransferToRegistry(ctx context.Context, id, recipientOperatorID string) error
+
+	// ApplyRouting finalises routage_info number by number (sourcePrefix for
+	// a rejected or excluded number, recipientPrefix otherwise) and on the
+	// request itself — recalculerRoutage, minus the two RoutingPrefix reads
+	// its caller already makes through the method above.
+	ApplyRouting(ctx context.Context, id, sourcePrefix, recipientPrefix string) error
+
+	// ApplyEndOfRequestRestitution moves a RESTITUTION or REVERSE's single
+	// number back to its recipient (the number's own origin operator) and
+	// records the request's own routing prefix — effetsFinDeDemande,
+	// COMPLETION's own exit effect for either type (§7.10). Never called for
+	// a PORTAGE, whose COMPLETION carries no such effect.
+	ApplyEndOfRequestRestitution(ctx context.Context, id, msisdn, recipientOperatorID, recipientPrefix string) error
+
+	// ScheduleTransitionAt marks id's current step processed and fixes the
+	// instant its transition will actually apply — PlanifierTransition's own
+	// deferred branch (R-10). The deadline itself is computed database-side,
+	// deliberately (commit 94af3f2): a single delaySeconds parameter, not a
+	// Go-computed time.Time, so the same now() Postgres will reread in
+	// DueConvergences also produced the deadline — two clocks compared
+	// against each other (the sandbox process and the Postgres container)
+	// is exactly the intermittence that commit removed.
+	ScheduleTransitionAt(ctx context.Context, id string, delaySeconds float64) error
+
+	// DueConvergences lists the ids whose deferred transition has come due —
+	// appliquerConvergencesDues's own SELECT, comparing transition_prevue_a
+	// against Postgres's own now() rather than a Go-side instant, for the
+	// same reason ScheduleTransitionAt's deadline is computed database-side.
+	DueConvergences(ctx context.Context) ([]string, error)
+
+	// OverdueSteps lists the ids whose current step has run past
+	// ETAPE_TIMEOUT_SECONDS without a pending transition — expirerEtapes's
+	// own SELECT. asOf is the single instant the whole tick shares (see
+	// internal/framework/engine.Engine.Tick's own doc comment): passed in
+	// rather than read again here, so a request that converges with a short
+	// EtapeTimeout cannot re-match this predicate within the same tick.
+	OverdueSteps(ctx context.Context, timeoutSeconds float64, asOf time.Time) ([]string, error)
+
+	// CreateAtConfirmation inserts a new request directly at
+	// entity.StepConfirmation rather than entity.StepAcceptance — the shape
+	// ValiderReverse's own INSERT needs (§6): an ARTP validation creates a
+	// REVERSE demande that skips ACCEPTATION and DESACTIVATION/ACTIVATION
+	// entirely. A separate method from Create rather than a parameter on it:
+	// every other caller of Create always starts at ACCEPTATION, and this
+	// keeps that invariant true by construction rather than by convention.
+	CreateAtConfirmation(ctx context.Context, in CreateRequestInput) error
+
+	// PendingReverseCompletion names one REVERSE request completerReversesConfirmes
+	// must catch up: either already at COMPLETION (advanced there by the
+	// generic convergence path, but left unfinished since no endpoint can
+	// carry a REVERSE's own COMPLETION forward), or at CONFIRMATION with
+	// every operator's confirmation already recorded.
+	PendingReverseCompletions(ctx context.Context) ([]PendingReverseCompletion, error)
+}
+
+// PendingReverseCompletion is one row PendingReverseCompletions answers —
+// see that method's own doc comment.
+type PendingReverseCompletion struct {
+	RequestID   string
+	CurrentStep entity.Step
 }
 
 // ErrAlreadyConfirmed is ConfirmationGateway.Confirm's answer to a replay:
@@ -318,6 +411,43 @@ type ReverseGateway interface {
 	// paginated (GET /reverse-requests/mes-demandes accepts page and size,
 	// unlike the ten demande queues).
 	Own(ctx context.Context, operatorID string, page, size int) ([]string, error)
+
+	// LockPending reads a reverse request's number, operator and status with
+	// a row lock (FOR UPDATE) — the read ValiderReverse (§6, Task 17) opens
+	// every validation with. err is a genuine failure (id absent included,
+	// matching the deleted internal/engine/reverse.go's own
+	// tx.QueryRow(...).Scan, which never swallowed ErrNoRows); status is
+	// returned rather than a bool so the caller can apply the same no-op
+	// rule ValiderReverse always has: only "EN_ATTENTE" is actionable.
+	LockPending(ctx context.Context, id string) (msisdn, operatorID, status string, err error)
+
+	// MarkValidated records that id was validated into demandeID — the same
+	// instant now also stamps the Demande just created, so both rows agree
+	// on when the act happened.
+	MarkValidated(ctx context.Context, id, demandeID string, now time.Time) error
+
+	// Reject marks id REJETE without creating any Demande — RejeterReverse's
+	// own single UPDATE, guarded on statut = 'EN_ATTENTE' so a second call
+	// (or a call racing ValiderReverse) is a silent no-op, exactly as
+	// before. date_decision stays Postgres's own now(): unlike MarkValidated,
+	// nothing else needs to agree with this instant.
+	Reject(ctx context.Context, id string) error
+
+	// CurrentOperatorFor reads a number's current holder
+	// (numero.operateur_actuel_id) — the one field ValiderReverse needs from
+	// the registry to become a Demande's operateur_source_id. Placed on
+	// ReverseGateway rather than NumberGateway so this read stays inside the
+	// same transaction as LockPending's own lock, which
+	// port.Repositories.Numbers (deliberately absent, see its own doc
+	// comment) cannot offer.
+	CurrentOperatorFor(ctx context.Context, msisdn string) (string, error)
+
+	// OverdueForAutoValidation lists the ids EN_ATTENTE for more than
+	// delaySeconds — validerReversesAutomatiquement's own SELECT, comparing
+	// date_demande against Postgres's own now() for the same
+	// flakiness-avoidance reason RequestGateway.DueConvergences' own doc
+	// comment gives.
+	OverdueForAutoValidation(ctx context.Context, delaySeconds float64) ([]string, error)
 }
 
 // ErrIncidentAlreadyOpen is IncidentGateway.Create's answer to the §7.12
@@ -378,6 +508,14 @@ type IncidentGateway interface {
 	// segment, paginated (like ReverseGateway.Own, an asymmetry the guide
 	// measures for both, not an oversight).
 	Own(ctx context.Context, operatorID string, systemLocked bool, page, size int) ([]string, error)
+
+	// MarketFrozen answers whether any operator has an EN_COURS,
+	// fige_systeme incident open — BR-012, PlaceGelee's own read. Reading it
+	// through IncidentGateway rather than a dedicated port keeps a single
+	// source of truth on what freezes the market: exactly the table
+	// DeclareIncidentInteractor and ResolveIncidentInteractor already write,
+	// per their own doc comments ("nothing here needs to call it").
+	MarketFrozen(ctx context.Context) (bool, error)
 }
 
 // SandboxGateway backs DELETE /api/sandbox/v1/demandes — hors gateway, hors
