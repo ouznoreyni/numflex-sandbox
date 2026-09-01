@@ -212,7 +212,16 @@ paths:
                 numeroPiece: "1234567890123"
       responses:
         "201":
-          $ref: "#/components/responses/UneDemande"
+          description: |
+            Demande créée — message `Demande particulier créée avec succès`.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Enveloppe"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/Demande" }
         "400":
           description: |
             `VALIDATION_ECHOUEE`, ou un refus d'éligibilité : `NUMERO_DEJA_CHEZ_DESTINATAIRE`,
@@ -582,9 +591,10 @@ paths:
         `ACCEPTATION` se traite via `/demandes/acceptation`, `CONFIRMATION` via
         `/demandes/a-confirmer` : les envoyer ici renvoie un `ETAPE_INVALIDE` qui nomme le bon endpoint.
 
-        **N'enchaînez pas les étapes sur le corps de la réponse.** Elle porte l'étape *précédant*
-        la transition ; la convergence prend 1 à 6 min en recette. L'avancement se constate en
-        scrutant la file suivante.
+        **La réponse porte l'étape suivante** : traiter `DESACTIVATION` répond `ACTIVATION`.
+        C'est ce que rendent les captures du 2026-08-27. Le sandbox lancé avec
+        `CONVERGENCE_MAX_SECONDS > 0` reproduit à la place le comportement mesuré au SIT v0.3 —
+        la réponse porte l'étape précédente et la transition survient 1 à 6 min plus tard.
 
         `COMPLETION` répond en **~30 s** et n'accepte aucune clé d'idempotence (ANO-005).
       requestBody:
@@ -866,7 +876,7 @@ components:
           enum: [ACCEPTATION, DESACTIVATION, ACTIVATION, CONFIRMATION, COMPLETION]
         statutEtapeActuel:
           type: string
-          enum: [EN_COURS, VALIDE, TERMINE, EXPIRE]
+          enum: [EN_COURS, TERMINE, EXPIRE]
           description: |
             Hors contrat documenté (ANO-012). `EXPIRE` distingue une étape soldée par
             l'expiration automatique d'une étape franchie par une action (ANO-013).
@@ -879,6 +889,13 @@ components:
           nullable: true
           description: Renseignée à la clôture — TERMINE, REJETE ou ANNULE.
         processus: { type: string, enum: [PREPAID, POSTPAID], nullable: true }
+        client:
+          allOf:
+            - $ref: "#/components/schemas/ClientRendu"
+          description: |
+            Rendu sur la création, l'acceptation, le traitement, `a-traiter` et `in`.
+            **Absent des trois endpoints de confirmation** — la file, son détail et le POST —
+            asymétrie mesurée sur les captures du 2026-08-27.
         routageInfo:
           type: string
           nullable: true
@@ -888,6 +905,19 @@ components:
             **destinataire** pour les numéros portés, source pour les rejetés. Sur une RESTITUTION
             ou un REVERSE, il n'existe qu'à partir de la COMPLETION.
           example: "191"
+
+    ClientRendu:
+      type: object
+      description: |
+        L'identité de l'abonné telle que la plateforme la rend : exactement ces six champs,
+        sans `raisonSociale` ni `numRC`, y compris sur une demande de flotte.
+      properties:
+        nom: { type: string, example: Ngome }
+        prenom: { type: string, example: Laye }
+        dateNaissance: { type: string, example: "1980-05-15" }
+        lieuNaissance: { type: string, example: Dakar }
+        typePiece: { type: string, example: CNI }
+        numeroPiece: { type: string, example: "1234567890123" }
 
     NumeroExclu:
       type: object
@@ -1050,8 +1080,12 @@ components:
 
     EtapeTraitee:
       description: |
-        Étape traitée. **La réponse porte l'étape *précédant* la transition** : l'avancement se
-        constate en scrutant la file suivante, jamais en lisant ce corps.
+        Étape traitée. **La réponse porte l'étape suivante**, la transition étant appliquée dans
+        la requête — sauf si le sandbox tourne avec `CONVERGENCE_MAX_SECONDS > 0`, qui restaure le
+        comportement différé mesuré au SIT v0.3.
+
+        Message : `Étape traitée avec succès` pour `/traitement` et `/a-confirmer`,
+        `Décision d'acceptation enregistrée` pour `/acceptation`.
       content:
         application/json:
           schema:

@@ -25,8 +25,11 @@ func TestLoadDefauts(t *testing.T) {
 	require.Equal(t, FidelityReal, c.Fidelity)
 	require.Equal(t, 349*time.Second, c.EtapeTimeout)
 	require.Equal(t, 10*time.Second, c.EngineTick)
-	require.Equal(t, 60*time.Second, c.ConvergenceMin)
-	require.Equal(t, 360*time.Second, c.ConvergenceMax)
+	// Convergence nulle par defaut : la transition s'applique dans la requete,
+	// comme le rendent les captures du 2026-08-27. Une valeur > 0 restaure le
+	// comportement differe mesure au SIT v0.3 (R-10).
+	require.Equal(t, time.Duration(0), c.ConvergenceMin)
+	require.Equal(t, time.Duration(0), c.ConvergenceMax)
 	require.Equal(t, 30500*time.Millisecond, c.CompletionLatency)
 	require.Equal(t, 540*time.Second, c.ClockSkew)
 	require.Equal(t, "123456", c.OTPStaticCode)

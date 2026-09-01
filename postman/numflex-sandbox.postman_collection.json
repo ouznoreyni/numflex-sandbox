@@ -305,7 +305,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"numero\": \"771000001\",\n  \"otpCode\": \"123456\",\n  \"operateurSourceId\": \"6a21745ce6c37b5b5b487ec1\",\n  \"operateurDestinataireId\": \"6a2174c3e6c37b5b5b487ec4\",\n  \"typePortabilite\": \"PREPAID\",\n  \"client\": {\n    \"nom\": \"Diallo\",\n    \"prenom\": \"Mamadou\",\n    \"dateNaissance\": \"1975-03-20\",\n    \"lieuNaissance\": \"Dakar\",\n    \"typePiece\": \"CNI\",\n    \"numeroPiece\": \"1234567890123\"\n  }\n}",
+                  "raw": "{\n  \"numero\": \"771000001\",\n  \"otpCode\": \"123456\",\n  \"operateurSourceId\": \"6a21745ce6c37b5b5b487ec1\",\n  \"operateurDestinataireId\": \"6a2174c3e6c37b5b5b487ec4\",\n  \"typePortabilite\": \"PREPAID\",\n  \"client\": {\n    \"nom\": \"Ngome\",\n    \"prenom\": \"Laye\",\n    \"dateNaissance\": \"1980-05-15\",\n    \"lieuNaissance\": \"Dakar\",\n    \"typePiece\": \"CNI\",\n    \"numeroPiece\": \"1234567890123\"\n  }\n}",
                   "options": {
                     "raw": {
                       "language": "json"

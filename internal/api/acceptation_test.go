@@ -20,15 +20,16 @@ func TestAcceptationNominale(t *testing.T) {
 	require.Equal(t, http.StatusOK, rep.StatusCode, corps)
 	require.Equal(t, "Décision d'acceptation enregistrée", corps["message"])
 
-	// R-10 : la réponse porte l'étape PRÉCÉDANT la transition.
+	// La réponse porte l'étape SUIVANTE : capture « 1. orange_2_ACCEPTATION
+	// Accepter ou rejeter une demande_next_DESACTIVATION ».
 	data := corps["data"].(map[string]any)
-	require.Equal(t, "ACCEPTATION", data["etapeActuelle"])
+	require.Equal(t, "DESACTIVATION", data["etapeActuelle"])
 
-	// La transition est planifiée, pas encore appliquée.
+	// La transition a été appliquée dans la requête, rien ne reste planifié.
 	var prevue *string
 	require.NoError(t, h.db.Pool.QueryRow(context.Background(),
 		"SELECT transition_prevue_a::text FROM demande WHERE id = $1", id).Scan(&prevue))
-	require.NotNil(t, prevue)
+	require.Nil(t, prevue)
 }
 
 func TestAcceptationParLeDestinataireRefusee(t *testing.T) {

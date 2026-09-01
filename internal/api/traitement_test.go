@@ -21,8 +21,9 @@ func TestTraitementDesactivationParLaSource(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, rep.StatusCode, corps)
 	require.Equal(t, "Étape traitée avec succès", corps["message"])
-	// R-10 : la réponse porte l'étape précédant la transition.
-	require.Equal(t, "DESACTIVATION", corps["data"].(map[string]any)["etapeActuelle"])
+	// La réponse porte l'étape suivante : capture
+	// « 1.orange_3_DESACTIVATION…_next_ACTIVATION ».
+	require.Equal(t, "ACTIVATION", corps["data"].(map[string]any)["etapeActuelle"])
 }
 
 func TestTraitementParLeMauvaisOperateur(t *testing.T) {

@@ -3,8 +3,10 @@ package api
 import (
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
+	"github.com/yas/numflex-sandbox/internal/config"
 )
 
 // Ce fichier fige les réponses réellement enregistrées contre la plateforme
@@ -137,4 +139,50 @@ func TestCaptureHorodatagesEnMillisecondes(t *testing.T) {
 	date := corps["data"].(map[string]any)["dateDemande"].(string)
 	require.Regexp(t, `^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?Z$`, date,
 		"la plateforme rend des horodatages à la milliseconde")
+}
+
+// Captures « 1.orange_3_DESACTIVATION…_next_ACTIVATION » et
+// « 1. yas_4_ACTIVATION…_next_CONFIRMATION » : la reponse porte l'etape
+// SUIVANTE. La transition est appliquee dans la requete.
+func TestCaptureTraitementRendLEtapeSuivante(t *testing.T) {
+	h := nouveauHarnais(t) // convergence nulle : le profil des captures
+	id := h.creerPortage("771000001")
+	h.avancerA(id, "DESACTIVATION")
+
+	_, corps := h.appel(http.MethodPost, "/api/gateway/v1/demandes/traitement",
+		h.jeton("orange", "orange2026"),
+		map[string]any{"idDemande": id, "commentaire": "Numéro désactivé avec succès"})
+
+	data := corps["data"].(map[string]any)
+	require.Equal(t, "ACTIVATION", data["etapeActuelle"])
+	require.Equal(t, "EN_COURS", data["statutEtapeActuel"])
+
+	// L'acceptation suit la même règle : la capture rend DESACTIVATION.
+	autre := h.creerPortage("771000002")
+	_, corpsAcc := h.appel(http.MethodPost, "/api/gateway/v1/demandes/acceptation",
+		h.jeton("orange", "orange2026"),
+		map[string]any{"idDemande": autre, "accepte": true})
+	require.Equal(t, "DESACTIVATION",
+		corpsAcc["data"].(map[string]any)["etapeActuelle"])
+}
+
+// Le comportement mesuré au SIT v0.3 (R-10) reste atteignable : une fenêtre de
+// convergence non nulle rend l'étape précédente, et la bascule survient plus
+// tard. Les deux mesures restent donc reproductibles, celle de 2026-08-27 par
+// défaut et celle du SIT sur demande.
+func TestConvergenceNonNulleRestaureLeComportementDuSIT(t *testing.T) {
+	h := nouveauHarnais(t, func(c *config.Config) {
+		c.ConvergenceMin = 30 * time.Second
+		c.ConvergenceMax = 30 * time.Second
+	})
+	id := h.creerPortage("771000001")
+	h.avancerA(id, "DESACTIVATION")
+
+	_, corps := h.appel(http.MethodPost, "/api/gateway/v1/demandes/traitement",
+		h.jeton("orange", "orange2026"), map[string]any{"idDemande": id})
+
+	require.Equal(t, "DESACTIVATION",
+		corps["data"].(map[string]any)["etapeActuelle"],
+		"fenêtre de convergence non nulle : la réponse porte l'étape précédente (R-10)")
+	require.Equal(t, "DESACTIVATION", h.etape(id))
 }

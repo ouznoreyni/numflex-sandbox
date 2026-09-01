@@ -82,6 +82,20 @@ func (e *Engine) PlaceGelee(ctx context.Context) (bool, error) {
 // laquelle la transition sera réellement appliquée. Entre les deux, la demande
 // continue de présenter l'étape précédente — c'est le comportement mesuré (R-10).
 func (e *Engine) PlanifierTransition(ctx context.Context, demandeID string) error {
+	// Fenêtre nulle : la transition s'applique dans la requête, de sorte que le
+	// DTO relu par le handler porte l'étape SUIVANTE. C'est ce que rendent les
+	// captures du 2026-08-27 — /acceptation répond DESACTIVATION, /traitement
+	// sur DESACTIVATION répond ACTIVATION, la dernière confirmation répond
+	// COMPLETION — et c'est le défaut.
+	//
+	// Fenêtre non nulle : la transition est planifiée et le moteur l'applique
+	// plus tard ; la réponse porte alors l'étape précédente. C'est le
+	// comportement mesuré au SIT v0.3 (R-10), conservé pour qui doit éprouver
+	// son intégration contre cette version-là de la plateforme.
+	if e.cfg.ConvergenceMax <= 0 {
+		return e.AppliquerTransition(ctx, demandeID, "ACTION")
+	}
+
 	delai := e.cfg.ConvergenceMin
 	if ecart := e.cfg.ConvergenceMax - e.cfg.ConvergenceMin; ecart > 0 {
 		delai += time.Duration(rand.Int63n(int64(ecart)))
