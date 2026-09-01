@@ -342,7 +342,26 @@ const spec = {
     },
     "responses": {
      "201": {
-      "$ref": "#/components/responses/UneDemande"
+      "description": "Demande créée — message `Demande particulier créée avec succès`.\n",
+      "content": {
+       "application/json": {
+        "schema": {
+         "allOf": [
+          {
+           "$ref": "#/components/schemas/Enveloppe"
+          },
+          {
+           "type": "object",
+           "properties": {
+            "data": {
+             "$ref": "#/components/schemas/Demande"
+            }
+           }
+          }
+         ]
+        }
+       }
+      }
      },
      "400": {
       "description": "`VALIDATION_ECHOUEE`, ou un refus d'éligibilité : `NUMERO_DEJA_CHEZ_DESTINATAIRE`,\n`OPERATEUR_SOURCE_INCORRECT`, `DEMANDE_EN_COURS_POUR_NUMERO`, `DELAI_PORTAGE_NON_RESPECTE`.\nCe dernier sort en `500 Unexpected runtime exception` en `FIDELITY=real` (ANO-002).\n",
@@ -916,7 +935,7 @@ const spec = {
      "Workflow"
     ],
     "summary": "Traiter l'étape courante (§7.10)",
-    "description": "**Le champ `etape` a disparu en v2.** L'étape à traiter n'est plus précisée par\nl'appelant : elle est déterminée automatiquement d'après l'état de la demande.\n`idDemande` suffit. Un client v1 qui envoie encore `etape` n'est ni rejeté ni averti —\nle champ est **ignoré en silence** et l'étape courante est exécutée (ANO-018).\n\n| Étape | Opérateur responsable |\n|---|---|\n| `DESACTIVATION` | Source |\n| `ACTIVATION` | Destinataire |\n| `COMPLETION` | Destinataire — **sauf REVERSE, réservée à l'ARTP** |\n\n`ACCEPTATION` se traite via `/demandes/acceptation`, `CONFIRMATION` via\n`/demandes/a-confirmer` : les envoyer ici renvoie un `ETAPE_INVALIDE` qui nomme le bon endpoint.\n\n**N'enchaînez pas les étapes sur le corps de la réponse.** Elle porte l'étape *précédant*\nla transition ; la convergence prend 1 à 6 min en recette. L'avancement se constate en\nscrutant la file suivante.\n\n`COMPLETION` répond en **~30 s** et n'accepte aucune clé d'idempotence (ANO-005).\n",
+    "description": "**Le champ `etape` a disparu en v2.** L'étape à traiter n'est plus précisée par\nl'appelant : elle est déterminée automatiquement d'après l'état de la demande.\n`idDemande` suffit. Un client v1 qui envoie encore `etape` n'est ni rejeté ni averti —\nle champ est **ignoré en silence** et l'étape courante est exécutée (ANO-018).\n\n| Étape | Opérateur responsable |\n|---|---|\n| `DESACTIVATION` | Source |\n| `ACTIVATION` | Destinataire |\n| `COMPLETION` | Destinataire — **sauf REVERSE, réservée à l'ARTP** |\n\n`ACCEPTATION` se traite via `/demandes/acceptation`, `CONFIRMATION` via\n`/demandes/a-confirmer` : les envoyer ici renvoie un `ETAPE_INVALIDE` qui nomme le bon endpoint.\n\n**La réponse porte l'étape suivante** : traiter `DESACTIVATION` répond `ACTIVATION`.\nC'est ce que rendent les captures du 2026-08-27. Le sandbox lancé avec\n`CONVERGENCE_MAX_SECONDS > 0` reproduit à la place le comportement mesuré au SIT v0.3 —\nla réponse porte l'étape précédente et la transition survient 1 à 6 min plus tard.\n\n`COMPLETION` répond en **~30 s** et n'accepte aucune clé d'idempotence (ANO-005).\n",
     "requestBody": {
      "$ref": "#/components/requestBodies/IdDemandeEtCommentaire"
     },
@@ -1409,7 +1428,6 @@ const spec = {
       "type": "string",
       "enum": [
        "EN_COURS",
-       "VALIDE",
        "TERMINE",
        "EXPIRE"
       ],
@@ -1439,11 +1457,49 @@ const spec = {
       ],
       "nullable": true
      },
+     "client": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/ClientRendu"
+       }
+      ],
+      "description": "Rendu sur la création, l'acceptation, le traitement, `a-traiter` et `in`.\n**Absent des trois endpoints de confirmation** — la file, son détail et le POST —\nasymétrie mesurée sur les captures du 2026-08-27.\n"
+     },
      "routageInfo": {
       "type": "string",
       "nullable": true,
       "description": "Préfixe de routage (§7.10). Sur un PORTAGE, il vaut celui de la **source** dès la\ncréation, puis est recalculé numéro par numéro au passage en CONFIRMATION : routage\n**destinataire** pour les numéros portés, source pour les rejetés. Sur une RESTITUTION\nou un REVERSE, il n'existe qu'à partir de la COMPLETION.\n",
       "example": "191"
+     }
+    }
+   },
+   "ClientRendu": {
+    "type": "object",
+    "description": "L'identité de l'abonné telle que la plateforme la rend : exactement ces six champs,\nsans `raisonSociale` ni `numRC`, y compris sur une demande de flotte.\n",
+    "properties": {
+     "nom": {
+      "type": "string",
+      "example": "Ngome"
+     },
+     "prenom": {
+      "type": "string",
+      "example": "Laye"
+     },
+     "dateNaissance": {
+      "type": "string",
+      "example": "1980-05-15"
+     },
+     "lieuNaissance": {
+      "type": "string",
+      "example": "Dakar"
+     },
+     "typePiece": {
+      "type": "string",
+      "example": "CNI"
+     },
+     "numeroPiece": {
+      "type": "string",
+      "example": "1234567890123"
      }
     }
    },
@@ -1840,7 +1896,7 @@ const spec = {
     }
    },
    "EtapeTraitee": {
-    "description": "Étape traitée. **La réponse porte l'étape *précédant* la transition** : l'avancement se\nconstate en scrutant la file suivante, jamais en lisant ce corps.\n",
+    "description": "Étape traitée. **La réponse porte l'étape suivante**, la transition étant appliquée dans\nla requête — sauf si le sandbox tourne avec `CONVERGENCE_MAX_SECONDS > 0`, qui restaure le\ncomportement différé mesuré au SIT v0.3.\n\nMessage : `Étape traitée avec succès` pour `/traitement` et `/a-confirmer`,\n`Décision d'acceptation enregistrée` pour `/acceptation`.\n",
     "content": {
      "application/json": {
       "schema": {

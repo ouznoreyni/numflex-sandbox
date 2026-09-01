@@ -116,13 +116,34 @@ func TestCycleCompletParExpiration(t *testing.T) {
 	require.Equal(t, seed.OperateurYAS, actuel)
 }
 
-func TestPlanifierPuisAppliquerLaTransition(t *testing.T) {
-	e, db := moteur(t) // convergence nulle : transition immédiatement due
+// Fenêtre de convergence nulle — le défaut : PlanifierTransition applique la
+// transition dans l'appel, de sorte que le handler relise l'étape suivante.
+func TestFenetreNulleAppliqueLaTransitionImmediatement(t *testing.T) {
+	e, db := moteur(t)
 	insererDemande(t, db, "d1", domain.EtapeDesactivation, time.Second)
 
 	require.NoError(t, e.PlanifierTransition(context.Background(), "d1"))
 
-	// Tant que le moteur n'a pas tourné, l'étape reste la précédente (R-10).
+	etape, _, _ := etatDemande(t, db, "d1")
+	require.Equal(t, "ACTIVATION", etape, "la transition est appliquée sans attendre un tick")
+
+	// Rien ne reste à faire au moteur.
+	require.NoError(t, e.Tick(context.Background()))
+	etape, _, _ = etatDemande(t, db, "d1")
+	require.Equal(t, "ACTIVATION", etape)
+}
+
+// Fenêtre non nulle : le comportement différé mesuré au SIT v0.3 (R-10).
+func TestFenetreNonNullePlanifiePuisApplique(t *testing.T) {
+	e, db := moteur(t, func(c *config.Config) {
+		c.ConvergenceMin = 0
+		c.ConvergenceMax = time.Millisecond
+	})
+	insererDemande(t, db, "d1", domain.EtapeDesactivation, time.Second)
+
+	require.NoError(t, e.PlanifierTransition(context.Background(), "d1"))
+
+	// Tant que le moteur n'a pas tourné, l'étape reste la précédente.
 	etape, _, _ := etatDemande(t, db, "d1")
 	require.Equal(t, "DESACTIVATION", etape)
 

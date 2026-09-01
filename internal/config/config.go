@@ -61,10 +61,10 @@ func Load() (*Config, error) {
 	if c.EngineTick, err = dur("ENGINE_TICK_SECONDS", 10, time.Second); err != nil {
 		return nil, err
 	}
-	if c.ConvergenceMin, err = dur("CONVERGENCE_MIN_SECONDS", 60, time.Second); err != nil {
+	if c.ConvergenceMin, err = dur("CONVERGENCE_MIN_SECONDS", 0, time.Second); err != nil {
 		return nil, err
 	}
-	if c.ConvergenceMax, err = dur("CONVERGENCE_MAX_SECONDS", 360, time.Second); err != nil {
+	if c.ConvergenceMax, err = dur("CONVERGENCE_MAX_SECONDS", 0, time.Second); err != nil {
 		return nil, err
 	}
 	if c.CompletionLatency, err = dur("COMPLETION_LATENCY_MS", 30500, time.Millisecond); err != nil {

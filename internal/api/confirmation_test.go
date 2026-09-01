@@ -27,15 +27,15 @@ func TestConfirmationParTousSaufLeDestinataire(t *testing.T) {
 	var prevue *string
 	require.NoError(t, h.db.Pool.QueryRow(context.Background(),
 		"SELECT transition_prevue_a::text FROM demande WHERE id = $1", id).Scan(&prevue))
-	require.Nil(t, prevue, "il manque la confirmation d'EXPRESSO")
+	require.Nil(t, prevue)
+	require.Equal(t, "CONFIRMATION", h.etape(id), "il manque la confirmation d'EXPRESSO")
 
 	rep, _ = h.appel(http.MethodPost, "/api/gateway/v1/demandes/a-confirmer",
 		h.jeton("expresso", "expresso2026"), map[string]any{"idDemande": id})
 	require.Equal(t, http.StatusOK, rep.StatusCode)
 
-	require.NoError(t, h.db.Pool.QueryRow(context.Background(),
-		"SELECT transition_prevue_a::text FROM demande WHERE id = $1", id).Scan(&prevue))
-	require.NotNil(t, prevue, "l'étape est soldée, la transition est planifiée")
+	require.Equal(t, "COMPLETION", h.etape(id),
+		"la dernière confirmation solde l'étape dans la requête")
 }
 
 func TestConfirmationParLeDestinataireRefusee(t *testing.T) {
@@ -95,10 +95,8 @@ func TestRestitutionExigeLaConfirmationDuDestinataire(t *testing.T) {
 		require.Equalf(t, http.StatusOK, rep.StatusCode, compte[0])
 	}
 
-	var prevue *string
-	require.NoError(t, h.db.Pool.QueryRow(context.Background(),
-		"SELECT transition_prevue_a::text FROM demande WHERE id = $1", id).Scan(&prevue))
-	require.NotNil(t, prevue)
+	require.Equal(t, "COMPLETION", h.etape(id),
+		"tous ont confirmé, destinataire compris : l'étape est soldée")
 }
 
 func TestDejaConfirmeesNeTracePasLaSourceEnModeReel(t *testing.T) {

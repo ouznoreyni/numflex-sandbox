@@ -10,11 +10,14 @@ ARTP.
   aucune route de santé, de metrics ou de debug, pour que la surface exposée soit exactement celle
   de la plateforme réelle.
 - Une **machine à états complète** — `ACCEPTATION` → `DESACTIVATION` → `ACTIVATION` →
-  `CONFIRMATION` → `COMPLETION` — avec ses habilitations, son moteur d'expiration et sa convergence
-  différée.
+  `CONFIRMATION` → `COMPLETION` — avec ses habilitations, son moteur d'expiration et sa fenêtre de
+  convergence réglable.
 - Un **registre national de numéros** en PostgreSQL : le portage change réellement l'opérateur
   détenteur, et les contrôles d'éligibilité s'appuient dessus.
 - Les **anomalies mesurées en recette**, reproduites à l'identique (voir plus bas).
+- Les **réponses capturées** contre la plateforme le 2026-08-27 (collection *Num Flex API*),
+  reproduites champ pour champ — sous-objet `client`, messages, `statutEtapeActuel`, précision des
+  horodatages. Basculer `baseUrl` du sandbox vers l'ARTP ne doit rien changer pour un client.
 
 ## Ce que ce n'est pas
 
@@ -78,8 +81,8 @@ l'état courant. Pour repartir à zéro, supprimer le volume Postgres.
 | `FIDELITY` | `real` | `real` \| `contract` — voir ci-dessous |
 | `ETAPE_TIMEOUT_SECONDS` | `349` | Expiration d'une étape ; `0` = pas d'expiration |
 | `ENGINE_TICK_SECONDS` | `10` | Cadence du moteur |
-| `CONVERGENCE_MIN_SECONDS` | `60` | Convergence minimale après traitement |
-| `CONVERGENCE_MAX_SECONDS` | `360` | Convergence maximale |
+| `CONVERGENCE_MIN_SECONDS` | `0` | Fenêtre de convergence — voir ci-dessous |
+| `CONVERGENCE_MAX_SECONDS` | `0` | `0` = transition appliquée dans la requête |
 | `COMPLETION_LATENCY_MS` | `30500` | Latence simulée de `COMPLETION` |
 | `CLOCK_SKEW_SECONDS` | `540` | Dérive d'horloge injectée dans les horodatages |
 | `OTP_STATIC_CODE` | `123456` | Code OTP accepté |
@@ -100,6 +103,21 @@ corrects, enveloppe systématique, catalogue de codes d'erreur renseigné. Utile
 client ne s'est pas rendu dépendant d'une anomalie. **La machine à états est identique dans les
 deux modes ; seule la présentation change** — c'est ce que verrouille
 `TestMemeScenarioEnModeContrat`.
+
+### Convergence : deux comportements mesurés, tous deux reproductibles
+
+Les réponses capturées contre la plateforme le **2026-08-27** montrent des
+transitions **synchrones** : `POST /demandes/acceptation` répond `DESACTIVATION`,
+`/demandes/traitement` sur `DESACTIVATION` répond `ACTIVATION`, la dernière
+confirmation répond `COMPLETION`. C'est le défaut du sandbox
+(`CONVERGENCE_MAX_SECONDS=0`).
+
+Le rapport SIT v0.3, plus ancien, avait mesuré l'inverse : la réponse portait
+l'étape *précédant* la transition, qui survenait 1 à 6 min plus tard (R-10).
+Donner une valeur non nulle à `CONVERGENCE_MIN/MAX_SECONDS` restaure ce
+comportement — utile pour éprouver une intégration contre cette version-là.
+
+Les deux sources sont des mesures ; c'est la plus récente qui fait le défaut.
 
 ### Profil déterministe (CI)
 
