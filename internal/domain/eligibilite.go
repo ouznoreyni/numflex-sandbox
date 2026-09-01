@@ -3,7 +3,7 @@ package domain
 import (
 	"time"
 
-	"github.com/yas/numflex-sandbox/internal/apperr"
+	"github.com/ouznoreyni/numflex-sandbox/internal/apperr"
 )
 
 const (

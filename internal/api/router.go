@@ -56,5 +56,16 @@ func NewRouter(d *Deps) *gin.Engine {
 	d.routesIncidents(g)    // Task 18
 	d.routesReverse(g)      // Task 19
 
+	// Hors gateway, et hors contrat ARTP : la purge des données de test. Le
+	// groupe n'est monté que si SANDBOX_ADMIN le demande — sinon la route
+	// n'existe pas et gin répond 404, sans rien révéler. L'authentification est
+	// ici un middleware de groupe et non la garde par préfixe ci-dessus :
+	// aucune raison d'imiter le filtre Spring sur une surface qui n'appartient
+	// pas à la plateforme, un chemin inconnu sous /api/sandbox/v1 doit donc
+	// bien répondre 404 plutôt que 401.
+	if d.Cfg.SandboxAdmin {
+		d.routesSandbox(r.Group(prefixeSandbox, d.Authentifier()))
+	}
+
 	return r
 }

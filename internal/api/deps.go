@@ -4,9 +4,9 @@ import (
 	"context"
 
 	"github.com/gin-gonic/gin"
-	"github.com/yas/numflex-sandbox/internal/config"
-	"github.com/yas/numflex-sandbox/internal/httpx"
-	"github.com/yas/numflex-sandbox/internal/store"
+	"github.com/ouznoreyni/numflex-sandbox/internal/config"
+	"github.com/ouznoreyni/numflex-sandbox/internal/httpx"
+	"github.com/ouznoreyni/numflex-sandbox/internal/store"
 )
 
 type Deps struct {

@@ -32,11 +32,19 @@ type Config struct {
 	OTPMaxAttempts        int
 	ReverseAutoValidation time.Duration
 
+	// SandboxAdmin ouvre /api/sandbox/v1 — la purge des données de test. Hors
+	// contrat ARTP, donc faux par défaut : à false la route n'est pas
+	// enregistrée du tout et répond 404, comme n'importe quel chemin inconnu.
+	// La gateway, elle, garde ses 33 routes dans les deux cas.
+	SandboxAdmin bool
+
 	// CORSAllowedOrigins est une commodité de bac à sable, pas un trait du
-	// contrat : elle n'existe que pour qu'une page de documentation servie sur
-	// un autre port puisse appeler l'API depuis un navigateur. Vide — le défaut
-	// — aucun en-tête CORS n'est émis, comme une gateway consommée de serveur à
-	// serveur. `*` autorise toute origine.
+	// contrat : elle n'existe que pour qu'une page servie sur un autre port —
+	// Swagger, un back-office en développement — puisse appeler l'API depuis un
+	// navigateur. Le défaut est `*`, toute origine autorisée, pour que ça marche
+	// sans rien configurer. La gateway réelle, elle, est consommée de serveur à
+	// serveur et n'émet aucun en-tête CORS : poser CORS_ALLOWED_ORIGINS à vide
+	// retrouve ce comportement.
 	CORSAllowedOrigins []string
 }
 
@@ -47,9 +55,16 @@ func Load() (*Config, error) {
 		JWTSecret:     str("JWT_SECRET", "numflex-sandbox-dev-secret"),
 		Fidelity:      Fidelity(str("FIDELITY", string(FidelityReal))),
 		OTPStaticCode: str("OTP_STATIC_CODE", "123456"),
-
-		CORSAllowedOrigins: liste(str("CORS_ALLOWED_ORIGINS", "")),
 	}
+
+	// Seule variable où la chaîne vide se distingue de l'absence, parce
+	// qu'ici les deux ont un sens opposé : non posée, le CORS est ouvert à
+	// toute origine ; posée vide, il est éteint.
+	origines := "*"
+	if v, ok := os.LookupEnv("CORS_ALLOWED_ORIGINS"); ok {
+		origines = v
+	}
+	c.CORSAllowedOrigins = liste(origines)
 
 	var err error
 	if c.JWTTTL, err = dur("JWT_TTL_HOURS", 24, time.Hour); err != nil {
@@ -80,6 +95,9 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 	if c.OTPMaxAttempts, err = num("OTP_MAX_ATTEMPTS", 3); err != nil {
+		return nil, err
+	}
+	if c.SandboxAdmin, err = booleen("SANDBOX_ADMIN", false); err != nil {
 		return nil, err
 	}
 
@@ -128,6 +146,18 @@ func num(clef string, defaut int) (int, error) {
 		return 0, fmt.Errorf("%s : entier attendu, reçu %q", clef, v)
 	}
 	return n, nil
+}
+
+func booleen(clef string, defaut bool) (bool, error) {
+	v, ok := os.LookupEnv(clef)
+	if !ok || v == "" {
+		return defaut, nil
+	}
+	b, err := strconv.ParseBool(v)
+	if err != nil {
+		return false, fmt.Errorf("%s : booléen attendu, reçu %q", clef, v)
+	}
+	return b, nil
 }
 
 func dur(clef string, defaut int, unite time.Duration) (time.Duration, error) {

@@ -9,8 +9,8 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/yas/numflex-sandbox/internal/config"
-	"github.com/yas/numflex-sandbox/internal/store"
+	"github.com/ouznoreyni/numflex-sandbox/internal/config"
+	"github.com/ouznoreyni/numflex-sandbox/internal/store"
 )
 
 type Engine struct {

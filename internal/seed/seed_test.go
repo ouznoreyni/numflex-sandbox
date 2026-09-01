@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ouznoreyni/numflex-sandbox/internal/store"
 	"github.com/stretchr/testify/require"
-	"github.com/yas/numflex-sandbox/internal/store"
 	"golang.org/x/crypto/bcrypt"
 )
 

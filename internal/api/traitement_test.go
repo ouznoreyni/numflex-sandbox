@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ouznoreyni/numflex-sandbox/internal/config"
 	"github.com/stretchr/testify/require"
-	"github.com/yas/numflex-sandbox/internal/config"
 )
 
 func TestTraitementDesactivationParLaSource(t *testing.T) {

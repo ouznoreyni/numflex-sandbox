@@ -1,14 +1,15 @@
 # NumFlex Sandbox
 
 Un double local de l'**API Gateway NumFlex de l'ARTP** (guide v2 du 2026-08-10), écrit pour que
-l'intégration YAS puisse être développée et testée sans dépendre de la disponibilité de la recette
+l'intégration puisse être développée et testée sans dépendre de la disponibilité de la recette
 ARTP.
 
 ## Ce que c'est
 
-- Les **33 routes** du contrat gateway, plus les deux routes d'authentification. Rien d'autre :
-  aucune route de santé, de metrics ou de debug, pour que la surface exposée soit exactement celle
-  de la plateforme réelle.
+- Les **33 routes** du contrat gateway, plus les deux routes d'authentification. Rien d'autre sous
+  `/api/gateway/v1` : aucune route de santé, de metrics ou de debug, pour que la surface exposée
+  soit exactement celle de la plateforme réelle. La seule commodité de bac à sable — la purge des
+  données de test — vit sous un autre préfixe et reste fermée par défaut.
 - Une **machine à états complète** — `ACCEPTATION` → `DESACTIVATION` → `ACTIVATION` →
   `CONFIRMATION` → `COMPLETION` — avec ses habilitations, son moteur d'expiration et sa fenêtre de
   convergence réglable.
@@ -34,9 +35,8 @@ docker compose up
 ```
 
 Postgres démarre, les migrations sont appliquées, le seed est joué, l'API écoute sur
-`http://localhost:8080`. Le `.env` du dépôt, s'il existe, alimente le conteneur ; seules
-`DATABASE_URL` et `CORS_ALLOWED_ORIGINS` sont imposées par le compose, la base ne s'appelant pas
-`localhost` dans son réseau.
+`http://localhost:8080`. Le `.env` du dépôt, s'il existe, alimente le conteneur ; seule
+`DATABASE_URL` est imposée par le compose, la base ne s'appelant pas `localhost` dans son réseau.
 
 ### L'image seule
 
@@ -54,10 +54,12 @@ disque, tout l'état vit dans la base.
 ```bash
 docker network create numflex-net       # une fois
 
-# La base. C'est elle qui porte le volume — l'API n'en a pas besoin.
+# La base. C'est elle qui porte les données — l'API n'a besoin d'aucun montage.
+# `-v <dossier hôte>:<chemin conteneur>` : le chemin est donné tel quel, il n'y a
+# aucun volume à créer au préalable.
 docker run -d --name numflex-db --network numflex-net \
   -e POSTGRES_USER=numflex -e POSTGRES_PASSWORD=numflex -e POSTGRES_DB=numflex \
-  -v numflex-data:/var/lib/postgresql/data \
+  -v "$PWD/pgdata:/var/lib/postgresql/data" \
   postgres:16-alpine
 
 # L'API. Le .env fournit le socle, -e corrige ce qui dépend du réseau Docker,
@@ -86,10 +88,36 @@ docker run -d --name numflex-api --network numflex-net \
 `/app/migrations`. Le seul montage de l'exemple est le `.env`, et il est facultatif : tout passer
 en `-e` ou en arguments donne le même résultat.
 
-**Plusieurs profils plutôt qu'un `.env`** : monter un répertoire, puis désigner le fichier.
+#### Monter des dossiers de l'hôte
+
+Un chemin en première position de `-v` suffit : Docker le monte tel quel, rien n'est à créer
+d'avance. Le chemin doit être absolu — `$PWD/pgdata`, pas `./pgdata`.
 
 ```bash
-docker run -d --name numflex-api --network numflex-net -p 8096:8096 \
+mkdir -p "$PWD/pgdata"
+
+docker run -d --name numflex-db --network numflex-net \
+  -e POSTGRES_USER=numflex -e POSTGRES_PASSWORD=numflex -e POSTGRES_DB=numflex \
+  -v "$PWD/pgdata:/var/lib/postgresql/data" \
+  postgres:16-alpine
+```
+
+PostgreSQL initialise son cluster directement dans `pgdata/` — `PG_VERSION`, `base/`, `global/` y
+apparaissent, et `docker inspect` rapporte des montages de type `bind`, sans aucun volume nommé.
+Le dossier doit exister avant : Docker le crée sinon, mais vide et possédé par `root`.
+
+Sur macOS et Windows, le dossier doit appartenir aux chemins partagés avec la machine virtuelle
+Docker — `/Users`, `/private`, `/tmp` par défaut sur macOS — sinon le montage échoue au démarrage.
+
+Pour mémoire, `docker volume create --driver local --opt type=none --opt device=<dossier> --opt
+o=bind <nom>` donne un volume *nommé* adossé au même dossier : même résultat à l'exécution, avec en
+plus un nom dans `docker volume ls`. Inutile si vous vous contentez du chemin.
+
+**Plusieurs profils plutôt qu'un `.env`** : monter le dossier qui les contient, en lecture seule,
+puis désigner le fichier voulu.
+
+```bash
+docker run -d --name numflex-api --network numflex-net -p 8097:8097 \
   -v "$PWD/config:/config:ro" \
   numflex-sandbox:latest --env-file /config/recette.env
 ```
@@ -108,8 +136,8 @@ docker run --rm --network numflex-net --entrypoint /usr/local/bin/artp \
 Pour publier :
 
 ```bash
-docker login ghcr.io
-make push                                    # ghcr.io/yas/numflex-sandbox:<git describe>
+docker login
+make push                                    # docker.io/ouzdiop268/numflex-sandbox:<git describe>
 make push REGISTRY=… VERSION=v0.4.0          # ailleurs, sous une version choisie
 ```
 
@@ -179,7 +207,8 @@ l'état courant. Pour repartir à zéro, supprimer le volume Postgres.
 | `OTP_TTL_SECONDS` | `300` | Validité de l'OTP |
 | `OTP_MAX_ATTEMPTS` | `3` | Tentatives de saisie |
 | `REVERSE_AUTO_VALIDATION_SECONDS` | `0` | `0` = validation par le CLI `artp` uniquement |
-| `CORS_ALLOWED_ORIGINS` | — | Origines autorisées, séparées par des virgules ; vide = aucun en-tête CORS, comme la plateforme réelle. `*` autorise tout |
+| `CORS_ALLOWED_ORIGINS` | `*` | Origines autorisées, séparées par des virgules. **Absente = `*`**, toute origine ; **posée vide = aucun en-tête CORS**, comme la plateforme réelle |
+| `SANDBOX_ADMIN` | `false` | Ouvre la purge des données de test sous `/api/sandbox/v1` — hors contrat ARTP, voir ci-dessous |
 | `ENV_FILE` | `.env` | Chemin du fichier d'environnement à charger — voir ci-dessous |
 
 ### D'où viennent les valeurs
@@ -245,7 +274,7 @@ C'est le profil utilisé par `make test`.
 
 ## Anomalies reproduites
 
-Toutes portent leur identifiant du rapport SIT `YAS-PORT-SIT-001`.
+Toutes portent leur identifiant du rapport SIT.
 
 | Identifiant | Comportement reproduit |
 |---|---|
@@ -281,6 +310,53 @@ Trois comportements ne sont ni documentés au guide v2, ni mesurés en recette. 
 
 D'autres `[HYP]` plus locaux existent (flotte intégralement rejetée, absence de garde de gel sur
 l'annulation, messages d'erreur non mesurés) : `grep -rn '\[HYP\]' internal/`.
+
+## Purge des données de test — hors contrat
+
+**Cette route n'existe pas chez l'ARTP.** Elle vit délibérément sous un autre préfixe, pour que
+`/api/gateway/v1` reste exactement la surface de la plateforme réelle : un client qui bascule son
+`baseUrl` vers la recette ARTP ne perd que ce qu'il sait ne pas exister là-bas.
+
+```bash
+SANDBOX_ADMIN=true          # défaut : false
+
+DELETE /api/sandbox/v1/demandes     Authorization: Bearer <jeton>
+```
+
+À `false` — le défaut — la route **n'est pas enregistrée** : elle répond `404`, indistinguable d'un
+chemin inconnu, jeton valide ou non. Rien n'est purgeable par accident, et rien ne se découvre par
+balayage.
+
+```json
+{ "success": true, "code": "SUCCESS", "message": "Demandes purgées avec succès",
+  "data": { "demandesSupprimees": 12, "numerosRestaures": 9,
+            "otpSupprimes": 4, "reverseSupprimees": 1 } }
+```
+
+**Le périmètre est `createur_operateur_id`**, pas le filtre de `/mes-demandes`. Une demande
+appartient à deux opérateurs à la fois ; seul son créateur l'a fabriquée. Conséquence à connaître :
+un Port-IN créé par un partenaire pour exercer votre Port-OUT ne se purge pas depuis votre jeton —
+c'est au partenaire de le faire avec le sien.
+
+**Ce qui part, en une transaction :** les demandes créées par l'appelant et tout ce qui en dépend
+(`demande_numero`, `demande_client`, `etape_historique`, `confirmation`, par cascade) ; les OTP des
+numéros concernés — sans quoi le même numéro ne pourrait pas être redemandé sans repasser par
+`otp/send` ; les demandes de reverse de l'appelant, dont la clé étrangère bloquerait sinon la
+suppression. Les incidents et le référentiel du seed ne sont pas touchés.
+
+**Le registre national est restauré** pour chaque numéro concerné :
+
+```
+operateur_actuel_id  = operateur_origine_id
+date_dernier_portage = NULL
+deja_restitue        = false
+```
+
+C'est ce qui rend l'opération utile : sans cette remise en état, un numéro déjà porté resterait
+bloqué par `DELAI_PORTAGE_NON_RESPECTE` pendant trois mois et le scénario ne pourrait pas être
+rejoué. La règle est **« le numéro rentre chez lui »**, pas « le numéro retrouve son état de
+seed » : pour une tranche ensemencée déjà portée — `77200`, détenue par ORANGE mais d'origine YAS —
+la purge la ramène chez YAS, pas chez ORANGE.
 
 ## Tests
 
@@ -346,12 +422,14 @@ sinon il ne présente plus la même surface que la plateforme réelle.
 
 Deux conséquences à connaître :
 
-- **« Try it out » exige que le CORS soit activé.** L'appel part d'une autre origine
-  (`8081` → `8080`) ; sans en-tête `Access-Control-Allow-Origin`, le navigateur le bloque.
-  `make run` et `docker compose up` posent `CORS_ALLOWED_ORIGINS=http://localhost:8081` pour vous.
-  **Cette variable est une commodité de bac à sable, pas un trait du contrat** : la gateway réelle
-  est consommée de serveur à serveur et aucun test du SIT n'a mesuré son comportement cross-origin.
-  Laissez-la vide — le défaut — pour retrouver le comportement exact de la plateforme.
+- **« Try it out » exige que le CORS soit activé, et il l'est par défaut.** L'appel part d'une
+  autre origine (`8081` → `8080`) ; sans en-tête `Access-Control-Allow-Origin`, le navigateur le
+  bloque. Le défaut, écrit dans le code, est `*` : rien à configurer, quel que soit le port d'où
+  vous servez la page.
+  **Ce CORS est une commodité de bac à sable, pas un trait du contrat** : la gateway réelle est
+  consommée de serveur à serveur, n'émet aucun en-tête CORS, et aucun test du SIT n'a mesuré son
+  comportement cross-origin. Poser `CORS_ALLOWED_ORIGINS=` — vide — retrouve ce silence ; y mettre
+  une liste d'origines restreint sans l'éteindre.
 - **La spécification décrit le contrat**, donc le sandbox lancé en `FIDELITY=contract`. En
   `FIDELITY=real` — le défaut — les réponses d'erreur diffèrent ; chaque description signale
   l'écart par son identifiant SIT.
@@ -370,10 +448,3 @@ traiter l'`ACTIVATION` et la `COMPLETION`, et lire `/demandes/in`. Il faut se r�
 `/demandes/out`, restitution, reverse — et en `orange` ou `expresso` pour la confirmation, attendue
 de tous **sauf** le destinataire. La description de chaque requête concernée le rappelle. Un appel
 émis avec le mauvais compte ne renvoie pas un refus lisible mais un `500` (ANO-003).
-
-## Sources
-
-- Guide d'utilisation — API Gateway NumFlex **v2**, ARTP, 2026-08-10 — le contrat en vigueur.
-- `YAS-PORT-SIT-001` v0.3 — rapport SIT : les 22 anomalies et les 53 cas de test.
-- `YAS-PORT-TBRD-001` v1.2 — Technical BRD portabilité.
-- Spécification du sandbox : `docs/superpowers/specs/2026-08-29-numflex-sandbox-design.md`.

@@ -9,12 +9,11 @@ test: up
 	COMPLETION_LATENCY_MS=0 CLOCK_SKEW_SECONDS=0 \
 	go test ./... -p 1 -count=1
 
-# CORS_ALLOWED_ORIGINS autorise la page Swagger (port 8081) a appeler l'API
-# depuis un navigateur. La plateforme reelle n'envoie pas de CORS : retirer
-# cette variable pour retrouver son comportement exact.
+# Le CORS est ouvert a toute origine par defaut, pour que la page Swagger
+# (port 8081) puisse appeler l'API depuis un navigateur. La plateforme reelle
+# n'en envoie pas : CORS_ALLOWED_ORIGINS="" retrouve son comportement exact.
 run: up
 	DATABASE_URL="postgres://numflex:numflex@localhost:5432/numflex?sslmode=disable" \
-	CORS_ALLOWED_ORIGINS="http://localhost:8081" \
 	go run ./cmd/server
 
 # Documentation servie hors de la gateway, sur un port distinct : le sandbox ne
@@ -29,38 +28,42 @@ swagger-build:
 	python3 scripts/build_swagger.py
 
 # ─── Image ──────────────────────────────────────────────────────────────────
-# Le nom local est IMAGE:VERSION, le nom publié REGISTRY/IMAGE:VERSION. Chaque
-# variable se surcharge :
-#   make image VERSION=v0.4.0
-#   make push  REGISTRY=ghcr.io/yas VERSION=v0.4.0
+# `latest` est toujours produit et toujours publié. VERSION=... ajoute un second
+# tag, figé sur cette version :
+#   make image                                   → numflex-sandbox:latest
+#   make push                                    → …/numflex-sandbox:latest
+#   make push VERSION=v0.4.0                     → :latest + :v0.4.0
+#   make push REGISTRY=harbor.noorexe.com/numflex
 IMAGE     ?= numflex-sandbox
-VERSION   ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
-REGISTRY  ?= ghcr.io/yas
+VERSION   ?=
+REGISTRY  ?= docker.io/ouzdiop268
 PLATFORMS ?= linux/amd64,linux/arm64
 BUILDER   ?= numflex-builder
 
 # Construit pour l'architecture locale et charge l'image dans le démon.
 image:
-	docker build -t $(IMAGE):$(VERSION) -t $(IMAGE):latest .
-	@docker images $(IMAGE):$(VERSION) --format '  {{.Repository}}:{{.Tag}}  {{.Size}}'
+	docker build -t $(IMAGE):latest $(if $(VERSION),-t $(IMAGE):$(VERSION),) .
+	@docker images $(IMAGE):latest --format '  {{.Repository}}:{{.Tag}}  {{.Size}}'
 
 # Construit et publie en une passe. buildx est obligatoire ici : un manifeste
 # multi-architecture ne peut pas être chargé dans le démon local, donc il n'y a
 # pas de `make image` préalable — seul le cache de build est partagé. Le pilote
 # `docker` par défaut ne sait pas produire de multi-arch, d'où le constructeur
-# dédié, créé au premier appel.
+# dédié, créé au premier appel. `docker login $(REGISTRY)` d'abord.
 #
-# `docker login $(REGISTRY)` d'abord. ALLOW_DIRTY=1 pour publier depuis un
-# arbre modifié — la version porterait alors le suffixe `-dirty`.
+# Le garde d'arbre propre ne vaut que pour un tag de version : celui-ci doit
+# rester reproductible, donc correspondre à un commit. `latest` est par nature
+# un pointeur mouvant, et se publie depuis un arbre modifié. ALLOW_DIRTY=1 lève
+# le garde — la version porte alors le suffixe `-dirty`.
 push:
-	@git diff --quiet HEAD 2>/dev/null || test -n "$(ALLOW_DIRTY)" || \
-	  { echo "arbre de travail modifié : commitez, ou make push ALLOW_DIRTY=1"; exit 1; }
+	@test -z "$(VERSION)" || git diff --quiet HEAD 2>/dev/null || test -n "$(ALLOW_DIRTY)" || \
+	  { echo "arbre modifié : un tag de version doit correspondre à un commit (ALLOW_DIRTY=1 pour passer outre)"; exit 1; }
 	@docker buildx inspect $(BUILDER) >/dev/null 2>&1 || \
 	  docker buildx create --name $(BUILDER) --driver docker-container >/dev/null
 	docker buildx build --builder $(BUILDER) --platform $(PLATFORMS) \
-	  --tag $(REGISTRY)/$(IMAGE):$(VERSION) \
 	  --tag $(REGISTRY)/$(IMAGE):latest \
+	  $(if $(VERSION),--tag $(REGISTRY)/$(IMAGE):$(VERSION),) \
 	  --push .
-	@echo "publié : $(REGISTRY)/$(IMAGE):$(VERSION)"
+	@echo "publié : $(REGISTRY)/$(IMAGE):latest$(if $(VERSION), et :$(VERSION),)"
 
 .PHONY: up test run swagger swagger-build image push
