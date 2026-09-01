@@ -1,0 +1,1175 @@
+openapi: 3.0.3
+
+info:
+  title: API Gateway NumFlex — sandbox local
+  version: "2.0"
+  description: |
+    Double local de l'**API Gateway NumFlex de l'ARTP**, décrit d'après le
+    *Guide d'utilisation — API Gateway NumFlex, version 2 (2026-08-10)*, qui est
+    le contrat en vigueur.
+
+    **Cette spécification décrit le contrat, c'est-à-dire le sandbox lancé en
+    `FIDELITY=contract`.** En `FIDELITY=real` — le défaut — le sandbox reproduit
+    les anomalies mesurées en recette : les erreurs métier sortent en `500`, aucune
+    réponse d'erreur ne porte de champ `code`, et le corps n'est pas enveloppé mais
+    rendu en `application/problem+json`. Les descriptions signalent ces écarts par
+    leur identifiant SIT (ANO-0xx).
+
+    Cette page de documentation est servie **hors de la gateway**, sur un port
+    distinct : le sandbox ne doit exposer que les 33 routes du contrat, sans route
+    de santé, de metrics ni de documentation.
+
+servers:
+  - url: http://localhost:8080
+    description: Sandbox local
+
+tags:
+  - name: authentication
+    description: Obtention et vérification du jeton JWT (§6)
+  - name: Données de référence
+    description: §7.1 — aucun paramètre, à consulter en premier
+  - name: OTP
+    description: §7.2 — code à 6 chiffres, obligatoire pour créer une demande de portage
+  - name: Création de demande
+    description: §7.3 à §7.6 — particulier, flotte, restitution, reverse
+  - name: Consultation
+    description: §7.7 — les dix listes, classées par ce qu'elles retournent
+  - name: Workflow
+    description: §7.8 à §7.11 — acceptation, confirmation, traitement, annulation
+  - name: Incidents
+    description: §7.12 — deux familles distinctes, gateway et interne
+
+security:
+  - bearerAuth: []
+
+paths:
+  /api/authenticate:
+    post:
+      tags: [authentication]
+      summary: Obtenir un token (§6.1)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username: { type: string, example: yas }
+                password: { type: string, example: yas2026 }
+                rememberMe: { type: boolean, example: false }
+            examples:
+              yas:
+                summary: YAS — destinataire dans les scénarios du guide
+                value: { username: yas, password: yas2026, rememberMe: false }
+              orange:
+                summary: ORANGE — source ; acceptation, DESACTIVATION, restitution, reverse
+                value: { username: orange, password: orange2026, rememberMe: false }
+              expresso:
+                summary: EXPRESSO — opérateur tiers ; confirmation seulement
+                value: { username: expresso, password: expresso2026, rememberMe: false }
+      responses:
+        "200":
+          description: Jeton JWT, valable 24 h
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id_token: { type: string }
+        "401":
+          description: |
+            Identifiants incorrects. Servi **hors enveloppe**, en `problem+json` (ANO-016).
+    get:
+      tags: [authentication]
+      summary: Vérifier le token courant (§6.2)
+      responses:
+        "204": { description: Le jeton est valide }
+        "401":
+          description: |
+            Jeton **absent** → enveloppe `ACCES_INTERDIT`.
+            Jeton **présent mais invalide ou expiré** → corps vide, sans `Content-Type` (ANO-008).
+
+  /api/gateway/v1/operateurs:
+    get:
+      tags: [Données de référence]
+      summary: Liste des opérateurs
+      description: Conservez les `id` — ils sont obligatoires dans les demandes de portage.
+      responses:
+        "200":
+          $ref: "#/components/responses/ListeOperateurs"
+
+  /api/gateway/v1/motifs-rejet:
+    get:
+      tags: [Données de référence]
+      summary: Liste des motifs de rejet
+      description: |
+        L'`id` du motif est obligatoire lors du rejet d'une demande.
+        Le champ porte le libellé sous la clé `motif`, **pas** `libelle` (ANO-009, corrigé au contrat v2).
+      responses:
+        "200":
+          $ref: "#/components/responses/ListeMotifsRejet"
+
+  /api/gateway/v1/types-demande:
+    get:
+      tags: [Données de référence]
+      summary: Types de demande — PORTAGE, RESTITUTION, REVERSE
+      responses:
+        "200":
+          $ref: "#/components/responses/ListeTypes"
+
+  /api/gateway/v1/processus:
+    get:
+      tags: [Données de référence]
+      summary: Types de processus — PREPAID, POSTPAID
+      responses:
+        "200":
+          $ref: "#/components/responses/ListeTypes"
+
+  /api/gateway/v1/types-incident:
+    get:
+      tags: [Données de référence]
+      summary: Types d'incident
+      description: |
+        Utile pour consulter les types configurés. **N'est plus nécessaire pour déclarer** :
+        c'est l'endpoint appelé (`/incidents/gateway` ou `/incidents/interne`) qui détermine
+        la catégorie.
+      responses:
+        "200":
+          $ref: "#/components/responses/ListeTypesIncident"
+
+  /api/gateway/v1/otp/send:
+    post:
+      tags: [OTP]
+      summary: Envoyer un OTP (§7.2)
+      description: |
+        Code à 6 chiffres, valide 5 minutes, 3 tentatives de vérification maximum.
+
+        Dans le sandbox le code est **statique** (`123456`, réglable par `OTP_STATIC_CODE`)
+        et **aucun SMS n'est envoyé**. La réponse acquitte la soumission, pas la remise (ANO-021).
+
+        En `FIDELITY=real`, la réponse **omet le champ `data`** au lieu de le porter à `null` (ANO-011).
+      requestBody:
+        $ref: "#/components/requestBodies/Numero"
+      responses:
+        "200":
+          $ref: "#/components/responses/EnveloppeVide"
+        "400": { $ref: "#/components/responses/Erreur" }
+
+  /api/gateway/v1/otp/verify:
+    post:
+      tags: [OTP]
+      summary: Vérifier un OTP — optionnel (§7.2)
+      description: "Pré-vérifie **sans consommer** le code : la création qui suit reste possible (TC-021)."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [numero, otpCode]
+              properties:
+                numero: { type: string, example: "771000001" }
+                otpCode: { type: string, example: "123456" }
+      responses:
+        "200":
+          $ref: "#/components/responses/EnveloppeVide"
+        "400":
+          description: |
+            `OTP_INVALID`, `OTP_EXPIRED`, `OTP_ALREADY_USED` ou `OTP_MAX_ATTEMPTS`.
+            En `FIDELITY=real`, ces états sortent en `500` avec des messages libres, hors catalogue (ANO-014).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EnveloppeErreur" }
+
+  /api/gateway/v1/demandes/particulier:
+    post:
+      tags: [Création de demande]
+      summary: Créer une demande de portage — particulier (§7.3)
+      description: |
+        **L'opérateur connecté doit être l'opérateur destinataire.** C'est également lui,
+        et lui seul, qui pourra l'annuler par la suite (§7.11).
+
+        `client.lieuNaissance` est documenté facultatif mais **rejeté s'il est absent** (ANO-010).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DemandeParticuliere" }
+            example:
+              numero: "771000001"
+              otpCode: "123456"
+              operateurSourceId: "6a21745ce6c37b5b5b487ec1"
+              operateurDestinataireId: "6a2174c3e6c37b5b5b487ec4"
+              typePortabilite: PREPAID
+              client:
+                nom: Diallo
+                prenom: Mamadou
+                dateNaissance: "1975-03-20"
+                lieuNaissance: Dakar
+                typePiece: CNI
+                numeroPiece: "1234567890123"
+      responses:
+        "201":
+          $ref: "#/components/responses/UneDemande"
+        "400":
+          description: |
+            `VALIDATION_ECHOUEE`, ou un refus d'éligibilité : `NUMERO_DEJA_CHEZ_DESTINATAIRE`,
+            `OPERATEUR_SOURCE_INCORRECT`, `DEMANDE_EN_COURS_POUR_NUMERO`, `DELAI_PORTAGE_NON_RESPECTE`.
+            Ce dernier sort en `500 Unexpected runtime exception` en `FIDELITY=real` (ANO-002).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EnveloppeErreur" }
+        "403": { $ref: "#/components/responses/AccesRefuse" }
+
+  /api/gateway/v1/demandes/entreprise:
+    post:
+      tags: [Création de demande]
+      summary: Créer une demande de portage — entreprise / flotte (§7.4)
+      description: |
+        Un seul OTP, vérifié sur `numeroPorteurFlotte`, couvre tous les numéros.
+
+        **Une flotte peut réussir en portant moins de numéros que demandé.** Les numéros
+        inéligibles sont *exclus*, pas rejetés : ils ressortent dans `numerosExclus`, avec
+        `numerosExclusCount` et `avertissement` (BR-006). Si **tous** sont exclus, la demande
+        n'est pas créée et l'appel échoue en `AUCUN_NUMERO_ELIGIBLE`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DemandeEntreprise" }
+            example:
+              numeroPorteurFlotte: "771000002"
+              otpCode: "123456"
+              operateurSourceId: "6a21745ce6c37b5b5b487ec1"
+              operateurDestinataireId: "6a2174c3e6c37b5b5b487ec4"
+              typePortabilite: POSTPAID
+              numerosFlotte: ["771000002", "771000003", "771000004"]
+              client:
+                raisonSociale: Entreprise SARL
+                numRC: "123456789"
+                prenom: Ousmane
+                nom: Diallo
+                dateNaissance: "1975-03-20"
+                typePiece: CNI
+                numeroPiece: "1234567890123"
+      responses:
+        "201":
+          description: Demande de flotte créée, éventuellement amputée des numéros exclus
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Enveloppe"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/FlotteCreee" }
+              example:
+                success: true
+                code: SUCCESS
+                message: Demande flotte créée
+                data:
+                  demande:
+                    id: "6a96de1e226392f964941953"
+                    typeDemande: PORTAGE
+                    typeAbonne: ENTREPRISE
+                    statutDemande: EN_COURS
+                    etapeActuelle: ACCEPTATION
+                  numerosPortesCount: 2
+                  numerosExclusCount: 1
+                  numerosExclus:
+                    - numero: "771000004"
+                      raison: Demande déjà en cours pour ce numéro
+                      codeErreur: DEMANDE_EN_COURS_POUR_NUMERO
+                  avertissement: 1 numéro(s) exclu(s) de la demande.
+        "400":
+          description: "`FLOTTE_VIDE`, `FLOTTE_OPERATEURS_MIXTES` ou `VALIDATION_ECHOUEE`"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EnveloppeErreur" }
+        "403": { $ref: "#/components/responses/AccesRefuse" }
+        "409":
+          description: "`AUCUN_NUMERO_ELIGIBLE` — aucun numéro de la flotte n'est éligible, la demande n'est pas créée"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EnveloppeErreur" }
+
+  /api/gateway/v1/demandes/restitution:
+    post:
+      tags: [Création de demande]
+      summary: Créer une demande de restitution (§7.5)
+      description: |
+        Conditions : numéro porté, non déjà restitué, **délai minimum de 6 mois** depuis le
+        dernier portage. L'appelant doit être l'opérateur **d'origine** du numéro et en devient
+        le destinataire ; le détenteur actuel est la source.
+
+        **Confirmation collective** : à l'étape CONFIRMATION, une restitution exige que *tous*
+        les opérateurs confirment explicitement, **y compris le destinataire** — aucune
+        auto-confirmation (§7.9).
+      requestBody:
+        $ref: "#/components/requestBodies/Numero"
+      responses:
+        "201":
+          $ref: "#/components/responses/UneDemande"
+        "400":
+          description: |
+            `NUMERO_NON_PORTE`, `NUMERO_DEJA_RESTITUE` ou `DELAI_RESTITUTION_NON_RESPECTE`.
+            Ce dernier sort en `FIDELITY=real` comme une erreur 400 sérialisée **en chaîne**
+            à l'intérieur d'une `500` (ANO-020).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EnveloppeErreur" }
+        "403": { $ref: "#/components/responses/AccesRefuse" }
+
+  /api/gateway/v1/reverse-requests:
+    post:
+      tags: [Création de demande]
+      summary: Soumettre une demande de validation de reverse (§7.6)
+      description: |
+        Un reverse restitue un numéro à son opérateur d'origine **sur décision de l'ARTP**.
+        Contrairement au portage et à la restitution, la demande passe d'abord par une étape de
+        **validation administrative** hors de cette API.
+
+        **Seul l'opérateur source** (opérateur d'origine du numéro) peut soumettre.
+        **Pas d'annulation** : une fois soumise, elle reste `EN_ATTENTE` jusqu'à décision de l'ARTP.
+
+        Dans le sandbox, cette décision se prend avec le CLI compagnon :
+        `artp reverse valider <id>` ou `artp reverse rejeter <id>`.
+      requestBody:
+        $ref: "#/components/requestBodies/Numero"
+      responses:
+        "201":
+          description: Demande de reverse soumise
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Enveloppe"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/ReverseRequest" }
+        "400": { $ref: "#/components/responses/Erreur" }
+        "403": { $ref: "#/components/responses/AccesRefuse" }
+
+  /api/gateway/v1/reverse-requests/mes-demandes:
+    get:
+      tags: [Création de demande]
+      summary: Suivre mes demandes de reverse (§7.6)
+      description: Tous statuts confondus — `EN_ATTENTE`, `VALIDE`, `REJETE`.
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Size"
+      responses:
+        "200":
+          description: Liste des demandes de reverse de l'appelant
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Enveloppe"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: "#/components/schemas/ReverseRequest" }
+
+  /api/gateway/v1/demandes/mes-demandes:
+    get:
+      tags: [Consultation]
+      summary: Toutes mes demandes, tout état (§7.7)
+      description: Celles dont l'appelant est source **ou** destinataire.
+      responses:
+        "200": { $ref: "#/components/responses/ListeDemandes" }
+
+  /api/gateway/v1/demandes/a-accepter:
+    get:
+      tags: [Consultation]
+      summary: En attente d'acceptation, vous êtes la source (§7.7)
+      responses:
+        "200": { $ref: "#/components/responses/ListeDemandes" }
+
+  /api/gateway/v1/demandes/a-accepter/{id}:
+    get:
+      tags: [Consultation]
+      summary: Détail d'une demande à accepter (§7.7)
+      parameters: [{ $ref: "#/components/parameters/IdDemande" }]
+      responses:
+        "200": { $ref: "#/components/responses/UneDemande" }
+        "404": { $ref: "#/components/responses/NonTrouvee" }
+
+  /api/gateway/v1/demandes/a-traiter:
+    get:
+      tags: [Consultation]
+      summary: Nécessitant une action de votre part (§7.7)
+      responses:
+        "200": { $ref: "#/components/responses/ListeDemandes" }
+
+  /api/gateway/v1/demandes/a-traiter/{id}:
+    get:
+      tags: [Consultation]
+      summary: Détail d'une demande à traiter (§7.7)
+      parameters: [{ $ref: "#/components/parameters/IdDemande" }]
+      responses:
+        "200": { $ref: "#/components/responses/UneDemande" }
+        "404": { $ref: "#/components/responses/NonTrouvee" }
+
+  /api/gateway/v1/demandes/a-confirmer:
+    get:
+      tags: [Consultation]
+      summary: À l'étape CONFIRMATION, que vous devez encore confirmer (§7.7)
+      description: |
+        **Pourquoi une demande dont je ne suis ni source ni destinataire ?** Sur un PORTAGE,
+        la confirmation est attendue de *tous les opérateurs sauf le destinataire* — un opérateur
+        tiers apparaît donc dans cette liste. Sur une RESTITUTION ou un REVERSE, tout le monde
+        confirme, destinataire compris.
+      responses:
+        "200": { $ref: "#/components/responses/ListeDemandes" }
+    post:
+      tags: [Workflow]
+      summary: Confirmer une demande (§7.9)
+      description: |
+        Endpoint **dédié** à l'étape CONFIRMATION, séparé de `/traitement` — l'envoyer à
+        `/traitement` renvoie `ETAPE_INVALIDE`.
+
+        | Type | Opérateurs habilités |
+        |---|---|
+        | PORTAGE | Tous **sauf** le destinataire (auto-confirmé une fois les autres validés) |
+        | RESTITUTION | Tous, **y compris** le destinataire |
+        | REVERSE | Tous, **y compris** le destinataire |
+
+        Une fois tous les confirmateurs attendus passés, la demande avance automatiquement.
+        Un second appel du même opérateur est refusé.
+
+        **Cas particulier REVERSE** : la COMPLETION qui suit est réservée à l'ARTP — elle n'est
+        accessible ni ici ni via `/traitement`.
+      requestBody:
+        $ref: "#/components/requestBodies/IdDemandeEtCommentaire"
+      responses:
+        "200": { $ref: "#/components/responses/EtapeTraitee" }
+        "403": { $ref: "#/components/responses/AccesRefuse" }
+        "404": { $ref: "#/components/responses/NonTrouvee" }
+        "409": { $ref: "#/components/responses/EtapeInvalide" }
+
+  /api/gateway/v1/demandes/a-confirmer/{id}:
+    get:
+      tags: [Consultation]
+      summary: Détail d'une demande à confirmer (§7.7)
+      parameters: [{ $ref: "#/components/parameters/IdDemande" }]
+      responses:
+        "200": { $ref: "#/components/responses/UneDemande" }
+        "404": { $ref: "#/components/responses/NonTrouvee" }
+
+  /api/gateway/v1/demandes/deja-confirmees:
+    get:
+      tags: [Consultation]
+      summary: Que vous avez déjà confirmées (§7.7)
+      description: |
+        En `FIDELITY=real`, cette liste **ne trace pas** la confirmation de l'opérateur *source* :
+        il confirme avec succès et sa liste renvoie `0`. Un opérateur tiers voit bien les siennes (ANO-019).
+      responses:
+        "200": { $ref: "#/components/responses/ListeDemandes" }
+
+  /api/gateway/v1/demandes/in:
+    get:
+      tags: [Consultation]
+      summary: Portages terminés, vous êtes destinataire (§7.7)
+      description: Ne porte que sur les portages `TERMINE` — **pas** les restitutions ni les reverses.
+      responses:
+        "200": { $ref: "#/components/responses/ListeDemandes" }
+
+  /api/gateway/v1/demandes/out:
+    get:
+      tags: [Consultation]
+      summary: Portages terminés, vous êtes source (§7.7)
+      description: Ne porte que sur les portages `TERMINE` — **pas** les restitutions ni les reverses.
+      responses:
+        "200": { $ref: "#/components/responses/ListeDemandes" }
+
+  /api/gateway/v1/demandes/acceptation:
+    post:
+      tags: [Workflow]
+      summary: Accepter ou rejeter — particulier / restitution (§7.8)
+      description: |
+        Réalisée par l'**opérateur source**, celui qui cède le numéro.
+
+        **Rupture de compatibilité v2** : la demande est identifiée par `idDemande`,
+        **plus par `numero`**.
+
+        `motifRejetId` est obligatoire dès que `accepte` vaut `false`, sinon `MOTIF_REJET_OBLIGATOIRE`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Acceptation" }
+            examples:
+              acceptation:
+                summary: Acceptation
+                value: { idDemande: "{{idDemande}}", accepte: true, commentaire: Demande conforme }
+              rejet:
+                summary: Rejet — motifRejetId obligatoire
+                value:
+                  idDemande: "{{idDemande}}"
+                  accepte: false
+                  motifRejetId: "6a2175c5e6c37b5b5b487edb"
+                  commentaire: Contrat non résilié
+      responses:
+        "200": { $ref: "#/components/responses/EtapeTraitee" }
+        "400":
+          description: "`MOTIF_REJET_OBLIGATOIRE` ou `VALIDATION_ECHOUEE`"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EnveloppeErreur" }
+        "403": { $ref: "#/components/responses/AccesRefuse" }
+        "404": { $ref: "#/components/responses/NonTrouvee" }
+        "409": { $ref: "#/components/responses/EtapeInvalide" }
+
+  /api/gateway/v1/demandes/{id}/acceptation:
+    post:
+      tags: [Workflow]
+      summary: Accepter ou rejeter — entreprise / flotte (§7.8)
+      description: |
+        Cet endpoint identifiait déjà la demande par son `id` dans l'URL — inchangé en v2.
+
+        `numerosRejetes` permet une **acceptation partielle** : la demande poursuit avec les
+        numéros restants.
+      parameters: [{ $ref: "#/components/parameters/IdDemande" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AcceptationFlotte" }
+            examples:
+              totale:
+                summary: Acceptation totale
+                value: { accepte: true, commentaire: Tous les numéros conformes }
+              partielle:
+                summary: Acceptation partielle
+                value:
+                  accepte: true
+                  numerosRejetes: [{ numero: "771000003", motifRejetId: "6a2175c5e6c37b5b5b487edb" }]
+                  commentaire: Numéro 771000003 non conforme
+              rejetTotal:
+                summary: Rejet total
+                value: { accepte: false, motifRejetId: "6a2175c5e6c37b5b5b487edb", commentaire: Dossier incomplet }
+      responses:
+        "200": { $ref: "#/components/responses/EtapeTraitee" }
+        "400":
+          description: "`MOTIF_REJET_OBLIGATOIRE` ou `VALIDATION_ECHOUEE`"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EnveloppeErreur" }
+        "403": { $ref: "#/components/responses/AccesRefuse" }
+        "404": { $ref: "#/components/responses/NonTrouvee" }
+        "409": { $ref: "#/components/responses/EtapeInvalide" }
+
+  /api/gateway/v1/demandes/traitement:
+    post:
+      tags: [Workflow]
+      summary: Traiter l'étape courante (§7.10)
+      description: |
+        **Le champ `etape` a disparu en v2.** L'étape à traiter n'est plus précisée par
+        l'appelant : elle est déterminée automatiquement d'après l'état de la demande.
+        `idDemande` suffit. Un client v1 qui envoie encore `etape` n'est ni rejeté ni averti —
+        le champ est **ignoré en silence** et l'étape courante est exécutée (ANO-018).
+
+        | Étape | Opérateur responsable |
+        |---|---|
+        | `DESACTIVATION` | Source |
+        | `ACTIVATION` | Destinataire |
+        | `COMPLETION` | Destinataire — **sauf REVERSE, réservée à l'ARTP** |
+
+        `ACCEPTATION` se traite via `/demandes/acceptation`, `CONFIRMATION` via
+        `/demandes/a-confirmer` : les envoyer ici renvoie un `ETAPE_INVALIDE` qui nomme le bon endpoint.
+
+        **N'enchaînez pas les étapes sur le corps de la réponse.** Elle porte l'étape *précédant*
+        la transition ; la convergence prend 1 à 6 min en recette. L'avancement se constate en
+        scrutant la file suivante.
+
+        `COMPLETION` répond en **~30 s** et n'accepte aucune clé d'idempotence (ANO-005).
+      requestBody:
+        $ref: "#/components/requestBodies/IdDemandeEtCommentaire"
+      responses:
+        "200": { $ref: "#/components/responses/EtapeTraitee" }
+        "403":
+          description: |
+            `DEMANDE_ACCES_REFUSE` — l'étape incombe à un autre opérateur, ou il s'agit de la
+            COMPLETION d'un REVERSE, réservée à l'ARTP.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EnveloppeErreur" }
+        "404": { $ref: "#/components/responses/NonTrouvee" }
+        "409": { $ref: "#/components/responses/EtapeInvalide" }
+        "500":
+          description: |
+            `ERREUR_INTERNE` — le traitement des demandes est **gelé** par un incident interne
+            en cours, déclaré par n'importe quel opérateur de la place (§7.12).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EnveloppeErreur" }
+
+  /api/gateway/v1/demandes/{id}/annuler:
+    post:
+      tags: [Workflow]
+      summary: Annuler une demande (§7.11)
+      description: |
+        Annule une demande **avant** qu'elle n'ait dépassé l'étape ACCEPTATION.
+        Aucun corps de requête requis.
+
+        **Seul l'opérateur créateur** — c'est-à-dire le destinataire, puisque c'est lui qui crée
+        le portage — peut annuler. La source ne peut pas, même si elle est partie à la demande.
+      parameters: [{ $ref: "#/components/parameters/IdDemande" }]
+      responses:
+        "200":
+          description: Demande annulée
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Enveloppe"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/Demande" }
+              example:
+                success: true
+                code: SUCCESS
+                message: Demande annulée avec succès
+                data:
+                  id: "6a96de59226392f964941954"
+                  statutDemande: ANNULE
+                  etapeActuelle: ACCEPTATION
+                  statutEtapeActuel: TERMINE
+                  dateFinalisation: "2026-09-01T14:16:57.785826Z"
+        "403":
+          description: "`DEMANDE_ACCES_REFUSE` — seul l'opérateur créateur peut annuler"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EnveloppeErreur" }
+        "404": { $ref: "#/components/responses/NonTrouvee" }
+        "409":
+          description: "`ETAPE_INVALIDE` — l'étape ACCEPTATION est dépassée"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EnveloppeErreur" }
+
+  /api/gateway/v1/incidents/gateway:
+    post:
+      tags: [Incidents]
+      summary: Déclarer un incident Gateway (§7.12)
+      description: |
+        Catégorie `figeSysteme = false` : **propre à l'opérateur déclarant, sans impact sur les autres.**
+        Plusieurs incidents gateway peuvent être ouverts simultanément.
+
+        La déclaration ne prend qu'un `commentaire` — pas de `typeIncidentId` : c'est l'endpoint
+        appelé qui détermine la catégorie.
+      requestBody:
+        $ref: "#/components/requestBodies/Commentaire"
+      responses:
+        "201": { $ref: "#/components/responses/UnIncident" }
+        "400": { $ref: "#/components/responses/Erreur" }
+
+  /api/gateway/v1/incidents/gateway/{id}/resoudre:
+    post:
+      tags: [Incidents]
+      summary: Résoudre un incident Gateway (§7.12)
+      description: |
+        **Seul l'opérateur ayant déclaré l'incident peut le résoudre.**
+        Le résoudre via le mauvais segment renvoie `VALIDATION_ECHOUEE` en indiquant le bon endpoint.
+      parameters: [{ $ref: "#/components/parameters/IdIncident" }]
+      requestBody:
+        $ref: "#/components/requestBodies/Commentaire"
+      responses:
+        "200": { $ref: "#/components/responses/UnIncident" }
+        "400":
+          description: "`VALIDATION_ECHOUEE` — mauvais segment ; le message nomme le bon endpoint"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EnveloppeErreur" }
+        "403": { $ref: "#/components/responses/AccesRefuse" }
+        "404": { $ref: "#/components/responses/NonTrouvee" }
+
+  /api/gateway/v1/incidents/gateway/mes-incidents:
+    get:
+      tags: [Incidents]
+      summary: Mes incidents Gateway, tous statuts (§7.12)
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Size"
+      responses:
+        "200": { $ref: "#/components/responses/ListeIncidents" }
+
+  /api/gateway/v1/incidents/interne:
+    post:
+      tags: [Incidents]
+      summary: Déclarer un incident interne (§7.12)
+      description: |
+        Catégorie `figeSysteme = true` : **fige le traitement des demandes pour tous les
+        opérateurs** tant qu'il n'est pas résolu — et seul le déclarant peut le résoudre.
+        Un seul incident interne ouvert à la fois par opérateur.
+      requestBody:
+        $ref: "#/components/requestBodies/Commentaire"
+      responses:
+        "201": { $ref: "#/components/responses/UnIncident" }
+        "400": { $ref: "#/components/responses/Erreur" }
+        "409":
+          description: "`ETAPE_INVALIDE` — un incident interne est déjà ouvert pour cet opérateur"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EnveloppeErreur" }
+
+  /api/gateway/v1/incidents/interne/{id}/resoudre:
+    post:
+      tags: [Incidents]
+      summary: Résoudre un incident interne (§7.12)
+      description: Seul l'opérateur ayant déclaré l'incident peut le résoudre. La place repart ensuite.
+      parameters: [{ $ref: "#/components/parameters/IdIncident" }]
+      requestBody:
+        $ref: "#/components/requestBodies/Commentaire"
+      responses:
+        "200": { $ref: "#/components/responses/UnIncident" }
+        "400":
+          description: "`VALIDATION_ECHOUEE` — mauvais segment ; le message nomme le bon endpoint"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EnveloppeErreur" }
+        "403": { $ref: "#/components/responses/AccesRefuse" }
+        "404": { $ref: "#/components/responses/NonTrouvee" }
+
+  /api/gateway/v1/incidents/interne/mes-incidents:
+    get:
+      tags: [Incidents]
+      summary: Mes incidents internes, tous statuts (§7.12)
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Size"
+      responses:
+        "200": { $ref: "#/components/responses/ListeIncidents" }
+
+components:
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        Jeton obtenu par `POST /api/authenticate`, valable **24 heures**.
+        Obligatoire sur tout endpoint du groupe `gateway`.
+
+  parameters:
+    IdDemande:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
+      example: "6a96ddc0226392f964941951"
+    IdIncident:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
+      example: "6a96de66226392f964941956"
+    Page:
+      name: page
+      in: query
+      required: false
+      schema: { type: integer, default: 0 }
+    Size:
+      name: size
+      in: query
+      required: false
+      schema: { type: integer, default: 20 }
+
+  requestBodies:
+    Numero:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [numero]
+            properties:
+              numero:
+                type: string
+                pattern: "^[0-9]{9}$"
+                example: "771000001"
+    Commentaire:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              commentaire: { type: string, example: Timeout de connexion à l'API gateway numFlex }
+    IdDemandeEtCommentaire:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [idDemande]
+            properties:
+              idDemande: { type: string, example: "6a96ddc0226392f964941951" }
+              commentaire: { type: string, example: Numéro désactivé }
+
+  schemas:
+
+    Enveloppe:
+      type: object
+      description: |
+        Toutes les réponses de l'API suivent ce format (§8) — **en `FIDELITY=contract`**.
+        En `FIDELITY=real`, les réponses d'erreur ne sont pas enveloppées et ne portent
+        aucun champ `code` (ANO-001).
+      properties:
+        success: { type: boolean, description: "`true` si la requête a réussi" }
+        code: { type: string, description: "`SUCCESS` en cas de succès, ou un code d'erreur", example: SUCCESS }
+        message: { type: string, description: Message lisible décrivant le résultat }
+        data: { description: "Données retournées, peut être `null`" }
+
+    EnveloppeErreur:
+      type: object
+      properties:
+        success: { type: boolean, example: false }
+        code:
+          type: string
+          description: |
+            Codes du §9 — OTP : `OTP_INVALID`, `OTP_EXPIRED`, `OTP_ALREADY_USED`, `OTP_MAX_ATTEMPTS` ·
+            portage : `NUMERO_DEJA_CHEZ_DESTINATAIRE`, `OPERATEUR_SOURCE_INCORRECT`,
+            `DEMANDE_EN_COURS_POUR_NUMERO`, `DELAI_PORTAGE_NON_RESPECTE` ·
+            restitution / reverse : `NUMERO_NON_PORTE`, `NUMERO_DEJA_RESTITUE`,
+            `DELAI_RESTITUTION_NON_RESPECTE` ·
+            workflow : `ETAPE_INVALIDE`, `MOTIF_REJET_OBLIGATOIRE`, `DEMANDE_NON_TROUVEE`,
+            `DEMANDE_ACCES_REFUSE` ·
+            flotte : `FLOTTE_VIDE`, `FLOTTE_OPERATEURS_MIXTES`, `AUCUN_NUMERO_ELIGIBLE` ·
+            accès et validation : `ACCES_INTERDIT`, `OPERATEUR_NON_TROUVE`, `VALIDATION_ECHOUEE`,
+            `FORMAT_JSON_INVALIDE`, `ERREUR_INTERNE`.
+          example: DEMANDE_ACCES_REFUSE
+        message: { type: string }
+        data: { nullable: true, example: null }
+
+    Operateur:
+      type: object
+      properties:
+        id: { type: string, example: "6a21745ce6c37b5b5b487ec1" }
+        nom: { type: string, example: ORANGE }
+
+    Demande:
+      type: object
+      properties:
+        id: { type: string, example: "6a96ddc0226392f964941951" }
+        numero: { type: string, example: "771000001" }
+        typeAbonne: { type: string, enum: [PARTICULIER, ENTREPRISE] }
+        typeDemande: { type: string, enum: [PORTAGE, RESTITUTION, REVERSE] }
+        statutDemande: { type: string, enum: [EN_COURS, TERMINE, REJETE, ANNULE] }
+        etapeActuelle:
+          type: string
+          enum: [ACCEPTATION, DESACTIVATION, ACTIVATION, CONFIRMATION, COMPLETION]
+        statutEtapeActuel:
+          type: string
+          enum: [EN_COURS, VALIDE, TERMINE, EXPIRE]
+          description: |
+            Hors contrat documenté (ANO-012). `EXPIRE` distingue une étape soldée par
+            l'expiration automatique d'une étape franchie par une action (ANO-013).
+        operateurSource: { $ref: "#/components/schemas/Operateur" }
+        operateurDestinataire: { $ref: "#/components/schemas/Operateur" }
+        dateDemande: { type: string, format: date-time }
+        dateFinalisation:
+          type: string
+          format: date-time
+          nullable: true
+          description: Renseignée à la clôture — TERMINE, REJETE ou ANNULE.
+        processus: { type: string, enum: [PREPAID, POSTPAID], nullable: true }
+        routageInfo:
+          type: string
+          nullable: true
+          description: |
+            Préfixe de routage (§7.10). Sur un PORTAGE, il vaut celui de la **source** dès la
+            création, puis est recalculé numéro par numéro au passage en CONFIRMATION : routage
+            **destinataire** pour les numéros portés, source pour les rejetés. Sur une RESTITUTION
+            ou un REVERSE, il n'existe qu'à partir de la COMPLETION.
+          example: "191"
+
+    NumeroExclu:
+      type: object
+      properties:
+        numero: { type: string, example: "771000004" }
+        raison: { type: string, example: Demande déjà en cours pour ce numéro }
+        codeErreur: { type: string, example: DEMANDE_EN_COURS_POUR_NUMERO }
+
+    FlotteCreee:
+      type: object
+      properties:
+        demande:
+          type: object
+          properties:
+            id: { type: string }
+            typeDemande: { type: string, example: PORTAGE }
+            typeAbonne: { type: string, example: ENTREPRISE }
+            statutDemande: { type: string, example: EN_COURS }
+            etapeActuelle: { type: string, example: ACCEPTATION }
+        numerosPortesCount: { type: integer, example: 2 }
+        numerosExclusCount: { type: integer, example: 1 }
+        numerosExclus:
+          type: array
+          items: { $ref: "#/components/schemas/NumeroExclu" }
+        avertissement: { type: string, example: 1 numéro(s) exclu(s) de la demande. }
+
+    ReverseRequest:
+      type: object
+      properties:
+        id: { type: string }
+        numero: { type: string, example: "773000001" }
+        statut: { type: string, enum: [EN_ATTENTE, VALIDE, REJETE] }
+        dateDemande: { type: string, format: date-time }
+        operateur: { $ref: "#/components/schemas/Operateur" }
+
+    Incident:
+      type: object
+      properties:
+        id: { type: string }
+        typeIncidentId: { type: string, example: "65abc456def001" }
+        type: { type: string, example: Gateway }
+        figeSysteme:
+          type: boolean
+          description: "`true` fige le traitement des demandes pour **tous** les opérateurs."
+        description: { type: string }
+        statut: { type: string, enum: [EN_COURS, RESOLU] }
+        dateOuverture: { type: string, format: date-time }
+        operateur: { $ref: "#/components/schemas/Operateur" }
+
+    ClientParticulier:
+      type: object
+      required: [nom, prenom, dateNaissance, lieuNaissance, typePiece, numeroPiece]
+      properties:
+        nom: { type: string }
+        prenom: { type: string }
+        dateNaissance: { type: string, example: "1975-03-20" }
+        lieuNaissance: { type: string, description: "Documenté facultatif, rejeté si absent (ANO-010)" }
+        typePiece: { type: string, example: CNI }
+        numeroPiece: { type: string }
+
+    ClientEntreprise:
+      type: object
+      required: [raisonSociale, numRC, nom, prenom, dateNaissance, typePiece, numeroPiece]
+      properties:
+        raisonSociale: { type: string }
+        numRC: { type: string }
+        nom: { type: string }
+        prenom: { type: string }
+        dateNaissance: { type: string }
+        typePiece: { type: string }
+        numeroPiece: { type: string }
+
+    DemandeParticuliere:
+      type: object
+      required: [numero, otpCode, operateurSourceId, operateurDestinataireId, typePortabilite, client]
+      properties:
+        numero: { type: string, pattern: "^[0-9]{9}$", description: Numéro à porter (9 chiffres) }
+        otpCode: { type: string, description: Code OTP reçu par l'abonné }
+        operateurSourceId: { type: string, description: ID de l'opérateur d'origine }
+        operateurDestinataireId:
+          type: string
+          description: ID de l'opérateur destinataire — doit être **votre** opérateur
+        typePortabilite: { type: string, enum: [PREPAID, POSTPAID] }
+        client: { $ref: "#/components/schemas/ClientParticulier" }
+
+    DemandeEntreprise:
+      type: object
+      required: [numeroPorteurFlotte, otpCode, operateurSourceId, operateurDestinataireId, typePortabilite, numerosFlotte, client]
+      properties:
+        numeroPorteurFlotte: { type: string, description: "Numéro principal, reçoit l'OTP" }
+        otpCode: { type: string }
+        operateurSourceId: { type: string }
+        operateurDestinataireId: { type: string }
+        typePortabilite: { type: string, enum: [PREPAID, POSTPAID] }
+        numerosFlotte:
+          type: array
+          minItems: 1
+          items: { type: string }
+          description: Liste des numéros à porter — au moins 1, sinon `FLOTTE_VIDE`
+        client: { $ref: "#/components/schemas/ClientEntreprise" }
+
+    Acceptation:
+      type: object
+      required: [idDemande, accepte]
+      properties:
+        idDemande: { type: string, description: Identifiant de la demande }
+        accepte: { type: boolean, description: "`true` = accepté, `false` = rejeté" }
+        motifRejetId: { type: string, description: Obligatoire si `accepte` vaut `false` — voir `/motifs-rejet` }
+        commentaire: { type: string, description: Commentaire libre }
+
+    AcceptationFlotte:
+      type: object
+      required: [accepte]
+      properties:
+        accepte: { type: boolean }
+        numerosRejetes:
+          type: array
+          description: Rejet partiel — les numéros restants poursuivent le portage
+          items:
+            type: object
+            properties:
+              numero: { type: string }
+              motifRejetId: { type: string }
+        motifRejetId: { type: string, description: Obligatoire si `accepte` vaut `false` }
+        commentaire: { type: string }
+
+  responses:
+
+    EnveloppeVide:
+      description: Succès sans données
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Enveloppe" }
+
+    Erreur:
+      description: Erreur
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/EnveloppeErreur" }
+
+    AccesRefuse:
+      description: "`DEMANDE_ACCES_REFUSE` — votre opérateur n'a pas les droits sur cette demande ou cette action"
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/EnveloppeErreur" }
+
+    NonTrouvee:
+      description: "`DEMANDE_NON_TROUVEE` — aucune demande avec cet identifiant"
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/EnveloppeErreur" }
+
+    EtapeInvalide:
+      description: |
+        `ETAPE_INVALIDE` — l'étape n'est pas celle attendue, elle a déjà été traitée,
+        ou elle doit passer par un autre endpoint (le message le nomme).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/EnveloppeErreur" }
+
+    EtapeTraitee:
+      description: |
+        Étape traitée. **La réponse porte l'étape *précédant* la transition** : l'avancement se
+        constate en scrutant la file suivante, jamais en lisant ce corps.
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: "#/components/schemas/Enveloppe"
+              - type: object
+                properties:
+                  data: { $ref: "#/components/schemas/Demande" }
+
+    UneDemande:
+      description: Une demande
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: "#/components/schemas/Enveloppe"
+              - type: object
+                properties:
+                  data: { $ref: "#/components/schemas/Demande" }
+
+    ListeDemandes:
+      description: Liste de demandes
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: "#/components/schemas/Enveloppe"
+              - type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Demande" }
+
+    UnIncident:
+      description: Un incident
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: "#/components/schemas/Enveloppe"
+              - type: object
+                properties:
+                  data: { $ref: "#/components/schemas/Incident" }
+
+    ListeIncidents:
+      description: Liste d'incidents
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: "#/components/schemas/Enveloppe"
+              - type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Incident" }
+
+    ListeOperateurs:
+      description: Liste des opérateurs
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: "#/components/schemas/Enveloppe"
+              - type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Operateur" }
+
+    ListeMotifsRejet:
+      description: Liste des motifs de rejet
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: "#/components/schemas/Enveloppe"
+              - type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string }
+                        motif: { type: string, example: Dernier portage inférieur à 3 mois }
+
+    ListeTypes:
+      description: Liste de types
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: "#/components/schemas/Enveloppe"
+              - type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string }
+                        type: { type: string }
+
+    ListeTypesIncident:
+      description: Liste des types d'incident
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: "#/components/schemas/Enveloppe"
+              - type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string }
+                        libelle: { type: string, example: Gateway }
+                        figeSysteme: { type: boolean }

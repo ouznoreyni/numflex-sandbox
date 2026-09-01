@@ -190,6 +190,29 @@ Rappel du contrat : sur une demande REVERSE, la `CONFIRMATION` est attendue de *
 opérateurs, destinataire compris, et la `COMPLETION` est **réservée à l'ARTP** — aucun opérateur ne
 peut la déclencher par `/demandes/traitement`.
 
+## Swagger
+
+```bash
+make swagger      # → http://localhost:8081/swagger.html
+```
+
+`docs/openapi.yaml` décrit les 35 opérations d'après le guide v2 : 33 routes gateway et les deux
+routes d'authentification. `make swagger-build` régénère `openapi.json` et `swagger.html` à partir
+de ce seul fichier.
+
+**La documentation est servie hors de la gateway, sur un port distinct, et c'est délibéré** : le
+sandbox ne doit exposer que les 33 routes du contrat — aucune route de doc, de santé ni de metrics,
+sinon il ne présente plus la même surface que la plateforme réelle.
+
+Deux conséquences à connaître :
+
+- **« Try it out » ne fonctionne pas** depuis cette page. Le sandbox n'envoie aucun en-tête CORS,
+  comme la plateforme réelle, et l'appel part d'une autre origine (`8081` → `8080`). Pour appeler
+  réellement, utilisez la collection Postman ou `curl`.
+- **La spécification décrit le contrat**, donc le sandbox lancé en `FIDELITY=contract`. En
+  `FIDELITY=real` — le défaut — les réponses d'erreur diffèrent ; chaque description signale
+  l'écart par son identifiant SIT.
+
 ## Postman
 
 `postman/` contient une collection calquée sur celle de l'ARTP et son environnement — les 33 routes
