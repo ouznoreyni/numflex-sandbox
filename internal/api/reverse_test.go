@@ -5,10 +5,10 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/ouznoreyni/numflex-sandbox/internal/config"
+	"github.com/ouznoreyni/numflex-sandbox/internal/engine"
+	"github.com/ouznoreyni/numflex-sandbox/internal/seed"
 	"github.com/stretchr/testify/require"
-	"github.com/yas/numflex-sandbox/internal/config"
-	"github.com/yas/numflex-sandbox/internal/engine"
-	"github.com/yas/numflex-sandbox/internal/seed"
 )
 
 func TestSoumissionReverseParLOperateurDOrigine(t *testing.T) {

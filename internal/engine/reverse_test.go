@@ -5,10 +5,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ouznoreyni/numflex-sandbox/internal/config"
+	"github.com/ouznoreyni/numflex-sandbox/internal/seed"
+	"github.com/ouznoreyni/numflex-sandbox/internal/store"
 	"github.com/stretchr/testify/require"
-	"github.com/yas/numflex-sandbox/internal/config"
-	"github.com/yas/numflex-sandbox/internal/seed"
-	"github.com/yas/numflex-sandbox/internal/store"
 )
 
 func insererReverse(t *testing.T, db *store.DB, id string) {

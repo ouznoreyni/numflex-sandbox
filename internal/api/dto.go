@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/yas/numflex-sandbox/internal/apperr"
-	"github.com/yas/numflex-sandbox/internal/domain"
+	"github.com/ouznoreyni/numflex-sandbox/internal/apperr"
+	"github.com/ouznoreyni/numflex-sandbox/internal/domain"
 )
 
 // demandeDTO sérialise une demande au format du guide §7.3, commun à tous les

@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ouznoreyni/numflex-sandbox/internal/config"
+	"github.com/ouznoreyni/numflex-sandbox/internal/seed"
 	"github.com/stretchr/testify/require"
-	"github.com/yas/numflex-sandbox/internal/config"
-	"github.com/yas/numflex-sandbox/internal/seed"
 )
 
 // TestPortageCompletJusquATermine rejoue le §10 du guide : ORANGE → YAS, avec la

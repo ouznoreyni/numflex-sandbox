@@ -3,7 +3,7 @@ package seed
 import (
 	"context"
 
-	"github.com/yas/numflex-sandbox/internal/store"
+	"github.com/ouznoreyni/numflex-sandbox/internal/store"
 )
 
 func init() {

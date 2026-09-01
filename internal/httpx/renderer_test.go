@@ -10,9 +10,9 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/ouznoreyni/numflex-sandbox/internal/apperr"
+	"github.com/ouznoreyni/numflex-sandbox/internal/config"
 	"github.com/stretchr/testify/require"
-	"github.com/yas/numflex-sandbox/internal/apperr"
-	"github.com/yas/numflex-sandbox/internal/config"
 )
 
 func contexte(fid config.Fidelity, chemin string) (*gin.Context, *httptest.ResponseRecorder, *Renderer) {

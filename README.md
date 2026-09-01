@@ -1,7 +1,7 @@
 # NumFlex Sandbox
 
 Un double local de l'**API Gateway NumFlex de l'ARTP** (guide v2 du 2026-08-10), écrit pour que
-l'intégration YAS puisse être développée et testée sans dépendre de la disponibilité de la recette
+l'intégration puisse être développée et testée sans dépendre de la disponibilité de la recette
 ARTP.
 
 ## Ce que c'est
@@ -273,7 +273,7 @@ C'est le profil utilisé par `make test`.
 
 ## Anomalies reproduites
 
-Toutes portent leur identifiant du rapport SIT `YAS-PORT-SIT-001`.
+Toutes portent leur identifiant du rapport SIT.
 
 | Identifiant | Comportement reproduit |
 |---|---|
@@ -398,10 +398,3 @@ traiter l'`ACTIVATION` et la `COMPLETION`, et lire `/demandes/in`. Il faut se r�
 `/demandes/out`, restitution, reverse — et en `orange` ou `expresso` pour la confirmation, attendue
 de tous **sauf** le destinataire. La description de chaque requête concernée le rappelle. Un appel
 émis avec le mauvais compte ne renvoie pas un refus lisible mais un `500` (ANO-003).
-
-## Sources
-
-- Guide d'utilisation — API Gateway NumFlex **v2**, ARTP, 2026-08-10 — le contrat en vigueur.
-- `YAS-PORT-SIT-001` v0.3 — rapport SIT : les 22 anomalies et les 53 cas de test.
-- `YAS-PORT-TBRD-001` v1.2 — Technical BRD portabilité.
-- Spécification du sandbox : `docs/superpowers/specs/2026-08-29-numflex-sandbox-design.md`.

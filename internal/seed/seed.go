@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/yas/numflex-sandbox/internal/store"
+	"github.com/ouznoreyni/numflex-sandbox/internal/store"
 	"golang.org/x/crypto/bcrypt"
 )
 

@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- **Module Go** : `github.com/yas/numflex-sandbox`. La directive `go` de `go.mod` suit ce
+- **Module Go** : `github.com/ouznoreyni/numflex-sandbox`. La directive `go` de `go.mod` suit ce
   qu'exigent les dépendances courantes — elle vaut `1.24` après la Task 1 et monte à `1.25`
   dès qu'une tâche importe gin, pgx ou x/crypto. Ne jamais épingler une dépendance à une
   version ancienne dans le seul but de tenir un plancher plus bas.
@@ -92,7 +92,7 @@
 - [ ] **Step 1 : Initialiser le module et les dépendances**
 
 ```bash
-go mod init github.com/yas/numflex-sandbox
+go mod init github.com/ouznoreyni/numflex-sandbox
 go get github.com/gin-gonic/gin@latest
 go get github.com/jackc/pgx/v5@latest
 go get github.com/golang-jwt/jwt/v5@latest
@@ -495,7 +495,7 @@ package main
 import (
 	"log"
 
-	"github.com/yas/numflex-sandbox/internal/config"
+	"github.com/ouznoreyni/numflex-sandbox/internal/config"
 )
 
 func main() {
@@ -909,7 +909,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"github.com/yas/numflex-sandbox/internal/store"
+	"github.com/ouznoreyni/numflex-sandbox/internal/store"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -1052,7 +1052,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/yas/numflex-sandbox/internal/store"
+	"github.com/ouznoreyni/numflex-sandbox/internal/store"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -1228,7 +1228,7 @@ package seed
 import (
 	"context"
 
-	"github.com/yas/numflex-sandbox/internal/store"
+	"github.com/ouznoreyni/numflex-sandbox/internal/store"
 )
 
 func init() {
@@ -1238,7 +1238,7 @@ func init() {
 }
 ```
 
-Les paquets de test qui ont besoin du seed importent `_ "github.com/yas/numflex-sandbox/internal/seed"`. Le test du paquet `seed` lui-même l'obtient par son propre `init`.
+Les paquets de test qui ont besoin du seed importent `_ "github.com/ouznoreyni/numflex-sandbox/internal/seed"`. Le test du paquet `seed` lui-même l'obtient par son propre `init`.
 
 - [ ] **Step 5 : Lancer les tests, vérifier qu'ils passent**
 
@@ -1294,8 +1294,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
-	"github.com/yas/numflex-sandbox/internal/apperr"
-	"github.com/yas/numflex-sandbox/internal/config"
+	"github.com/ouznoreyni/numflex-sandbox/internal/apperr"
+	"github.com/ouznoreyni/numflex-sandbox/internal/config"
 )
 
 func contexte(fid config.Fidelity, chemin string) (*gin.Context, *httptest.ResponseRecorder, *Renderer) {
@@ -1683,8 +1683,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/yas/numflex-sandbox/internal/apperr"
-	"github.com/yas/numflex-sandbox/internal/config"
+	"github.com/ouznoreyni/numflex-sandbox/internal/apperr"
+	"github.com/ouznoreyni/numflex-sandbox/internal/config"
 )
 
 type Renderer struct {
@@ -1848,10 +1848,10 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"github.com/yas/numflex-sandbox/internal/config"
-	"github.com/yas/numflex-sandbox/internal/httpx"
-	_ "github.com/yas/numflex-sandbox/internal/seed"
-	"github.com/yas/numflex-sandbox/internal/store"
+	"github.com/ouznoreyni/numflex-sandbox/internal/config"
+	"github.com/ouznoreyni/numflex-sandbox/internal/httpx"
+	_ "github.com/ouznoreyni/numflex-sandbox/internal/seed"
+	"github.com/ouznoreyni/numflex-sandbox/internal/store"
 )
 
 type harnais struct {
@@ -2086,9 +2086,9 @@ import (
 	"context"
 
 	"github.com/gin-gonic/gin"
-	"github.com/yas/numflex-sandbox/internal/config"
-	"github.com/yas/numflex-sandbox/internal/httpx"
-	"github.com/yas/numflex-sandbox/internal/store"
+	"github.com/ouznoreyni/numflex-sandbox/internal/config"
+	"github.com/ouznoreyni/numflex-sandbox/internal/httpx"
+	"github.com/ouznoreyni/numflex-sandbox/internal/store"
 )
 
 type Deps struct {
@@ -2133,9 +2133,9 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/yas/numflex-sandbox/internal/apperr"
-	"github.com/yas/numflex-sandbox/internal/auth"
-	"github.com/yas/numflex-sandbox/internal/httpx"
+	"github.com/ouznoreyni/numflex-sandbox/internal/apperr"
+	"github.com/ouznoreyni/numflex-sandbox/internal/auth"
+	"github.com/ouznoreyni/numflex-sandbox/internal/httpx"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -2388,7 +2388,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/yas/numflex-sandbox/internal/apperr"
+	"github.com/ouznoreyni/numflex-sandbox/internal/apperr"
 )
 
 func (d *Deps) routesReferentiels(g *gin.RouterGroup) {
@@ -2591,7 +2591,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5"
-	"github.com/yas/numflex-sandbox/internal/apperr"
+	"github.com/ouznoreyni/numflex-sandbox/internal/apperr"
 )
 
 var motifMSISDN = regexp.MustCompile(`^[0-9]{9}$`)
@@ -2747,7 +2747,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"github.com/yas/numflex-sandbox/internal/apperr"
+	"github.com/ouznoreyni/numflex-sandbox/internal/apperr"
 )
 
 const (
@@ -3018,7 +3018,7 @@ package domain
 import (
 	"fmt"
 
-	"github.com/yas/numflex-sandbox/internal/apperr"
+	"github.com/ouznoreyni/numflex-sandbox/internal/apperr"
 )
 
 var sequence = []Etape{
@@ -3190,10 +3190,10 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"github.com/yas/numflex-sandbox/internal/config"
-	"github.com/yas/numflex-sandbox/internal/domain"
-	"github.com/yas/numflex-sandbox/internal/seed"
-	"github.com/yas/numflex-sandbox/internal/store"
+	"github.com/ouznoreyni/numflex-sandbox/internal/config"
+	"github.com/ouznoreyni/numflex-sandbox/internal/domain"
+	"github.com/ouznoreyni/numflex-sandbox/internal/seed"
+	"github.com/ouznoreyni/numflex-sandbox/internal/store"
 )
 
 // insererDemande crée une demande directement en base, à l'étape voulue.
@@ -3407,8 +3407,8 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/yas/numflex-sandbox/internal/config"
-	"github.com/yas/numflex-sandbox/internal/store"
+	"github.com/ouznoreyni/numflex-sandbox/internal/config"
+	"github.com/ouznoreyni/numflex-sandbox/internal/store"
 )
 
 type Engine struct {
@@ -3554,7 +3554,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/yas/numflex-sandbox/internal/domain"
+	"github.com/ouznoreyni/numflex-sandbox/internal/domain"
 )
 
 // AppliquerTransition solde l'étape courante et fait passer la demande à la
@@ -3885,7 +3885,7 @@ package domain
 import (
 	"time"
 
-	"github.com/yas/numflex-sandbox/internal/apperr"
+	"github.com/ouznoreyni/numflex-sandbox/internal/apperr"
 )
 
 const (
@@ -3951,7 +3951,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"github.com/yas/numflex-sandbox/internal/seed"
+	"github.com/ouznoreyni/numflex-sandbox/internal/seed"
 )
 
 func corpsParticulier(numero string) map[string]any {
@@ -4106,7 +4106,7 @@ func TestCreationParticulierEnModeContratRendUnCodeMetier(t *testing.T) {
 }
 ```
 
-Ajouter l'import `"github.com/yas/numflex-sandbox/internal/config"` au fichier de test.
+Ajouter l'import `"github.com/ouznoreyni/numflex-sandbox/internal/config"` au fichier de test.
 
 - [ ] **Step 5 : Lancer les tests, vérifier qu'ils échouent**
 
@@ -4127,9 +4127,9 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/yas/numflex-sandbox/internal/apperr"
-	"github.com/yas/numflex-sandbox/internal/domain"
-	"github.com/yas/numflex-sandbox/internal/oid"
+	"github.com/ouznoreyni/numflex-sandbox/internal/apperr"
+	"github.com/ouznoreyni/numflex-sandbox/internal/domain"
+	"github.com/ouznoreyni/numflex-sandbox/internal/oid"
 )
 
 // routesCreation est complétée au fil des tâches : /demandes/entreprise en
@@ -4329,7 +4329,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"github.com/yas/numflex-sandbox/internal/seed"
+	"github.com/ouznoreyni/numflex-sandbox/internal/seed"
 )
 
 func corpsEntreprise(porteur string, flotte []string) map[string]any {
@@ -4528,7 +4528,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"github.com/yas/numflex-sandbox/internal/seed"
+	"github.com/ouznoreyni/numflex-sandbox/internal/seed"
 )
 
 func TestRestitutionNominale(t *testing.T) {
@@ -4838,8 +4838,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5"
-	"github.com/yas/numflex-sandbox/internal/apperr"
-	"github.com/yas/numflex-sandbox/internal/domain"
+	"github.com/ouznoreyni/numflex-sandbox/internal/apperr"
+	"github.com/ouznoreyni/numflex-sandbox/internal/domain"
 )
 
 func (d *Deps) routesLecture(g *gin.RouterGroup) {
@@ -4962,7 +4962,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"github.com/yas/numflex-sandbox/internal/seed"
+	"github.com/ouznoreyni/numflex-sandbox/internal/seed"
 )
 
 func TestAcceptationNominale(t *testing.T) {
@@ -5297,7 +5297,7 @@ func TestDejaConfirmeesTraceLaSourceEnModeContrat(t *testing.T) {
 }
 ```
 
-Ajouter l'import `"github.com/yas/numflex-sandbox/internal/config"`.
+Ajouter l'import `"github.com/ouznoreyni/numflex-sandbox/internal/config"`.
 
 - [ ] **Step 2 : Lancer les tests, vérifier qu'ils échouent**
 
@@ -5354,7 +5354,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"github.com/yas/numflex-sandbox/internal/config"
+	"github.com/ouznoreyni/numflex-sandbox/internal/config"
 )
 
 func TestTraitementDesactivationParLaSource(t *testing.T) {
@@ -5533,8 +5533,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/yas/numflex-sandbox/internal/apperr"
-	"github.com/yas/numflex-sandbox/internal/domain"
+	"github.com/ouznoreyni/numflex-sandbox/internal/apperr"
+	"github.com/ouznoreyni/numflex-sandbox/internal/domain"
 )
 
 func (d *Deps) routesTraitement(g *gin.RouterGroup) {
@@ -5711,7 +5711,7 @@ func TestAnnulationEnModeContrat(t *testing.T) {
 }
 ```
 
-Ajouter l'import `"github.com/yas/numflex-sandbox/internal/config"`.
+Ajouter l'import `"github.com/ouznoreyni/numflex-sandbox/internal/config"`.
 
 - [ ] **Step 2 : Lancer les tests, vérifier qu'ils échouent**
 
@@ -5763,7 +5763,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"github.com/yas/numflex-sandbox/internal/seed"
+	"github.com/ouznoreyni/numflex-sandbox/internal/seed"
 )
 
 func TestDeclarationIncidentGateway(t *testing.T) {
@@ -5937,7 +5937,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"github.com/yas/numflex-sandbox/internal/seed"
+	"github.com/ouznoreyni/numflex-sandbox/internal/seed"
 )
 
 func TestSoumissionReverseParLOperateurDOrigine(t *testing.T) {
@@ -6000,9 +6000,9 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"github.com/yas/numflex-sandbox/internal/config"
-	"github.com/yas/numflex-sandbox/internal/seed"
-	"github.com/yas/numflex-sandbox/internal/store"
+	"github.com/ouznoreyni/numflex-sandbox/internal/config"
+	"github.com/ouznoreyni/numflex-sandbox/internal/seed"
+	"github.com/ouznoreyni/numflex-sandbox/internal/store"
 )
 
 func insererReverse(t *testing.T, db *store.DB, id string) {
@@ -6129,8 +6129,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/yas/numflex-sandbox/internal/oid"
-	"github.com/yas/numflex-sandbox/internal/store"
+	"github.com/ouznoreyni/numflex-sandbox/internal/oid"
+	"github.com/ouznoreyni/numflex-sandbox/internal/store"
 )
 
 // ValiderReverse est un acte de l'ARTP, hors périmètre de l'API gateway (§7.6).
@@ -6313,8 +6313,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"github.com/yas/numflex-sandbox/internal/config"
-	"github.com/yas/numflex-sandbox/internal/seed"
+	"github.com/ouznoreyni/numflex-sandbox/internal/config"
+	"github.com/ouznoreyni/numflex-sandbox/internal/seed"
 )
 
 // TestPortageCompletJusquATermine rejoue le §10 du guide : ORANGE → YAS, avec la

@@ -9,12 +9,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ouznoreyni/numflex-sandbox/internal/config"
+	"github.com/ouznoreyni/numflex-sandbox/internal/engine"
+	"github.com/ouznoreyni/numflex-sandbox/internal/httpx"
+	_ "github.com/ouznoreyni/numflex-sandbox/internal/seed"
+	"github.com/ouznoreyni/numflex-sandbox/internal/store"
 	"github.com/stretchr/testify/require"
-	"github.com/yas/numflex-sandbox/internal/config"
-	"github.com/yas/numflex-sandbox/internal/engine"
-	"github.com/yas/numflex-sandbox/internal/httpx"
-	_ "github.com/yas/numflex-sandbox/internal/seed"
-	"github.com/yas/numflex-sandbox/internal/store"
 )
 
 type harnais struct {
