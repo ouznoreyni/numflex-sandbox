@@ -95,6 +95,14 @@ func RequestAccessDenied(message string) *Fault {
 	return New(FaultAccess, "DEMANDE_ACCES_REFUSE", message)
 }
 
+// IncidentNotFound — [HYP] the guide does not fix a non-existent incident's
+// message. Decision 4 of Task 16: reuse the demande catalogue's Kind, with
+// the incident wording — RequestNotFound() cannot be reused as-is, its
+// message being frozen.
+func IncidentNotFound() *Fault {
+	return New(FaultNotFound, "DEMANDE_NON_TROUVEE", "Incident introuvable")
+}
+
 // --- Flotte (§9) ------------------------------------------------------------
 
 func FleetEmpty() *Fault {

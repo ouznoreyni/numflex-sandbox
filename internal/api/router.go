@@ -126,8 +126,28 @@ func NewRouter(d *Deps) *gin.Engine {
 	g.POST("/demandes/traitement", portingCtrl.Traitement)
 	g.POST("/demandes/:id/annuler", portingCtrl.Annulation)
 
-	d.routesIncidents(g) // Task 18
-	d.routesReverse(g)   // Task 19
+	// Task 16 : les six routes d'incidents (§7.12) passent en clean
+	// architecture — un contrôleur qui délègue à trois interactors
+	// (internal/usecase/incident), partagés par les familles gateway et
+	// interne, au-dessus d'un IncidentGateway. Construit une seule fois ici,
+	// comme les huit contrôleurs précédents.
+	incidentCtrl := d.incidentController()
+	g.POST("/incidents/gateway", incidentCtrl.DeclarerGateway)
+	g.POST("/incidents/interne", incidentCtrl.DeclarerInterne)
+	g.POST("/incidents/gateway/:id/resoudre", incidentCtrl.ResoudreGateway)
+	g.POST("/incidents/interne/:id/resoudre", incidentCtrl.ResoudreInterne)
+	g.GET("/incidents/gateway/mes-incidents", incidentCtrl.MesIncidentsGateway)
+	g.GET("/incidents/interne/mes-incidents", incidentCtrl.MesIncidentsInterne)
+
+	// Task 16 : les deux routes de reverse (§6) passent en clean
+	// architecture — un contrôleur qui délègue à deux interactors
+	// (internal/usecase/reverse), au-dessus d'un NumberGateway (partagé en
+	// forme avec creationController) et d'un ReverseGateway. Construit une
+	// seule fois ici, comme les neuf contrôleurs précédents. Aucune route
+	// d'annulation : le guide l'exclut explicitement pour le reverse.
+	reverseCtrl := d.reverseController()
+	g.POST("/reverse-requests", reverseCtrl.Soumission)
+	g.GET("/reverse-requests/mes-demandes", reverseCtrl.MesDemandes)
 
 	// Hors gateway, et hors contrat ARTP : la purge des données de test. Le
 	// groupe n'est monté que si SANDBOX_ADMIN le demande — sinon la route
@@ -137,7 +157,8 @@ func NewRouter(d *Deps) *gin.Engine {
 	// pas à la plateforme, un chemin inconnu sous /api/sandbox/v1 doit donc
 	// bien répondre 404 plutôt que 401.
 	if d.Cfg.SandboxAdmin {
-		d.routesSandbox(r.Group(prefixeSandbox, authentifier))
+		sandboxCtrl := d.sandboxController()
+		r.Group(prefixeSandbox, authentifier).DELETE("/demandes", sandboxCtrl.Purge)
 	}
 
 	return r

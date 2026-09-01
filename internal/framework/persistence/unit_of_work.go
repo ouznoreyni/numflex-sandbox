@@ -45,6 +45,9 @@ func (u *unitOfWork) Do(ctx context.Context, fn func(port.Repositories) error) (
 		OTP:           postgres.NewOTPGateway(tx),
 		Requests:      postgres.NewRequestGateway(tx),
 		Confirmations: postgres.NewConfirmationGateway(tx),
+		Reverse:       postgres.NewReverseGateway(tx),
+		Incidents:     postgres.NewIncidentGateway(tx),
+		Sandbox:       postgres.NewSandboxGateway(tx),
 	}
 	err = fn(repos)
 	return err

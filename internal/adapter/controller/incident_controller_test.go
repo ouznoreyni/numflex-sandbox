@@ -1,25 +1,43 @@
-package api
+package controller_test
+
+// These 9 test functions are moved, unchanged in assertion, from the
+// deleted internal/api/incidents_test.go (Task 16). They still exercise the
+// real, live router — routerharness.NewRouterHarness wraps api.NewRouter,
+// wired exactly as cmd/server/main.go wires it — so a green run here proves
+// a real HTTP request to /incidents/{gateway,interne} goes through the new
+// IncidentController, its three interactors (internal/usecase/incident) and
+// port.UnitOfWork, not through any leftover handler.
 
 import (
 	"net/http"
 	"testing"
 
-	"github.com/ouznoreyni/numflex-sandbox/internal/framework/config"
-	"github.com/ouznoreyni/numflex-sandbox/internal/framework/seed"
+	"github.com/ouznoreyni/numflex-sandbox/internal/testsupport/routerharness"
 	"github.com/stretchr/testify/require"
 )
 
+// typeIncidentGateway and typeIncidentTechnique are
+// internal/framework/seed.TypeIncidentGateway and .TypeIncidentTechnique,
+// recopiés en littéral : un test de contrôleur ne peut pas importer
+// internal/framework (règle de dépendance) — même précédent
+// qu'operateurOrange (creation_particulier_test.go) et operateurExpresso
+// (confirmation_boundary_test.go).
+const (
+	typeIncidentGateway   = "65abc456def001"
+	typeIncidentTechnique = "65abc456def002"
+)
+
 func TestDeclarationIncidentGateway(t *testing.T) {
-	h := nouveauHarnais(t)
-	rep, corps := h.appel(http.MethodPost, "/api/gateway/v1/incidents/gateway",
-		h.jeton("orange", "orange2026"),
+	h := routerharness.NewRouterHarness(t)
+	rep, corps := h.Appel(http.MethodPost, "/api/gateway/v1/incidents/gateway",
+		h.Jeton("orange", "orange2026"),
 		map[string]any{"commentaire": "Timeout de connexion à l'API gateway numFlex"})
 
 	require.Equal(t, http.StatusCreated, rep.StatusCode)
 	require.Equal(t, "Incident déclaré avec succès", corps["message"])
 
 	data := corps["data"].(map[string]any)
-	require.Equal(t, seed.TypeIncidentGateway, data["typeIncidentId"])
+	require.Equal(t, typeIncidentGateway, data["typeIncidentId"])
 	require.Equal(t, "Gateway", data["type"])
 	require.Equal(t, false, data["figeSysteme"])
 	require.Equal(t, "Timeout de connexion à l'API gateway numFlex", data["description"])
@@ -29,52 +47,52 @@ func TestDeclarationIncidentGateway(t *testing.T) {
 
 func TestDeclarationIncidentInterneGelLaPlace(t *testing.T) {
 	// BR-012 : un incident interne bloque le traitement pour tous les opérateurs.
-	h := nouveauHarnais(t)
-	id := h.creerPortage("771000001")
-	h.avancerA(id, "DESACTIVATION")
+	h := routerharness.NewRouterHarness(t)
+	id := creerPortage(h, "771000001")
+	avancerA(h, id, "DESACTIVATION")
 
-	rep, corps := h.appel(http.MethodPost, "/api/gateway/v1/incidents/interne",
-		h.jeton("expresso", "expresso2026"),
+	rep, corps := h.Appel(http.MethodPost, "/api/gateway/v1/incidents/interne",
+		h.Jeton("expresso", "expresso2026"),
 		map[string]any{"commentaire": "Panne du système de routage interne, portages bloqués"})
 	require.Equal(t, http.StatusCreated, rep.StatusCode)
 	require.Equal(t, true, corps["data"].(map[string]any)["figeSysteme"])
 	incidentID := corps["data"].(map[string]any)["id"].(string)
 
 	// ORANGE, étranger à l'incident, ne peut plus traiter.
-	rep, _ = h.appel(http.MethodPost, "/api/gateway/v1/demandes/traitement",
-		h.jeton("orange", "orange2026"), map[string]any{"idDemande": id})
+	rep, _ = h.Appel(http.MethodPost, "/api/gateway/v1/demandes/traitement",
+		h.Jeton("orange", "orange2026"), map[string]any{"idDemande": id})
 	require.Equal(t, http.StatusInternalServerError, rep.StatusCode)
 
 	// Résolution par le déclarant : la place repart.
-	rep, _ = h.appel(http.MethodPost,
+	rep, _ = h.Appel(http.MethodPost,
 		"/api/gateway/v1/incidents/interne/"+incidentID+"/resoudre",
-		h.jeton("expresso", "expresso2026"), map[string]any{"commentaire": "Service rétabli"})
+		h.Jeton("expresso", "expresso2026"), map[string]any{"commentaire": "Service rétabli"})
 	require.Equal(t, http.StatusOK, rep.StatusCode)
 
-	rep, _ = h.appel(http.MethodPost, "/api/gateway/v1/demandes/traitement",
-		h.jeton("orange", "orange2026"), map[string]any{"idDemande": id})
+	rep, _ = h.Appel(http.MethodPost, "/api/gateway/v1/demandes/traitement",
+		h.Jeton("orange", "orange2026"), map[string]any{"idDemande": id})
 	require.Equal(t, http.StatusOK, rep.StatusCode)
 }
 
 func TestSeulLeDeclarantResout(t *testing.T) {
-	h := nouveauHarnais(t)
-	_, corps := h.appel(http.MethodPost, "/api/gateway/v1/incidents/gateway",
-		h.jeton("orange", "orange2026"), map[string]any{"commentaire": "timeout"})
+	h := routerharness.NewRouterHarness(t)
+	_, corps := h.Appel(http.MethodPost, "/api/gateway/v1/incidents/gateway",
+		h.Jeton("orange", "orange2026"), map[string]any{"commentaire": "timeout"})
 	id := corps["data"].(map[string]any)["id"].(string)
 
-	rep, _ := h.appel(http.MethodPost, "/api/gateway/v1/incidents/gateway/"+id+"/resoudre",
-		h.jeton("yas", "yas2026"), map[string]any{"commentaire": "rétabli"})
+	rep, _ := h.Appel(http.MethodPost, "/api/gateway/v1/incidents/gateway/"+id+"/resoudre",
+		h.Jeton("yas", "yas2026"), map[string]any{"commentaire": "rétabli"})
 	require.Equal(t, http.StatusInternalServerError, rep.StatusCode)
 }
 
 func TestResolutionParLeMauvaisSegment(t *testing.T) {
-	h := nouveauHarnais(t)
-	_, corps := h.appel(http.MethodPost, "/api/gateway/v1/incidents/interne",
-		h.jeton("orange", "orange2026"), map[string]any{"commentaire": "panne"})
+	h := routerharness.NewRouterHarness(t)
+	_, corps := h.Appel(http.MethodPost, "/api/gateway/v1/incidents/interne",
+		h.Jeton("orange", "orange2026"), map[string]any{"commentaire": "panne"})
 	id := corps["data"].(map[string]any)["id"].(string)
 
-	rep, corps2 := h.appel(http.MethodPost, "/api/gateway/v1/incidents/gateway/"+id+"/resoudre",
-		h.jeton("orange", "orange2026"), map[string]any{"commentaire": "rétabli"})
+	rep, corps2 := h.Appel(http.MethodPost, "/api/gateway/v1/incidents/gateway/"+id+"/resoudre",
+		h.Jeton("orange", "orange2026"), map[string]any{"commentaire": "rétabli"})
 
 	// Le bon endpoint est porté par le detail du problem+json, pas par un
 	// fieldErrors : `id` est une variable de chemin, pas un champ de DTO, et une
@@ -85,14 +103,14 @@ func TestResolutionParLeMauvaisSegment(t *testing.T) {
 }
 
 func TestUnSeulIncidentInterneOuvertParOperateur(t *testing.T) {
-	h := nouveauHarnais(t)
-	jeton := h.jeton("orange", "orange2026")
+	h := routerharness.NewRouterHarness(t)
+	jeton := h.Jeton("orange", "orange2026")
 
-	rep, _ := h.appel(http.MethodPost, "/api/gateway/v1/incidents/interne", jeton,
+	rep, _ := h.Appel(http.MethodPost, "/api/gateway/v1/incidents/interne", jeton,
 		map[string]any{"commentaire": "panne 1"})
 	require.Equal(t, http.StatusCreated, rep.StatusCode)
 
-	rep, _ = h.appel(http.MethodPost, "/api/gateway/v1/incidents/interne", jeton,
+	rep, _ = h.Appel(http.MethodPost, "/api/gateway/v1/incidents/interne", jeton,
 		map[string]any{"commentaire": "panne 2"})
 	require.Equal(t, http.StatusInternalServerError, rep.StatusCode)
 }
@@ -103,43 +121,43 @@ func TestUnSeulIncidentInterneOuvertParOperateur(t *testing.T) {
 // ce test, une refonte qui étendrait par erreur la garde `if figeSysteme` aux
 // incidents gateway ne ferait échouer aucun test existant.
 func TestPlusieursIncidentsGatewayOuvertsAutorises(t *testing.T) {
-	h := nouveauHarnais(t)
-	jeton := h.jeton("orange", "orange2026")
+	h := routerharness.NewRouterHarness(t)
+	jeton := h.Jeton("orange", "orange2026")
 
-	rep, _ := h.appel(http.MethodPost, "/api/gateway/v1/incidents/gateway", jeton,
+	rep, _ := h.Appel(http.MethodPost, "/api/gateway/v1/incidents/gateway", jeton,
 		map[string]any{"commentaire": "timeout 1"})
 	require.Equal(t, http.StatusCreated, rep.StatusCode)
 
-	rep, _ = h.appel(http.MethodPost, "/api/gateway/v1/incidents/gateway", jeton,
+	rep, _ = h.Appel(http.MethodPost, "/api/gateway/v1/incidents/gateway", jeton,
 		map[string]any{"commentaire": "timeout 2"})
 	require.Equal(t, http.StatusCreated, rep.StatusCode)
 }
 
 func TestMesIncidentsSontCloisonnesParSegmentEtParOperateur(t *testing.T) {
-	h := nouveauHarnais(t)
-	h.appel(http.MethodPost, "/api/gateway/v1/incidents/gateway",
-		h.jeton("orange", "orange2026"), map[string]any{"commentaire": "timeout"})
-	h.appel(http.MethodPost, "/api/gateway/v1/incidents/interne",
-		h.jeton("orange", "orange2026"), map[string]any{"commentaire": "panne"})
+	h := routerharness.NewRouterHarness(t)
+	h.Appel(http.MethodPost, "/api/gateway/v1/incidents/gateway",
+		h.Jeton("orange", "orange2026"), map[string]any{"commentaire": "timeout"})
+	h.Appel(http.MethodPost, "/api/gateway/v1/incidents/interne",
+		h.Jeton("orange", "orange2026"), map[string]any{"commentaire": "panne"})
 
-	jetonOrange := h.jeton("orange", "orange2026")
-	require.Len(t, h.liste("/api/gateway/v1/incidents/gateway/mes-incidents", jetonOrange), 1)
-	require.Len(t, h.liste("/api/gateway/v1/incidents/interne/mes-incidents", jetonOrange), 1)
+	jetonOrange := h.Jeton("orange", "orange2026")
+	require.Len(t, h.Liste("/api/gateway/v1/incidents/gateway/mes-incidents", jetonOrange), 1)
+	require.Len(t, h.Liste("/api/gateway/v1/incidents/interne/mes-incidents", jetonOrange), 1)
 
-	require.Empty(t, h.liste("/api/gateway/v1/incidents/gateway/mes-incidents",
-		h.jeton("yas", "yas2026")))
+	require.Empty(t, h.Liste("/api/gateway/v1/incidents/gateway/mes-incidents",
+		h.Jeton("yas", "yas2026")))
 }
 
 func TestDeclarationSansTypeIncidentId(t *testing.T) {
 	// §7.12 : le corps ne prend qu'un commentaire ; le type est résolu côté serveur.
-	h := nouveauHarnais(t)
-	rep, corps := h.appel(http.MethodPost, "/api/gateway/v1/incidents/gateway",
-		h.jeton("yas", "yas2026"),
-		map[string]any{"commentaire": "test", "typeIncidentId": seed.TypeIncidentTechnique})
+	h := routerharness.NewRouterHarness(t)
+	rep, corps := h.Appel(http.MethodPost, "/api/gateway/v1/incidents/gateway",
+		h.Jeton("yas", "yas2026"),
+		map[string]any{"commentaire": "test", "typeIncidentId": typeIncidentTechnique})
 
 	require.Equal(t, http.StatusCreated, rep.StatusCode)
 	// Le typeIncidentId fourni est ignoré : c'est l'endpoint qui décide.
-	require.Equal(t, seed.TypeIncidentGateway, corps["data"].(map[string]any)["typeIncidentId"])
+	require.Equal(t, typeIncidentGateway, corps["data"].(map[string]any)["typeIncidentId"])
 }
 
 // TestResolutionParLeMauvaisSegmentIndiqueLeBonEndpoint — §7.12 du guide :
@@ -148,16 +166,16 @@ func TestDeclarationSansTypeIncidentId(t *testing.T) {
 // c'est l'indication de l'endpoint que le guide promet, et elle doit atteindre
 // le client, pas rester dans un fieldError que l'enveloppe de contrat jette.
 func TestResolutionParLeMauvaisSegmentIndiqueLeBonEndpoint(t *testing.T) {
-	h := nouveauHarnais(t, func(c *config.Config) { c.Fidelity = config.FidelityContract })
-	jeton := h.jeton("orange", "orange2026")
+	h := routerharness.NewRouterHarness(t, routerharness.FiabiliteContrat)
+	jeton := h.Jeton("orange", "orange2026")
 
-	_, corps := h.appel(http.MethodPost, "/api/gateway/v1/incidents/gateway", jeton,
+	_, corps := h.Appel(http.MethodPost, "/api/gateway/v1/incidents/gateway", jeton,
 		map[string]any{"commentaire": "Timeout de connexion à l'API gateway numFlex"})
 	incidentID := corps["data"].(map[string]any)["id"].(string)
 
 	// L'incident est de catégorie Gateway : le résoudre via /interne est un
 	// mauvais segment.
-	rep, corps := h.appel(http.MethodPost,
+	rep, corps := h.Appel(http.MethodPost,
 		"/api/gateway/v1/incidents/interne/"+incidentID+"/resoudre", jeton,
 		map[string]any{"commentaire": "Service rétabli"})
 

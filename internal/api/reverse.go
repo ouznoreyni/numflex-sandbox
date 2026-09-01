@@ -1,197 +1,36 @@
 package api
 
 import (
-	"context"
-	"errors"
-	"net/http"
-	"regexp"
-	"time"
-
-	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5"
-	"github.com/ouznoreyni/numflex-sandbox/internal/entity"
+	"github.com/ouznoreyni/numflex-sandbox/internal/adapter/controller"
+	"github.com/ouznoreyni/numflex-sandbox/internal/adapter/gateway/postgres"
+	"github.com/ouznoreyni/numflex-sandbox/internal/framework/clock"
 	"github.com/ouznoreyni/numflex-sandbox/internal/framework/identifier"
+	"github.com/ouznoreyni/numflex-sandbox/internal/framework/persistence"
+	"github.com/ouznoreyni/numflex-sandbox/internal/usecase/reverse"
 )
 
-// motifMSISDN est le format MSISDN du contrat ARTP. Moved here from the
-// deleted internal/api/dto.go (Task 15): postReverseRequest below is its
-// last caller in this package — the OTP and creation controllers
-// (internal/adapter/controller) each carry their own independent copy.
-var motifMSISDN = regexp.MustCompile(`^[0-9]{9}$`)
+// reverseController wires the clean-architecture stack behind guide §6's
+// two routes — POST /reverse-requests, GET /reverse-requests/mes-demandes —
+// one NumberGateway (shared in shape with creationController's own build),
+// one ReverseGateway (Task 16's own addition to port.Repositories), a
+// UnitOfWork, two interactors, a presenter and a clock. NewRouter calls it
+// once, at router construction, exactly as it does the eight controllers
+// before it.
+//
+// This is the strangler pattern's next stop: internal/api/reverse.go's own
+// former self — the handlers that read and wrote through *Deps and
+// internal/api/dto.go's Deps.etatNumero directly — is gone, replaced by
+// internal/usecase/reverse's two interactors, orchestrating their one write
+// through port.UnitOfWork.Do like every other capability's own.
+func (d *Deps) reverseController() *controller.ReverseController {
+	numbers := postgres.NewNumberGateway(d.DB.Pool)
+	reverses := postgres.NewReverseGateway(d.DB.Pool)
+	uow := persistence.NewUnitOfWork(d.DB)
+	ids := identifier.NewGenerator()
+	clk := clock.New(d.Cfg.ClockSkew)
 
-// etatNumero lit l'état courant d'un numéro dans le registre et calcule
-// RequestInProgress par existence d'une demande EN_COURS qui le référence.
-// Moved here from the deleted internal/api/dto.go (Task 15): with
-// annulation.go, confirmation.go and traitement.go gone, postReverseRequest
-// below is this method's only remaining caller. Un numéro absent du
-// registre ne peut pas appartenir à l'opérateur source déclaré.
-func (d *Deps) etatNumero(ctx context.Context, msisdn string) (entity.NumberState, *entity.Fault) {
-	n := entity.NumberState{MSISDN: msisdn}
+	submit := reverse.NewSubmitReverseRequest(numbers, reverses, uow, ids, clk)
+	listOwn := reverse.NewListOwnReverseRequests(reverses)
 
-	err := d.DB.Pool.QueryRow(ctx,
-		`SELECT operateur_actuel_id, operateur_origine_id, date_dernier_portage, deja_restitue
-		   FROM numero WHERE msisdn = $1`, msisdn).
-		Scan(&n.CurrentOperatorID, &n.OriginOperatorID, &n.LastPortingDate, &n.AlreadyRestituted)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return entity.NumberState{}, entity.IncorrectSourceOperator()
-	}
-	if err != nil {
-		return entity.NumberState{}, entity.InternalError("lecture du numéro")
-	}
-
-	if err := d.DB.Pool.QueryRow(ctx, `
-		SELECT EXISTS (
-		  SELECT 1 FROM demande_numero dn
-		    JOIN demande dm ON dm.id = dn.demande_id
-		   WHERE dn.numero = $1
-		     AND dm.statut_demande = 'EN_COURS'
-		     AND NOT dn.exclu
-		     AND dn.statut <> 'REJETE')`, msisdn).
-		Scan(&n.RequestInProgress); err != nil {
-		return entity.NumberState{}, entity.InternalError("lecture des demandes en cours")
-	}
-
-	return n, nil
-}
-
-// routesReverse câble le §6 du guide : soumission et consultation des
-// demandes de reverse. Aucune route d'annulation — le guide l'exclut
-// explicitement (« il n'existe pas d'endpoint pour annuler une demande de
-// reverse »). Les actes de l'ARTP (validation, rejet, complétion) sont hors
-// périmètre de cette API : ils vivent dans internal/engine, pilotés par le
-// binaire artp et, en option, par le tick du moteur.
-func (d *Deps) routesReverse(g *gin.RouterGroup) {
-	g.POST("/reverse-requests", d.postReverseRequest)
-	g.GET("/reverse-requests/mes-demandes", d.getMesReverseRequests)
-}
-
-type reqReverse struct {
-	Numero string `json:"numero"`
-}
-
-// postReverseRequest soumet une demande de reverse. Seul l'opérateur source
-// (opérateur d'origine du numéro) peut le faire, et le numéro doit avoir été
-// porté au moins une fois — sinon il n'y a rien à reverser.
-func (d *Deps) postReverseRequest(c *gin.Context) {
-	var req reqReverse
-	if err := c.ShouldBindJSON(&req); err != nil {
-		d.R.Fail(c, entity.InvalidJSONFormat())
-		return
-	}
-	if !motifMSISDN.MatchString(req.Numero) {
-		d.R.Fail(c, entity.Validation(entity.FieldFault{
-			ObjectName: "reverseRequestDTO", Field: "numero",
-			Message: "doit correspondre à \"^[0-9]{9}$\"",
-		}))
-		return
-	}
-
-	etat, err := d.etatNumero(c, req.Numero)
-	if err != nil {
-		d.R.Fail(c, err)
-		return
-	}
-
-	appelant := Appelant(c)
-	if etat.OriginOperatorID != appelant.OperatorID {
-		d.R.Fail(c, entity.RequestAccessDenied(
-			"Seul l'opérateur source (opérateur d'origine du numéro) peut soumettre "+
-				"une demande de reverse pour ce numéro."))
-		return
-	}
-	if etat.CurrentOperatorID == etat.OriginOperatorID {
-		d.R.Fail(c, entity.NumberNotPorted())
-		return
-	}
-
-	id := identifier.New()
-	maintenant := time.Now()
-	if _, err := d.DB.Pool.Exec(c,
-		`INSERT INTO reverse_request (id, numero, operateur_id, statut, date_demande)
-		 VALUES ($1,$2,$3,'EN_ATTENTE',$4)`,
-		id, req.Numero, appelant.OperatorID, maintenant); err != nil {
-		d.R.Fail(c, entity.InternalError("création de la demande de reverse"))
-		return
-	}
-
-	dto, errDTO := d.reverseRequestDTO(c, id)
-	if errDTO != nil {
-		d.R.Fail(c, entity.InternalError("relecture de la demande de reverse"))
-		return
-	}
-	d.R.OK(c, http.StatusCreated, "Demande de reverse soumise avec succès", dto)
-}
-
-// getMesReverseRequests liste les demandes de reverse de l'appelant, tous
-// statuts confondus. Contrairement aux dix files de demande, elle accepte la
-// pagination (page, size — défauts 0 et 20), comme les listes d'incidents.
-func (d *Deps) getMesReverseRequests(c *gin.Context) {
-	page := parseQueryInt(c, "page", 0)
-	size := parseQueryInt(c, "size", 20)
-
-	appelant := Appelant(c)
-	ids, err := d.idsReverseRequests(c, appelant.OperatorID, page, size)
-	if err != nil {
-		d.R.Fail(c, entity.InternalError("lecture des demandes de reverse"))
-		return
-	}
-
-	out := make([]map[string]any, 0, len(ids))
-	for _, id := range ids {
-		dto, errDTO := d.reverseRequestDTO(c, id)
-		if errDTO != nil {
-			d.R.Fail(c, entity.InternalError("lecture de la demande de reverse"))
-			return
-		}
-		out = append(out, dto)
-	}
-	d.R.OK(c, http.StatusOK, "Demandes de reverse récupérées avec succès", out)
-}
-
-func (d *Deps) idsReverseRequests(ctx context.Context, operateurID string, page, size int) ([]string, error) {
-	rows, err := d.DB.Pool.Query(ctx,
-		`SELECT id FROM reverse_request
-		  WHERE operateur_id = $1
-		  ORDER BY date_demande
-		  LIMIT $2 OFFSET $3`, operateurID, size, page*size)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	ids := []string{}
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
-		}
-		ids = append(ids, id)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return ids, nil
-}
-
-// reverseRequestDTO sérialise une demande de reverse au format du §6 du guide :
-// {id, numero, statut, dateDemande, operateur{id,nom}}.
-func (d *Deps) reverseRequestDTO(ctx context.Context, id string) (map[string]any, error) {
-	var numero, statut, operateurID, operateurNom string
-	var dateDemande time.Time
-	err := d.DB.Pool.QueryRow(ctx, `
-		SELECT rr.numero, rr.statut, rr.date_demande, op.id, op.nom
-		  FROM reverse_request rr
-		  JOIN operateur op ON op.id = rr.operateur_id
-		 WHERE rr.id = $1`, id).
-		Scan(&numero, &statut, &dateDemande, &operateurID, &operateurNom)
-	if err != nil {
-		return nil, err
-	}
-	return map[string]any{
-		"id":          id,
-		"numero":      numero,
-		"statut":      statut,
-		"dateDemande": d.R.Skew(dateDemande),
-		"operateur":   map[string]any{"id": operateurID, "nom": operateurNom},
-	}, nil
+	return controller.NewReverseController(submit, listOwn, d.presenter(), clk)
 }

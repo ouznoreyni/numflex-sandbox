@@ -20,7 +20,15 @@ type Repositories struct {
 	// every other capability's writes here, though today it coordinates
 	// with nothing else inside the same Do.
 	Confirmations ConfirmationGateway
-	// Reverse, Incidents… are added by later tasks.
+	// Reverse carries Task 16's SubmitReverseRequest write — one
+	// reverse_request row.
+	Reverse ReverseGateway
+	// Incidents carries Task 16's DeclareIncident and ResolveIncident
+	// writes.
+	Incidents IncidentGateway
+	// Sandbox carries Task 16's PurgeTestData writes — the strongest case
+	// for this whole type: five tables, one Do, atomic or nothing happens.
+	Sandbox SandboxGateway
 }
 
 // UnitOfWork owns the transaction boundary. The interactor decides that there

@@ -288,3 +288,129 @@ type QueryGateway interface {
 	// apart (both end in entity.RequestNotFound), and this preserves that.
 	ByID(ctx context.Context, queue Queue, id, operatorID string) (entity.PortingRequest, bool, error)
 }
+
+// ReverseCreateInput carries the fields a new reverse request persists into
+// the reverse_request table.
+type ReverseCreateInput struct {
+	ID          string
+	MSISDN      string
+	OperatorID  string
+	RequestDate time.Time
+}
+
+// ReverseView is a reverse request as read back right after its creation, or
+// as listed by GET /reverse-requests/mes-demandes — guide §6's shape:
+// {id, numero, statut, dateDemande, operateur{id,nom}}.
+type ReverseView struct {
+	ID, MSISDN, Status       string
+	RequestDate              time.Time
+	OperatorID, OperatorName string
+}
+
+// ReverseGateway persists a new reverse request and reads one, or a page of
+// an operator's own, back. Create is always called inside a
+// port.UnitOfWork transaction (via Repositories.Reverse); Get and Own are
+// called against the plain pool, exactly as RequestGateway's own Get is.
+type ReverseGateway interface {
+	Create(ctx context.Context, in ReverseCreateInput) error
+	Get(ctx context.Context, id string) (ReverseView, bool, error)
+	// Own lists, in chronological order, operatorID's own reverse requests,
+	// paginated (GET /reverse-requests/mes-demandes accepts page and size,
+	// unlike the ten demande queues).
+	Own(ctx context.Context, operatorID string, page, size int) ([]string, error)
+}
+
+// ErrIncidentAlreadyOpen is IncidentGateway.Create's answer to the §7.12
+// race: operatorID already has an EN_COURS internal incident open. It is a
+// sentinel rather than a raw SQL error code because the guarantee comes from
+// the migration's own partial unique index (incident_interne_unique_ouvert),
+// not from a pre-check — the same reasoning as port.ErrAlreadyConfirmed's own
+// doc comment.
+var ErrIncidentAlreadyOpen = errors.New("un incident interne est déjà ouvert pour cet opérateur")
+
+// IncidentCreateInput carries the fields a new incident persists into the
+// incident table. SystemLocked mirrors the endpoint's own segment — never
+// the request body, which never carries a typeIncidentId (§7.12).
+type IncidentCreateInput struct {
+	ID           string
+	OperatorID   string
+	TypeID       string
+	SystemLocked bool
+	Description  string
+	OpenedAt     time.Time
+}
+
+// IncidentView is an incident as read back right after its creation, or as
+// listed by GET /incidents/{segment}/mes-incidents — guide §7.12's shape:
+// {id, typeIncidentId, type, figeSysteme, description, statut,
+// dateOuverture, operateur{id,nom}}.
+type IncidentView struct {
+	ID, TypeID, TypeLabel    string
+	SystemLocked             bool
+	Description, Status      string
+	OpenedAt                 time.Time
+	OperatorID, OperatorName string
+}
+
+// IncidentGateway persists a new incident and reads it, or a page of an
+// operator's own for one segment, back. TypeIDFor and HasOpen are always
+// read against the plain pool, ahead of the transaction Create runs inside
+// (via Repositories.Incidents) — the same division RequestGateway.ByID and
+// its own writes already draw. Resolve is always called inside a
+// port.UnitOfWork transaction too.
+type IncidentGateway interface {
+	// TypeIDFor resolves the id of the type_incident row matching
+	// systemLocked — the endpoint decides the category, never the body.
+	TypeIDFor(ctx context.Context, systemLocked bool) (string, error)
+	// HasOpen answers whether operatorID already has an EN_COURS internal
+	// incident — §7.12's rule, reserved to the interne segment. This
+	// pre-check only anticipates a clean business message before the race
+	// on the insert below; the migration's own partial unique index is the
+	// real guarantee (see ErrIncidentAlreadyOpen).
+	HasOpen(ctx context.Context, operatorID string) (bool, error)
+	Create(ctx context.Context, in IncidentCreateInput) error
+	// ByID reads the authorization-relevant shape of an incident — moved
+	// from the deleted internal/api/incidents.go's own inline query.
+	ByID(ctx context.Context, id string) (entity.Incident, bool, error)
+	Resolve(ctx context.Context, id, comment string, now time.Time) error
+	Get(ctx context.Context, id string) (IncidentView, bool, error)
+	// Own lists, in chronological order, operatorID's own incidents for one
+	// segment, paginated (like ReverseGateway.Own, an asymmetry the guide
+	// measures for both, not an oversight).
+	Own(ctx context.Context, operatorID string, systemLocked bool, page, size int) ([]string, error)
+}
+
+// SandboxGateway backs DELETE /api/sandbox/v1/demandes — hors gateway, hors
+// contrat ARTP. Every method here is always called inside the same
+// port.UnitOfWork transaction (via Repositories.Sandbox): the purge touches
+// five tables and must stay atomic, or a failure partway through would
+// leave a request deleted without its number restored, or a number restored
+// without its OTP cleared — see internal/usecase/sandbox's own doc comment.
+type SandboxGateway interface {
+	// RequestIDsToPurge lists the ids of every demande operatorID created —
+	// createur_operateur_id, never the /mes-demandes filter: a request
+	// belongs to two operators at once, and only its creator may purge it.
+	RequestIDsToPurge(ctx context.Context, operatorID string) ([]string, error)
+	// NumbersToRestore lists every numéro referenced by requestIDs, on
+	// demande.numero (particulier) or demande_numero.numero (flotte,
+	// exclus compris — a number can have moved before being excluded).
+	NumbersToRestore(ctx context.Context, requestIDs []string) ([]string, error)
+	// DeleteReverseRequests removes every reverse_request belonging to
+	// operatorID or attached to one of requestIDs — ahead of
+	// DeleteRequests, since the foreign key carries no ON DELETE CASCADE.
+	DeleteReverseRequests(ctx context.Context, operatorID string, requestIDs []string) (int64, error)
+	// DeleteOTP removes every otp row for numbers — an OTP is consumed at
+	// creation; leaving it would block a replay of the same number without
+	// otp/send.
+	DeleteOTP(ctx context.Context, numbers []string) (int64, error)
+	// DeleteRequests removes every demande named by requestIDs.
+	// demande_numero, demande_client, etape_historique and confirmation
+	// carry ON DELETE CASCADE and follow.
+	DeleteRequests(ctx context.Context, requestIDs []string) (int64, error)
+	// RestoreNumbers returns every number in numbers to its origin operator
+	// (operateur_origine_id) and clears date_dernier_portage and
+	// deja_restitue — what makes the purge useful: without it,
+	// DELAI_PORTAGE_NON_RESPECTE would block an already-ported number for
+	// three months and the scenario could not be replayed.
+	RestoreNumbers(ctx context.Context, numbers []string) (int64, error)
+}

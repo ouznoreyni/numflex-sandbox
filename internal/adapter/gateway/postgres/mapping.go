@@ -215,3 +215,73 @@ package postgres
 // Task 15's other write, port.RequestGateway.Cancel, touches only columns
 // this file already maps for the table demande and etape_historique blocks
 // above (Reject's own), plus clearing transition_prevue_a — no new column.
+
+// Table reverse_request — port.ReverseCreateInput / port.ReverseView, via
+// port.ReverseGateway (Task 16, reverse_gateway.go). Statut is fixed
+// 'EN_ATTENTE' at creation — Create does not parameterize it.
+//
+//	Go field       SQL column     Notes
+//	-----------    -----------    -----
+//	ID             id
+//	MSISDN         numero
+//	OperatorID     operateur_id
+//	RequestDate    date_demande
+//	Status         statut         read-only on ReverseView
+//	OperatorName   —              joined from operateur.nom, ReverseView only
+//
+// Own filters on operateur_id = $1, ordered by date_demande, paginated —
+// the one queue among this task's three capabilities to accept page/size,
+// like the two incident lists below.
+
+// Table incident — port.IncidentCreateInput / port.IncidentView, via
+// port.IncidentGateway (Task 16, incident_gateway.go). Statut is fixed
+// 'EN_COURS' at creation, then 'RESOLU' on Resolve; the anti-race guarantee
+// for "one open internal incident per operator" (§7.12) comes from the
+// migration's own partial unique index (incident_interne_unique_ouvert,
+// on operateur_id where statut = 'EN_COURS' and fige_systeme), reported by
+// Postgres as code 23505 and translated by this gateway into
+// port.ErrIncidentAlreadyOpen — the same division ConfirmationGateway.Confirm
+// already draws for its own anti-replay guarantee.
+//
+//	Go field                  SQL column               Notes
+//	-----------------------   ---------------------     -----
+//	ID                        id
+//	OperatorID                operateur_id
+//	TypeID                    type_incident_id
+//	SystemLocked              fige_systeme
+//	Description               description
+//	OpenedAt                  date_ouverture
+//	Status                    statut                    read-only on IncidentView
+//	—                         date_resolution           write-only: set by Resolve
+//	—                         commentaire_resolution    write-only: set by Resolve
+//	TypeLabel                 —                         joined from
+//	                                                     type_incident.libelle,
+//	                                                     IncidentView only
+//	OperatorName              —                         joined from operateur.nom,
+//	                                                     IncidentView only
+//
+// TypeIDFor reads type_incident.id filtered on fige_systeme — the endpoint's
+// own segment decides the category, never the request body. Own filters on
+// operateur_id = $1 AND fige_systeme = $2, ordered by date_ouverture,
+// paginated.
+
+// port.SandboxGateway (Task 16, sandbox_gateway.go) touches five tables this
+// file already maps field by field above (demande, reverse_request, otp,
+// numero) or by cascade (demande_numero, demande_client, etape_historique,
+// confirmation — all four carry ON DELETE CASCADE from demande, so
+// DeleteRequests alone accounts for them). No column here is new:
+//
+//	RequestIDsToPurge   demande.id WHERE createur_operateur_id = $1 — never
+//	                    the operateur_source_id/operateur_destinataire_id
+//	                    pair /mes-demandes filters on: a request belongs to
+//	                    two operators at once, only its creator made it.
+//	NumbersToRestore    demande.numero UNION demande_numero.numero, for the
+//	                    given ids — exclus compris.
+//	DeleteReverseRequests  reverse_request WHERE operateur_id = $1 OR
+//	                       demande_id = ANY($2) — ahead of DeleteRequests,
+//	                       since this foreign key carries no cascade.
+//	DeleteOTP           otp WHERE numero = ANY($1).
+//	DeleteRequests      demande WHERE id = ANY($1).
+//	RestoreNumbers      numero.operateur_actuel_id set back to
+//	                    operateur_origine_id, date_dernier_portage and
+//	                    deja_restitue cleared, for the given msisdns.
