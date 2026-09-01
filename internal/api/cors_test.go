@@ -11,7 +11,9 @@ import (
 
 // Le CORS est une commodité de bac à sable, pas un trait du contrat : une
 // gateway consommée de serveur à serveur n'en envoie pas, et aucune mesure du
-// SIT n'en atteste. Il est donc éteint par défaut.
+// SIT n'en atteste. Le sandbox l'ouvre à toute origine par défaut, pour le
+// confort ; liste vide — CORS_ALLOWED_ORIGINS posée vide — le middleware
+// redevient muet, et c'est ce que ce test vérifie.
 func TestSansConfigurationAucunEnTeteCORS(t *testing.T) {
 	h := nouveauHarnais(t)
 

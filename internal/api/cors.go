@@ -11,8 +11,9 @@ import (
 // serveur à serveur, et aucun test du SIT n'a mesuré son comportement sur une
 // requête cross-origin. Ce middleware n'existe donc que pour le confort du bac
 // à sable — permettre à la page Swagger, servie sur un autre port, d'appeler
-// l'API depuis un navigateur. Il est inerte tant que CORS_ALLOWED_ORIGINS est
-// vide, ce qui est le défaut.
+// l'API depuis un navigateur. Il autorise toute origine par défaut ; poser
+// CORS_ALLOWED_ORIGINS à vide le rend inerte, et rend au sandbox le silence de
+// la gateway réelle.
 //
 // Il est délibérément écrit comme un middleware global plutôt qu'en routes
 // OPTIONS enregistrées : la contrainte D-4 veut que le sandbox n'expose que les
