@@ -331,5 +331,5 @@ func (d *Deps) repondreDemandeTraitee(c *gin.Context, id string) {
 		d.R.Fail(c, apperr.ErreurInterne("relecture de la demande"))
 		return
 	}
-	d.R.OK(c, http.StatusOK, "Étape traitée avec succès", dto)
+	d.R.OK(c, http.StatusOK, "Décision d'acceptation enregistrée", dto)
 }

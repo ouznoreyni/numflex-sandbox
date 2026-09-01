@@ -40,11 +40,14 @@ func (e *Engine) AppliquerTransition(ctx context.Context, demandeID, origine str
 	typeDemande := domain.TypeDemande(typeDem)
 	maintenant := time.Now()
 
+	// Une étape soldée par une action porte TERMINE, y compris la COMPLETION :
+	// c'est ce que rendent les captures « in » et « 2_yas_confirmer-a
+	// COMPLETION », et ce qu'ANO-013 décrivait déjà (TERMINE en nominal, EXPIRE
+	// par expiration). Le VALIDE que ce code posait sur la COMPLETION n'avait
+	// aucune source.
 	statutEtapeSoldee := string(domain.EtapeTerminee)
 	if origine == "EXPIRATION" {
 		statutEtapeSoldee = string(domain.EtapeExpiree)
-	} else if courante == domain.EtapeCompletion {
-		statutEtapeSoldee = string(domain.EtapeValidee)
 	}
 
 	if _, err := tx.Exec(ctx,
