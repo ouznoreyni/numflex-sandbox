@@ -44,6 +44,14 @@ type ReferenceGateway interface {
 	RequestTypes(ctx context.Context) ([]entity.RequestTypeRef, error)
 	Processes(ctx context.Context) ([]entity.Process, error)
 	IncidentTypes(ctx context.Context) ([]entity.IncidentType, error)
+	// RejectionReasonExists answers whether id names a row in motif_rejet —
+	// acceptance's guard on a caller-supplied motifRejetId (Task 14),
+	// top-level on both routes and per-number on a fleet's partial
+	// rejection. A dedicated existence check rather than a call to
+	// RejectionReasons filtered in memory: the same division RequestGateway
+	// already draws between Get (a full read-back) and its narrower
+	// existence-shaped reads like RoutingPrefix.
+	RejectionReasonExists(ctx context.Context, id string) (bool, error)
 }
 
 // NumberGateway resolves a number's current standing in the registry — the
@@ -149,6 +157,48 @@ type RequestGateway interface {
 	AddExcludedNumber(ctx context.Context, in ExcludedNumberInput) error
 	AddClient(ctx context.Context, in ClientInput) error
 	Get(ctx context.Context, id string) (RequestView, bool, error)
+
+	// ByID reads the authorization-relevant shape of a request —
+	// entity.PortingRequest, the same six columns the legacy handlers'
+	// chargerDemande loaded — regardless of which queue it sits in today.
+	// Task 14 (acceptance) is its first caller: entity.CanAccept needs the
+	// whole request, not the queue-filtered view QueryGateway.ByID answers
+	// (that one folds "wrong operator" into RequestNotFound; acceptance
+	// must still tell the two apart, per TC-034). Read outside any
+	// transaction, exactly as chargerDemande was: before acceptance opens
+	// the transaction that changes state, never inside it.
+	ByID(ctx context.Context, id string) (entity.PortingRequest, bool, error)
+
+	// SetComment writes a request's free-text commentaire without moving it
+	// out of its current step — the write an acceptance (individual, or a
+	// fleet with numbers still active) makes before scheduling its
+	// transition.
+	SetComment(ctx context.Context, id, comment string) error
+
+	// NumberBelongs answers whether msisdn is one of request id's
+	// demande_numero rows — the fleet-rejection guard: a numerosRejetes
+	// entry naming a number outside the request is refused before anything
+	// is written.
+	NumberBelongs(ctx context.Context, requestID, msisdn string) (bool, error)
+
+	// RejectNumber marks one fleet member REJETE, recording rejectionReasonID
+	// when one is given (NULL otherwise).
+	RejectNumber(ctx context.Context, requestID, msisdn, rejectionReasonID string) error
+
+	// HasActiveNumber answers whether request id still has at least one
+	// demande_numero row that is not REJETE — the fleet-rejection guard
+	// deciding whether a partially-rejected fleet still has something to
+	// port, or has been rejected numéro by numéro until nothing is left.
+	HasActiveNumber(ctx context.Context, requestID string) (bool, error)
+
+	// Reject closes a request definitively: REJETE, its current step marked
+	// TERMINE, the rejection reason recorded, and one etape_historique row
+	// of origin ACTION — no transition of the engine ever writes this one,
+	// since R-10 only governs acceptance's own convergence. Shared by an
+	// individual rejection and a fleet rejected in full, either outright or
+	// numéro by numéro until nothing is left ([HYP], see
+	// internal/usecase/acceptance).
+	Reject(ctx context.Context, requestID, operatorID, rejectionReasonID, comment string, now time.Time) error
 }
 
 // Queue names the three read-only queues that carry a single-id detail

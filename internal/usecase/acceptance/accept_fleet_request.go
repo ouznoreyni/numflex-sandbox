@@ -1,0 +1,179 @@
+package acceptance
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/ouznoreyni/numflex-sandbox/internal/entity"
+	"github.com/ouznoreyni/numflex-sandbox/internal/usecase/port"
+)
+
+// RejectedNumberInput names one fleet member to reject, and — optionally —
+// why: numerosRejetes' entries on POST /demandes/:id/acceptation.
+type RejectedNumberInput struct {
+	MSISDN            string
+	RejectionReasonID string
+}
+
+// AcceptFleetRequestInput carries POST /demandes/:id/acceptation's body.
+type AcceptFleetRequestInput struct {
+	RequestID         string
+	Accept            bool
+	RejectedNumbers   []RejectedNumberInput
+	RejectionReasonID string
+	Comment           string
+}
+
+// AcceptFleetRequestBoundary is the interface a controller drives.
+type AcceptFleetRequestBoundary interface {
+	Execute(ctx context.Context, in AcceptFleetRequestInput) (port.RequestView, *entity.Fault)
+}
+
+// AcceptFleetRequestInteractor implements AcceptFleetRequestBoundary.
+type AcceptFleetRequestInteractor struct {
+	requests port.RequestGateway
+	reasons  port.ReferenceGateway
+	uow      port.UnitOfWork
+	engine   port.Engine
+	clock    port.Clock
+}
+
+// NewAcceptFleetRequest wires an interactor against its dependencies.
+func NewAcceptFleetRequest(
+	requests port.RequestGateway,
+	reasons port.ReferenceGateway,
+	uow port.UnitOfWork,
+	engine port.Engine,
+	clock port.Clock,
+) *AcceptFleetRequestInteractor {
+	return &AcceptFleetRequestInteractor{
+		requests: requests, reasons: reasons, uow: uow, engine: engine, clock: clock,
+	}
+}
+
+// Execute reproduces the deleted internal/api/acceptation.go's
+// postAcceptationFlotte order of checks: the market must not be frozen, the
+// request must exist, entity.CanAccept must let this caller decide on it,
+// a top-level motifRejetId — given on either branch — must exist.
+//
+// A total rejection (accepte:false) takes the same path an individual
+// rejection does: entity.RequestGateway.Reject inside one transaction, no
+// engine transition ever scheduled.
+//
+// A fleet accept (accepte:true) instead validates every numerosRejetes
+// entry before writing anything — each number must belong to this request,
+// and its own motif, if given, must exist — exactly as the deleted handler
+// did ("on valide tout avant de rien écrire, pour ne jamais laisser une
+// flotte à moitié marquée"). The write itself is one transaction: reject
+// each named number, then decide — from inside that same transaction, so
+// the check sees the rows it just wrote — whether any number is still
+// active. [HYP] The guide never says what becomes of a fleet rejected
+// number by number until none is left; neither measured at SIT nor fixed by
+// a test. The project's choice, carried over unchanged from the deleted
+// handler: such a request has nothing left to port and closes REJETE too,
+// with no transition to schedule — the same Reject call a total rejection
+// makes. Otherwise the transaction only records the comment, and the engine
+// schedules the transition after it commits.
+func (i *AcceptFleetRequestInteractor) Execute(
+	ctx context.Context, in AcceptFleetRequestInput,
+) (port.RequestView, *entity.Fault) {
+	if f := marketFrozen(ctx, i.engine); f != nil {
+		return port.RequestView{}, f
+	}
+
+	caller := port.CallerFromContext(ctx)
+	dm, found, err := i.requests.ByID(ctx, in.RequestID)
+	if err != nil {
+		return port.RequestView{}, entity.InternalError("lecture de la demande")
+	}
+	if !found {
+		return port.RequestView{}, entity.RequestNotFound()
+	}
+	if f := entity.CanAccept(dm, caller.OperatorID); f != nil {
+		return port.RequestView{}, f
+	}
+	if f := rejectionReasonValid(ctx, i.reasons, in.RejectionReasonID); f != nil {
+		return port.RequestView{}, f
+	}
+
+	if !in.Accept {
+		// Rejet total : même traitement qu'un particulier, la flotte entière tombe.
+		if in.RejectionReasonID == "" {
+			return port.RequestView{}, entity.RejectionReasonRequired()
+		}
+		err := i.uow.Do(ctx, func(repos port.Repositories) error {
+			if err := repos.Requests.Reject(ctx, dm.ID, caller.OperatorID,
+				in.RejectionReasonID, in.Comment, i.clock.Now()); err != nil {
+				return entity.InternalError("rejet de la demande")
+			}
+			return nil
+		})
+		if err != nil {
+			return port.RequestView{}, entity.FaultFrom(err)
+		}
+		return i.readBack(ctx, dm.ID)
+	}
+
+	// Rejet partiel : chaque numéro visé doit appartenir à la flotte, et son
+	// motif — s'il en porte un — doit exister. Tout est validé avant
+	// d'ouvrir la transaction, pour ne jamais laisser une flotte à moitié
+	// marquée.
+	for _, nr := range in.RejectedNumbers {
+		appartient, err := i.requests.NumberBelongs(ctx, dm.ID, nr.MSISDN)
+		if err != nil {
+			return port.RequestView{}, entity.InternalError("vérification du numéro")
+		}
+		if !appartient {
+			return port.RequestView{}, entity.ValidationFailed(
+				fmt.Sprintf("Le numéro %s ne fait pas partie de cette demande", nr.MSISDN))
+		}
+		if f := rejectionReasonValid(ctx, i.reasons, nr.RejectionReasonID); f != nil {
+			return port.RequestView{}, f
+		}
+	}
+
+	var flotteEpuisee bool
+	err = i.uow.Do(ctx, func(repos port.Repositories) error {
+		for _, nr := range in.RejectedNumbers {
+			if err := repos.Requests.RejectNumber(ctx, dm.ID, nr.MSISDN, nr.RejectionReasonID); err != nil {
+				return entity.InternalError("rejet du numéro")
+			}
+		}
+
+		active, err := repos.Requests.HasActiveNumber(ctx, dm.ID)
+		if err != nil {
+			return entity.InternalError("vérification de la flotte")
+		}
+		if !active {
+			flotteEpuisee = true
+			if err := repos.Requests.Reject(ctx, dm.ID, caller.OperatorID, "",
+				in.Comment, i.clock.Now()); err != nil {
+				return entity.InternalError("rejet de la demande")
+			}
+			return nil
+		}
+
+		if err := repos.Requests.SetComment(ctx, dm.ID, in.Comment); err != nil {
+			return entity.InternalError("enregistrement du commentaire")
+		}
+		return nil
+	})
+	if err != nil {
+		return port.RequestView{}, entity.FaultFrom(err)
+	}
+
+	if !flotteEpuisee {
+		if err := i.engine.ScheduleTransition(ctx, dm.ID); err != nil {
+			return port.RequestView{}, entity.InternalError("planification de la transition")
+		}
+	}
+	return i.readBack(ctx, dm.ID)
+}
+
+func (i *AcceptFleetRequestInteractor) readBack(ctx context.Context, id string) (port.RequestView, *entity.Fault) {
+	view, found, err := i.requests.Get(ctx, id)
+	if err != nil || !found {
+		return port.RequestView{}, entity.InternalError("relecture de la demande")
+	}
+	return view, nil
+}

@@ -42,6 +42,8 @@ package postgres
 //	Name           nom          entity.Operator's half
 
 // Table motif_rejet — entity.RejectionReason (internal/usecase/port/gateway.go).
+// port.ReferenceGateway.RejectionReasonExists (Task 14) reads only id, an
+// EXISTS check with no Go-side mapping of its own.
 //
 //	Go field   SQL column   Notes
 //	--------   ----------   -----
@@ -112,9 +114,29 @@ package postgres
 //	—                      date_debut_etape               write-only: RequestDate again
 //	CompletionDate         date_finalisation              read-only on RequestView;
 //	                                                      never written at creation
+//
+// Task 14 (acceptance) adds three more RequestGateway methods against this
+// same table, none of them mapped field by field like the block above
+// because each writes or reads a single column:
+//
+//	ByID          reads type_demande, type_abonne, statut_demande,
+//	              etape_actuelle, statut_etape_actuel, operateur_source_id,
+//	              operateur_destinataire_id, createur_operateur_id and
+//	              transition_prevue_a — the same six-plus columns
+//	              chargerDemande read, onto entity.PortingRequest rather
+//	              than RequestView.
+//	SetComment    writes commentaire alone.
+//	Reject        writes statut_demande, statut_etape_actuel,
+//	              date_finalisation, motif_rejet_id and commentaire, plus
+//	              one etape_historique row (see below).
 
 // Table demande_numero — port.RequestNumberInput / port.ExcludedNumberInput,
-// via port.RequestGateway (internal/usecase/port/gateway.go).
+// via port.RequestGateway (internal/usecase/port/gateway.go). Task 14
+// (acceptance) adds three read/write methods against the same statut and
+// motif_rejet_id columns a fleet's creation-time exclusion already uses:
+// NumberBelongs (EXISTS on demande_id + numero), RejectNumber (writes
+// statut = 'REJETE' and motif_rejet_id, mirroring AddExcludedNumber's own
+// REJETE row) and HasActiveNumber (EXISTS a row whose statut isn't 'REJETE').
 //
 //	Go field                     SQL column               Notes
 //	--------                     ----------                -----
@@ -123,10 +145,33 @@ package postgres
 //	RoutingInfo                  routage_info              nil ⇒ NULL (restitution,
 //	                                                        and every excluded row)
 //	—                            statut                    'EN_COURS' (retained) or
-//	                                                        'REJETE' (excluded), fixed
-//	—                            exclu                     false (retained) or true
+//	                                                        'REJETE' (excluded or
+//	                                                        acceptance-rejected)
+//	—                            exclu                     false (retained) or true —
+//	                                                        acceptance's RejectNumber
+//	                                                        never sets this column,
+//	                                                        only creation-time
+//	                                                        exclusion does
 //	Reason (ExcludedNumberInput) raison_exclusion
 //	ErrorCode ( "  )             code_erreur_exclusion
+//	—                            motif_rejet_id            written by RejectNumber
+//	                                                        (acceptance), NULL for a
+//	                                                        creation-time exclusion
+
+// Table etape_historique — written only by RequestGateway.Reject (Task 14):
+// no engine transition ever produces this row for a rejection, since R-10's
+// convergence only governs acceptance and later steps closing out normally.
+//
+//	SQL column     Notes
+//	----------     -----
+//	demande_id     the rejected request
+//	etape          copied from demande.etape_actuelle at the moment of rejection
+//	statut         fixed 'TERMINE'
+//	operateur_id   the caller who rejected
+//	origine        fixed 'ACTION'
+//	commentaire    NULL ⇒ empty
+//	date_debut     copied from demande.date_debut_etape
+//	date_fin       the rejection instant
 
 // Table demande_client — port.ClientInput / port.ClientView, via
 // port.RequestGateway (internal/usecase/port/gateway.go). Absent for a

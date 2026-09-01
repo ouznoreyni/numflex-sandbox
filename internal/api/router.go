@@ -106,7 +106,15 @@ func NewRouter(d *Deps) *gin.Engine {
 	g.GET("/demandes/in", queryCtrl.In)
 	g.GET("/demandes/out", queryCtrl.Out)
 
-	d.routesAcceptation(g)  // Task 14
+	// Task 14 : les deux routes d'acceptation passent en clean architecture —
+	// un contrôleur qui délègue à AcceptRequestInteractor et
+	// AcceptFleetRequestInteractor, tous deux au-dessus du même
+	// RequestGateway que la création et la lecture. Construit une seule
+	// fois ici, comme les six contrôleurs précédents.
+	acceptCtrl := d.acceptanceController()
+	g.POST("/demandes/acceptation", acceptCtrl.Acceptation)
+	g.POST("/demandes/:id/acceptation", acceptCtrl.AcceptationFlotte)
+
 	d.routesConfirmation(g) // Task 15
 	d.routesTraitement(g)   // Task 16
 	d.routesAnnulation(g)   // Task 17

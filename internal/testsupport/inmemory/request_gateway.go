@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"time"
 
+	"github.com/ouznoreyni/numflex-sandbox/internal/entity"
 	"github.com/ouznoreyni/numflex-sandbox/internal/usecase/port"
 )
 
@@ -15,6 +17,13 @@ import (
 // transaction *guarantee* itself (that a failed Create really leaves the
 // OTP unconsumed) is proven separately, against real Postgres, in
 // internal/framework/persistence.
+//
+// demandes, comments and the two numero maps back Task 14's six acceptance
+// methods (ByID, SetComment, NumberBelongs, RejectNumber, HasActiveNumber,
+// Reject). They are a separate state machine from requests/numbers above,
+// seeded directly with Seed/SeedNumbers rather than through Create/AddNumber:
+// an acceptance test starts from a request already sitting at ACCEPTATION,
+// it does not create one first.
 type RequestGateway struct {
 	mu       sync.Mutex
 	prefixes map[string]string
@@ -23,7 +32,15 @@ type RequestGateway struct {
 	excluded map[string][]port.ExcludedNumberInput
 	clients  map[string]port.ClientInput
 
-	FailCreate error
+	demandes         map[string]entity.PortingRequest
+	comments         map[string]string
+	rejectionReasons map[string]string            // requestID -> motifRejetId, written by Reject
+	numberStatus     map[string]map[string]string // requestID -> msisdn -> statut
+	numberMotif      map[string]map[string]string // requestID -> msisdn -> motifRejetId
+
+	FailCreate       error
+	FailReject       error // fails Reject, the seam acceptance's atomicity test uses
+	FailRejectNumber error // fails RejectNumber, same seam for the fleet path
 }
 
 // NewRequestGateway returns an empty double, ready to use.
@@ -34,6 +51,12 @@ func NewRequestGateway() *RequestGateway {
 		numbers:  map[string][]port.RequestNumberInput{},
 		excluded: map[string][]port.ExcludedNumberInput{},
 		clients:  map[string]port.ClientInput{},
+
+		demandes:         map[string]entity.PortingRequest{},
+		comments:         map[string]string{},
+		rejectionReasons: map[string]string{},
+		numberStatus:     map[string]map[string]string{},
+		numberMotif:      map[string]map[string]string{},
 	}
 }
 
@@ -91,7 +114,21 @@ func (g *RequestGateway) Get(_ context.Context, id string) (port.RequestView, bo
 	defer g.mu.Unlock()
 	req, ok := g.requests[id]
 	if !ok {
-		return port.RequestView{}, false, nil
+		// Not created through Create/AddNumber: fall back to a request
+		// Seed()ed directly for an acceptance test, which starts from a
+		// request already sitting at ACCEPTATION rather than creating one.
+		pr, ok := g.demandes[id]
+		if !ok {
+			return port.RequestView{}, false, nil
+		}
+		return port.RequestView{
+			ID: pr.ID, MSISDN: pr.MSISDN,
+			SubscriberType: string(pr.SubscriberType), RequestType: string(pr.RequestType),
+			Status: string(pr.Status), CurrentStep: string(pr.CurrentStep),
+			CurrentStepStatus: string(pr.CurrentStepStatus),
+			SourceOperatorID:  pr.SourceOperatorID, SourceOperatorName: pr.SourceOperatorID,
+			RecipientOperatorID: pr.RecipientOperatorID, RecipientOperatorName: pr.RecipientOperatorID,
+		}, true, nil
 	}
 	view := port.RequestView{
 		ID: req.ID, MSISDN: req.MSISDN,
@@ -131,4 +168,124 @@ func (g *RequestGateway) RequestCount() int {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	return len(g.requests)
+}
+
+// --- Acceptance (Task 14) ---------------------------------------------------
+
+// Seed registers a request's authorization-relevant shape, read back by
+// ByID — an acceptance test's starting point, independent of Create.
+func (g *RequestGateway) Seed(pr entity.PortingRequest) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.demandes[pr.ID] = pr
+}
+
+// SeedNumbers registers requestID's fleet members, all initially EN_COURS —
+// the fleet-rejection tests' starting point, independent of AddNumber.
+func (g *RequestGateway) SeedNumbers(requestID string, msisdns ...string) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	statuts := map[string]string{}
+	for _, m := range msisdns {
+		statuts[m] = "EN_COURS"
+	}
+	g.numberStatus[requestID] = statuts
+	g.numberMotif[requestID] = map[string]string{}
+}
+
+func (g *RequestGateway) ByID(_ context.Context, id string) (entity.PortingRequest, bool, error) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	pr, ok := g.demandes[id]
+	return pr, ok, nil
+}
+
+func (g *RequestGateway) SetComment(_ context.Context, id, comment string) error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.comments[id] = comment
+	return nil
+}
+
+func (g *RequestGateway) NumberBelongs(_ context.Context, requestID, msisdn string) (bool, error) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	_, ok := g.numberStatus[requestID][msisdn]
+	return ok, nil
+}
+
+func (g *RequestGateway) RejectNumber(_ context.Context, requestID, msisdn, rejectionReasonID string) error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.FailRejectNumber != nil {
+		return g.FailRejectNumber
+	}
+	g.numberStatus[requestID][msisdn] = "REJETE"
+	g.numberMotif[requestID][msisdn] = rejectionReasonID
+	return nil
+}
+
+func (g *RequestGateway) HasActiveNumber(_ context.Context, requestID string) (bool, error) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	for _, statut := range g.numberStatus[requestID] {
+		if statut != "REJETE" {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func (g *RequestGateway) Reject(_ context.Context, requestID, _, rejectionReasonID,
+	comment string, _ time.Time) error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.FailReject != nil {
+		return g.FailReject
+	}
+	pr := g.demandes[requestID]
+	pr.Status = entity.RequestRejected
+	pr.CurrentStepStatus = entity.StepCompleted
+	g.demandes[requestID] = pr
+	g.comments[requestID] = comment
+	g.rejectionReasons[requestID] = rejectionReasonID
+	return nil
+}
+
+// Status exposes a seeded/rejected request's current status — tests use it
+// to assert Reject actually ran.
+func (g *RequestGateway) Status(id string) entity.RequestStatus {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.demandes[id].Status
+}
+
+// Comment exposes the commentaire written by SetComment or Reject.
+func (g *RequestGateway) Comment(id string) string {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.comments[id]
+}
+
+// NumberStatus exposes one fleet member's current statut — EN_COURS unless
+// RejectNumber (or a full Reject) marked it REJETE.
+func (g *RequestGateway) NumberStatus(requestID, msisdn string) string {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.numberStatus[requestID][msisdn]
+}
+
+// RejectionReason exposes the motifRejetId written by Reject.
+func (g *RequestGateway) RejectionReason(id string) string {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.rejectionReasons[id]
+}
+
+// NumberRejectionReason exposes the motifRejetId written by RejectNumber
+// for one fleet member.
+func (g *RequestGateway) NumberRejectionReason(requestID, msisdn string) string {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.numberMotif[requestID][msisdn]
 }

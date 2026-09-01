@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5"
 	"github.com/ouznoreyni/numflex-sandbox/internal/entity"
 )
@@ -14,10 +15,27 @@ import (
 // chargerDemande et tousOperateurs ont migré ici depuis
 // internal/api/demandes_lecture.go (supprimé, Task 12 : sept files de
 // lecture en clean architecture). Elles restent des méthodes de *Deps,
-// comme demandeDTO et sansClient au-dessus : acceptation.go, annulation.go,
-// confirmation.go et traitement.go les appellent encore, et ne migrent
-// qu'aux tâches suivantes — les supprimer casserait leur compilation
-// (même raison que R28 pour demandeDTO).
+// comme demandeDTO et sansClient au-dessus : annulation.go, confirmation.go
+// et traitement.go les appellent encore, et ne migrent qu'aux tâches
+// suivantes — les supprimer casserait leur compilation (même raison que
+// R28 pour demandeDTO).
+//
+// verifierGel a migré ici depuis internal/api/acceptation.go (supprimé,
+// Task 14 : acceptation particulier et flotte en clean architecture).
+// L'acceptation elle-même n'en a plus besoin — son gel passe désormais par
+// port.Engine.MarketFrozen, appelé depuis internal/usecase/acceptance — mais
+// confirmation.go et traitement.go l'appellent encore, jusqu'à ce qu'ils
+// migrent à leur tour (Tasks 15 et 16) et fassent le même passage par le
+// port. Une méthode de *Deps de plus qui ne migre que là où son dernier
+// appelant migre, comme demandeDTO et chargerDemande.
+func (d *Deps) verifierGel(c *gin.Context) bool {
+	if gelee, _ := d.Moteur.PlaceGelee(c); gelee {
+		d.R.Fail(c, entity.InternalError(
+			"Le traitement des demandes est gelé par un incident interne en cours."))
+		return true
+	}
+	return false
+}
 
 // motifMSISDN est le format MSISDN du contrat ARTP. Sa copie d'origine
 // vivait dans internal/api/otp.go ; elle reste ici pour reverse.go, qui

@@ -63,6 +63,15 @@ func (g *ReferenceGateway) RejectionReasons(ctx context.Context) ([]entity.Rejec
 	return out, nil
 }
 
+// RejectionReasonExists answers whether id names a row in motif_rejet —
+// moved verbatim from internal/api/acceptation.go's motifExiste (Task 14).
+func (g *ReferenceGateway) RejectionReasonExists(ctx context.Context, id string) (bool, error) {
+	var existe bool
+	err := g.db.QueryRow(ctx,
+		`SELECT EXISTS (SELECT 1 FROM motif_rejet WHERE id = $1)`, id).Scan(&existe)
+	return existe, err
+}
+
 func (g *ReferenceGateway) RequestTypes(ctx context.Context) ([]entity.RequestTypeRef, error) {
 	rows, err := g.db.Query(ctx, `SELECT id, type FROM type_demande ORDER BY type`)
 	if err != nil {
