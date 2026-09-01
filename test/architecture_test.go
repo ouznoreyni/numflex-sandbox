@@ -8,19 +8,34 @@ import (
 
 const module = "github.com/ouznoreyni/numflex-sandbox"
 
+// listFormat asks `go list` for the import path plus every kind of import a
+// package's files can carry: .Imports (non-test files), .TestImports (the
+// package's own _test.go files) and .XTestImports (an external <pkg>_test
+// package). A violation introduced only through a test file would be invisible
+// to the dependency rule if .Imports were the only field consulted.
+const listFormat = `{{.ImportPath}} {{join .Imports " "}} {{join .TestImports " "}} {{join .XTestImports " "}}`
+
+// hasPathPrefix reports whether pkg is prefix itself or a package nested under
+// it (prefix followed by "/"), so that e.g. "internal/entity" does not also
+// match a hypothetical "internal/entityx". Same shape as the whole-segment
+// guard already used for the /api/gateway/v1 route prefix.
+func hasPathPrefix(pkg, prefix string) bool {
+	return pkg == prefix || strings.HasPrefix(pkg, prefix+"/")
+}
+
 // layerOf maps a package path to its Clean Architecture layer number.
 // Lower is more inward. A package may only import packages with a
 // number less than or equal to its own.
 func layerOf(pkg string) (int, bool) {
 	switch {
-	case strings.HasPrefix(pkg, module+"/internal/entity"):
+	case hasPathPrefix(pkg, module+"/internal/entity"):
 		return 0, true
-	case strings.HasPrefix(pkg, module+"/internal/usecase"):
+	case hasPathPrefix(pkg, module+"/internal/usecase"):
 		return 1, true
-	case strings.HasPrefix(pkg, module+"/internal/adapter"):
+	case hasPathPrefix(pkg, module+"/internal/adapter"):
 		return 2, true
-	case strings.HasPrefix(pkg, module+"/internal/framework"),
-		strings.HasPrefix(pkg, module+"/cmd"):
+	case hasPathPrefix(pkg, module+"/internal/framework"),
+		hasPathPrefix(pkg, module+"/cmd"):
 		return 3, true
 	}
 	return 0, false
@@ -28,7 +43,7 @@ func layerOf(pkg string) (int, bool) {
 
 func TestDependencyRule(t *testing.T) {
 	out, err := exec.Command("go", "list",
-		"-f", "{{.ImportPath}} {{join .Imports \" \"}}", "../...").Output()
+		"-f", listFormat, "../...").Output()
 	if err != nil {
 		t.Fatalf("go list: %v", err)
 	}
@@ -59,7 +74,7 @@ func TestDependencyRule(t *testing.T) {
 // TestEntityIsPure asserts the innermost layer imports nothing from this module.
 func TestEntityIsPure(t *testing.T) {
 	out, err := exec.Command("go", "list",
-		"-f", "{{.ImportPath}} {{join .Imports \" \"}}", "../internal/entity/...").Output()
+		"-f", listFormat, "../internal/entity/...").Output()
 	if err != nil {
 		t.Fatalf("go list: %v", err)
 	}
