@@ -144,3 +144,18 @@ package postgres
 //	IDNumber      numero_piece
 //	CompanyName   raison_sociale   nil outside ENTREPRISE
 //	RCNumber      num_rc           nil outside ENTREPRISE
+
+// port.QueryGateway (internal/usecase/port/gateway.go) reads demande —
+// same table and columns as port.RequestGateway above — filtered per queue
+// rather than mapped field by field; the seven predicates (§7.6-§7.8) live
+// in internal/adapter/gateway/postgres/query_gateway.go itself, not
+// repeated here. It also reads:
+//
+// Table confirmation — read-only, joined or EXISTS-checked by ToConfirm and
+// AlreadyConfirmed; nothing in port.QueryGateway writes it (a confirmation
+// is recorded by a capability not yet migrated).
+//
+//	SQL column     Notes
+//	----------     -----
+//	demande_id     joined to demande.id
+//	operateur_id   the confirming operator

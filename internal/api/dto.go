@@ -11,6 +11,14 @@ import (
 	"github.com/ouznoreyni/numflex-sandbox/internal/entity"
 )
 
+// chargerDemande et tousOperateurs ont migré ici depuis
+// internal/api/demandes_lecture.go (supprimé, Task 12 : sept files de
+// lecture en clean architecture). Elles restent des méthodes de *Deps,
+// comme demandeDTO et sansClient au-dessus : acceptation.go, annulation.go,
+// confirmation.go et traitement.go les appellent encore, et ne migrent
+// qu'aux tâches suivantes — les supprimer casserait leur compilation
+// (même raison que R28 pour demandeDTO).
+
 // motifMSISDN est le format MSISDN du contrat ARTP. Sa copie d'origine
 // vivait dans internal/api/otp.go ; elle reste ici pour reverse.go, qui
 // l'utilise encore, jusqu'à ce qu'il migre à son tour (Task 19). Le
@@ -137,4 +145,55 @@ func (d *Deps) etatNumero(ctx context.Context, msisdn string) (entity.NumberStat
 	}
 
 	return n, nil
+}
+
+// chargerDemande — moved verbatim from demandes_lecture.go.
+func (d *Deps) chargerDemande(ctx context.Context, id string) (entity.PortingRequest, *entity.Fault) {
+	var dm entity.PortingRequest
+	var etape, statutDem, statutEtape, typeDem, typeAb string
+	var transition *string
+
+	err := d.DB.Pool.QueryRow(ctx,
+		`SELECT id, numero, type_demande, type_abonne, statut_demande, etape_actuelle,
+		        statut_etape_actuel, operateur_source_id, operateur_destinataire_id,
+		        createur_operateur_id, transition_prevue_a::text
+		   FROM demande WHERE id = $1`, id).
+		Scan(&dm.ID, &dm.MSISDN, &typeDem, &typeAb, &statutDem, &etape, &statutEtape,
+			&dm.SourceOperatorID, &dm.RecipientOperatorID,
+			&dm.CreatorOperatorID, &transition)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return dm, entity.RequestNotFound()
+	}
+	if err != nil {
+		return dm, entity.InternalError("lecture de la demande")
+	}
+
+	dm.RequestType = entity.RequestType(typeDem)
+	dm.SubscriberType = entity.SubscriberType(typeAb)
+	dm.Status = entity.RequestStatus(statutDem)
+	dm.CurrentStep = entity.Step(etape)
+	dm.CurrentStepStatus = entity.StepStatus(statutEtape)
+	dm.PendingTransition = transition != nil
+	return dm, nil
+}
+
+// tousOperateurs — moved verbatim from demandes_lecture.go.
+func (d *Deps) tousOperateurs(ctx context.Context) ([]string, error) {
+	rows, err := d.DB.Pool.Query(ctx, `SELECT id FROM operateur ORDER BY id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []string{}
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out = append(out, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return out, nil
 }

@@ -150,3 +150,60 @@ type RequestGateway interface {
 	AddClient(ctx context.Context, in ClientInput) error
 	Get(ctx context.Context, id string) (RequestView, bool, error)
 }
+
+// Queue names the three read-only queues that carry a single-id detail
+// route (/a-accepter/:id, /a-traiter/:id, /a-confirmer/:id) alongside their
+// list route. Own, AlreadyConfirmed, Incoming and Outgoing have no detail
+// route in the guide, so they never appear as a QueryGateway.ByID argument.
+type Queue string
+
+const (
+	QueueToAccept  Queue = "a-accepter"
+	QueueToProcess Queue = "a-traiter"
+	QueueToConfirm Queue = "a-confirmer"
+)
+
+// QueryGateway resolves the seven read-only queues behind
+// GET /demandes/{mes-demandes,a-accepter,a-traiter,a-confirmer,
+// deja-confirmees,in,out} — internal/api/demandes_lecture.go before this
+// task. Every list method returns ids ordered by date_demande, exactly as
+// the legacy handlers' shared idsDemandes did: turning an id into a
+// renderable view stays RequestGateway.Get's job, already built for request
+// creation and reused here rather than duplicated (see
+// internal/usecase/query).
+type QueryGateway interface {
+	// Own lists the requests where operatorID is source or recipient
+	// (GET /mes-demandes).
+	Own(ctx context.Context, operatorID string) ([]string, error)
+	// ToAccept lists the EN_COURS/ACCEPTATION requests operatorID is source
+	// of (GET /a-accepter).
+	ToAccept(ctx context.Context, operatorID string) ([]string, error)
+	// ToProcess lists the requests entity.StepOwner(step, type) makes
+	// operatorID responsible for right now (GET /a-traiter).
+	ToProcess(ctx context.Context, operatorID string) ([]string, error)
+	// ToConfirm lists the EN_COURS/CONFIRMATION requests operatorID is an
+	// expected confirmer of and has not yet confirmed
+	// (entity.ExpectedConfirmers) (GET /a-confirmer).
+	ToConfirm(ctx context.Context, operatorID string) ([]string, error)
+	// AlreadyConfirmed lists the requests operatorID has confirmed
+	// (GET /deja-confirmees). excludeSource reproduces ANO-019: in real
+	// fidelity, the platform omits confirmations issued by the request's
+	// own source operator — measured, absent from the contract guide. The
+	// bool crosses from internal/framework/config.Fidelity at the wiring
+	// layer (internal/api), which this package may not import.
+	AlreadyConfirmed(ctx context.Context, operatorID string, excludeSource bool) ([]string, error)
+	// Incoming lists the completed PORTAGE requests where operatorID is
+	// recipient (GET /in).
+	Incoming(ctx context.Context, operatorID string) ([]string, error)
+	// Outgoing lists the completed PORTAGE requests where operatorID is
+	// source (GET /out).
+	Outgoing(ctx context.Context, operatorID string) ([]string, error)
+
+	// ByID answers whether id belongs to queue for operatorID — the same
+	// predicate the matching list method applies, reapplied to a single
+	// row so a detail route needn't load every id first. found is false
+	// both when id doesn't exist at all and when it exists but isn't in
+	// this queue for this caller: the legacy handlers never told the two
+	// apart (both end in entity.RequestNotFound), and this preserves that.
+	ByID(ctx context.Context, queue Queue, id, operatorID string) (entity.PortingRequest, bool, error)
+}

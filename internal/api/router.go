@@ -89,7 +89,23 @@ func NewRouter(d *Deps) *gin.Engine {
 	g.POST("/demandes/entreprise", creationCtrl.Entreprise)
 	g.POST("/demandes/restitution", creationCtrl.Restitution)
 
-	d.routesLecture(g)      // Task 13
+	// Task 12 : les sept files de lecture passent en clean architecture —
+	// un contrôleur qui délègue à sept interactors, chacun résolvant des
+	// ids via QueryGateway puis leur vue via RequestGateway.Get (déjà
+	// construit pour la création). Construit une seule fois ici, comme les
+	// cinq contrôleurs précédents.
+	queryCtrl := d.queryController()
+	g.GET("/demandes/mes-demandes", queryCtrl.MesDemandes)
+	g.GET("/demandes/a-accepter", queryCtrl.AAccepter)
+	g.GET("/demandes/a-accepter/:id", queryCtrl.AAccepterDetail)
+	g.GET("/demandes/a-traiter", queryCtrl.ATraiter)
+	g.GET("/demandes/a-traiter/:id", queryCtrl.ATraiterDetail)
+	g.GET("/demandes/a-confirmer", queryCtrl.AConfirmer)
+	g.GET("/demandes/a-confirmer/:id", queryCtrl.AConfirmerDetail)
+	g.GET("/demandes/deja-confirmees", queryCtrl.DejaConfirmees)
+	g.GET("/demandes/in", queryCtrl.In)
+	g.GET("/demandes/out", queryCtrl.Out)
+
 	d.routesAcceptation(g)  // Task 14
 	d.routesConfirmation(g) // Task 15
 	d.routesTraitement(g)   // Task 16

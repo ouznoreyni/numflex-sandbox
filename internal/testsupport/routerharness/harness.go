@@ -122,6 +122,20 @@ func (h *RouterHarness) Appel(methode, chemin, jeton string, corps any) (*http.R
 	return rep, decode
 }
 
+// Liste exécute un GET authentifié dont data est un tableau. Promoted here
+// (ruling R25) from reference_controller_test.go's local liste(), its first
+// caller — a second capability (Task 12, the seven read-only queues) needing
+// the exact same helper is the signal the ruling names for promoting rather
+// than copying it again.
+func (h *RouterHarness) Liste(chemin, jeton string) []any {
+	h.T.Helper()
+	rep, corps := h.Appel(http.MethodGet, chemin, jeton, nil)
+	require.Equal(h.T, http.StatusOK, rep.StatusCode, chemin)
+	data, ok := corps["data"].([]any)
+	require.Truef(h.T, ok, "%s : data n'est pas un tableau (%v)", chemin, corps)
+	return data
+}
+
 // Jeton authentifie un compte du seed et retourne son id_token.
 func (h *RouterHarness) Jeton(username, motDePasse string) string {
 	h.T.Helper()

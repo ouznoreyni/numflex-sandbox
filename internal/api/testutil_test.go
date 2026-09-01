@@ -58,6 +58,21 @@ func nouveauHarnais(t *testing.T, ajuste ...func(*config.Config)) *harnais {
 	return &harnais{t: t, srv: srv, cfg: cfg, db: db, moteur: mot}
 }
 
+// avancerA fait progresser une demande jusqu'à l'étape voulue en manipulant
+// directement la base — les endpoints de traitement sont testés ailleurs.
+// Déplacée depuis internal/api/lecture_test.go (supprimé, Task 12) : encore
+// utilisée par annulation_test.go, confirmation_test.go, traitement_test.go,
+// incidents_test.go, sandbox_test.go et conformite_captures_test.go, aucun
+// desquels ne migre dans cette tâche.
+func (h *harnais) avancerA(id, etape string) {
+	h.t.Helper()
+	_, err := h.db.Pool.Exec(context.Background(),
+		`UPDATE demande SET etape_actuelle = $2, statut_etape_actuel = 'EN_COURS',
+		                    date_debut_etape = now(), transition_prevue_a = NULL
+		  WHERE id = $1`, id, etape)
+	require.NoError(h.t, err)
+}
+
 // converger déclenche un passage du moteur et vérifie qu'aucune transition ne
 // reste due. Les tests pilotent le moteur explicitement plutôt que d'attendre
 // son ticker.

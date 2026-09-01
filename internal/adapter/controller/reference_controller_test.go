@@ -17,21 +17,9 @@ import (
 	"github.com/ouznoreyni/numflex-sandbox/internal/testsupport/routerharness"
 )
 
-// liste exécute un GET authentifié dont data est un tableau — le pendant
-// local de harnais.liste (internal/api/testutil_test.go), pour un test qui
-// ne peut pas importer internal/api.
-func liste(h *routerharness.RouterHarness, chemin, jeton string) []any {
-	h.T.Helper()
-	rep, corps := h.Appel(http.MethodGet, chemin, jeton, nil)
-	require.Equal(h.T, http.StatusOK, rep.StatusCode, chemin)
-	data, ok := corps["data"].([]any)
-	require.Truef(h.T, ok, "%s : data n'est pas un tableau (%v)", chemin, corps)
-	return data
-}
-
 func TestOperateursRenvoieLesTroisIdentifiantsDeRecette(t *testing.T) {
 	h := routerharness.NewRouterHarness(t)
-	data := liste(h, "/api/gateway/v1/operateurs", h.Jeton("yas", "yas2026"))
+	data := h.Liste("/api/gateway/v1/operateurs", h.Jeton("yas", "yas2026"))
 
 	require.Len(t, data, 3)
 	vus := map[string]string{}
@@ -58,7 +46,7 @@ func TestOperateursMessageExact(t *testing.T) {
 func TestMotifsRejetExposeMotifPasLibelle(t *testing.T) {
 	// ANO-009 : le champ s'appelle motif. La v2 le documente ainsi.
 	h := routerharness.NewRouterHarness(t)
-	data := liste(h, "/api/gateway/v1/motifs-rejet", h.Jeton("orange", "orange2026"))
+	data := h.Liste("/api/gateway/v1/motifs-rejet", h.Jeton("orange", "orange2026"))
 
 	require.Len(t, data, 6)
 	premier := data[0].(map[string]any)
@@ -68,7 +56,7 @@ func TestMotifsRejetExposeMotifPasLibelle(t *testing.T) {
 
 func TestTypesDemande(t *testing.T) {
 	h := routerharness.NewRouterHarness(t)
-	data := liste(h, "/api/gateway/v1/types-demande", h.Jeton("yas", "yas2026"))
+	data := h.Liste("/api/gateway/v1/types-demande", h.Jeton("yas", "yas2026"))
 
 	types := []string{}
 	for _, e := range data {
@@ -79,7 +67,7 @@ func TestTypesDemande(t *testing.T) {
 
 func TestProcessus(t *testing.T) {
 	h := routerharness.NewRouterHarness(t)
-	data := liste(h, "/api/gateway/v1/processus", h.Jeton("yas", "yas2026"))
+	data := h.Liste("/api/gateway/v1/processus", h.Jeton("yas", "yas2026"))
 
 	types := []string{}
 	for _, e := range data {
@@ -90,7 +78,7 @@ func TestProcessus(t *testing.T) {
 
 func TestTypesIncidentPorteFigeSysteme(t *testing.T) {
 	h := routerharness.NewRouterHarness(t)
-	data := liste(h, "/api/gateway/v1/types-incident", h.Jeton("yas", "yas2026"))
+	data := h.Liste("/api/gateway/v1/types-incident", h.Jeton("yas", "yas2026"))
 
 	require.Len(t, data, 2)
 	par := map[string]bool{}
