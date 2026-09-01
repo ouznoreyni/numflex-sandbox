@@ -6,13 +6,13 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/ouznoreyni/numflex-sandbox/internal/config"
 	"github.com/ouznoreyni/numflex-sandbox/internal/entity"
+	"github.com/ouznoreyni/numflex-sandbox/internal/framework/persistence"
 	"github.com/ouznoreyni/numflex-sandbox/internal/httpx"
-	"github.com/ouznoreyni/numflex-sandbox/internal/store"
 )
 
 type Deps struct {
 	Cfg *config.Config
-	DB  *store.DB
+	DB  *persistence.DB
 	R   *httpx.Renderer
 	// Moteur est renseigné en Task 9. Déclaré ici en interface pour que le
 	// paquet api ne dépende pas de l'ordre de livraison des tâches.

@@ -8,9 +8,9 @@ import (
 	"github.com/ouznoreyni/numflex-sandbox/internal/api"
 	"github.com/ouznoreyni/numflex-sandbox/internal/config"
 	"github.com/ouznoreyni/numflex-sandbox/internal/engine"
+	"github.com/ouznoreyni/numflex-sandbox/internal/framework/persistence"
 	"github.com/ouznoreyni/numflex-sandbox/internal/httpx"
 	"github.com/ouznoreyni/numflex-sandbox/internal/seed"
-	"github.com/ouznoreyni/numflex-sandbox/internal/store"
 )
 
 func main() {
@@ -31,14 +31,14 @@ func main() {
 	log.Printf("numflex-sandbox — fidélité=%s expiration=%s port=%s",
 		c.Fidelity, c.EtapeTimeout, c.Port)
 
-	if err := store.Migrate(c.DatabaseURL); err != nil {
+	if err := persistence.Migrate(c.DatabaseURL); err != nil {
 		log.Fatalf("migrations : %v", err)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	db, err := store.Open(ctx, c.DatabaseURL)
+	db, err := persistence.Open(ctx, c.DatabaseURL)
 	if err != nil {
 		log.Fatalf("ouverture de la base : %v", err)
 	}

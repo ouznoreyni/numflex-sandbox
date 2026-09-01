@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/ouznoreyni/numflex-sandbox/internal/store"
+	"github.com/ouznoreyni/numflex-sandbox/internal/framework/persistence"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -34,7 +34,7 @@ const (
 	TypeIncidentTechnique = "65abc456def002"
 )
 
-func Run(ctx context.Context, db *store.DB) error {
+func Run(ctx context.Context, db *persistence.DB) error {
 	operateurs := []struct{ id, nom, prefixe string }{
 		{OperateurOrange, "ORANGE", "191"},
 		{OperateurYAS, "YAS", "192"},
@@ -129,7 +129,7 @@ func Run(ctx context.Context, db *store.DB) error {
 
 // seedNumeros installe le vivier décrit au §10 de la spec : dix numéros par tranche,
 // chaque tranche rendant exerçable une règle précise dès le premier démarrage.
-func seedNumeros(ctx context.Context, db *store.DB) error {
+func seedNumeros(ctx context.Context, db *persistence.DB) error {
 	jours := func(n int) *time.Time {
 		t := time.Now().AddDate(0, 0, -n)
 		return &t

@@ -6,12 +6,12 @@ import (
 	"time"
 
 	"github.com/ouznoreyni/numflex-sandbox/internal/config"
+	"github.com/ouznoreyni/numflex-sandbox/internal/framework/persistence"
 	"github.com/ouznoreyni/numflex-sandbox/internal/seed"
-	"github.com/ouznoreyni/numflex-sandbox/internal/store"
 	"github.com/stretchr/testify/require"
 )
 
-func insererReverse(t *testing.T, db *store.DB, id string) {
+func insererReverse(t *testing.T, db *persistence.DB, id string) {
 	t.Helper()
 	_, err := db.Pool.Exec(context.Background(),
 		`INSERT INTO reverse_request (id, numero, operateur_id, statut, date_demande)

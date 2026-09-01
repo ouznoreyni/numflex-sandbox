@@ -1,36 +1,15 @@
-package store
+package persistence
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"path/filepath"
 
 	"github.com/golang-migrate/migrate/v4"
-	_ "github.com/golang-migrate/migrate/v4/database/postgres"
-	_ "github.com/golang-migrate/migrate/v4/source/file"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-type DB struct {
-	Pool *pgxpool.Pool
-}
-
-func Open(ctx context.Context, url string) (*DB, error) {
-	pool, err := pgxpool.New(ctx, url)
-	if err != nil {
-		return nil, fmt.Errorf("ouverture du pool : %w", err)
-	}
-	if err := pool.Ping(ctx); err != nil {
-		return nil, fmt.Errorf("connexion à la base : %w", err)
-	}
-	return &DB{Pool: pool}, nil
-}
-
-func (d *DB) Close() { d.Pool.Close() }
-
 func Migrate(url string) error {
-	dir, err := RepertoireMigrations()
+	dir, err := MigrationsDir()
 	if err != nil {
 		return err
 	}
@@ -45,9 +24,9 @@ func Migrate(url string) error {
 	return nil
 }
 
-// RepertoireMigrations remonte l'arborescence jusqu'à trouver le dossier migrations,
-// pour que les tests s'exécutent depuis n'importe quel paquet.
-func RepertoireMigrations() (string, error) {
+// MigrationsDir walks up the directory tree until it finds the migrations
+// folder, so tests run correctly regardless of which package invokes them.
+func MigrationsDir() (string, error) {
 	dir, err := os.Getwd()
 	if err != nil {
 		return "", err

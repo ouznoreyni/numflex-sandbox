@@ -1,4 +1,6 @@
-package store_test
+//go:build integration
+
+package persistence_test
 
 import (
 	"context"

@@ -18,9 +18,9 @@ import (
 	"github.com/ouznoreyni/numflex-sandbox/internal/api"
 	"github.com/ouznoreyni/numflex-sandbox/internal/config"
 	"github.com/ouznoreyni/numflex-sandbox/internal/engine"
+	"github.com/ouznoreyni/numflex-sandbox/internal/framework/persistence"
 	"github.com/ouznoreyni/numflex-sandbox/internal/httpx"
 	"github.com/ouznoreyni/numflex-sandbox/internal/seed"
-	"github.com/ouznoreyni/numflex-sandbox/internal/store"
 	"github.com/ouznoreyni/numflex-sandbox/internal/testsupport"
 	"github.com/stretchr/testify/require"
 )
@@ -29,7 +29,7 @@ type harnais struct {
 	t      *testing.T
 	srv    *httptest.Server
 	cfg    *config.Config
-	db     *store.DB
+	db     *persistence.DB
 	moteur *engine.Engine
 }
 

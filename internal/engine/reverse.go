@@ -4,14 +4,14 @@ import (
 	"context"
 	"time"
 
+	"github.com/ouznoreyni/numflex-sandbox/internal/framework/persistence"
 	"github.com/ouznoreyni/numflex-sandbox/internal/oid"
-	"github.com/ouznoreyni/numflex-sandbox/internal/store"
 )
 
 // ValiderReverse est un acte de l'ARTP, hors périmètre de l'API gateway (§6).
 // Il crée une Demande de type REVERSE directement à l'étape CONFIRMATION : ni
 // ACCEPTATION, ni DESACTIVATION/ACTIVATION.
-func ValiderReverse(ctx context.Context, db *store.DB, reverseID string) error {
+func ValiderReverse(ctx context.Context, db *persistence.DB, reverseID string) error {
 	tx, err := db.Pool.Begin(ctx)
 	if err != nil {
 		return err
@@ -62,7 +62,7 @@ func ValiderReverse(ctx context.Context, db *store.DB, reverseID string) error {
 
 // RejeterReverse est également un acte de l'ARTP : rejeter la demande sans
 // jamais créer de Demande.
-func RejeterReverse(ctx context.Context, db *store.DB, reverseID string) error {
+func RejeterReverse(ctx context.Context, db *persistence.DB, reverseID string) error {
 	_, err := db.Pool.Exec(ctx,
 		`UPDATE reverse_request SET statut='REJETE', date_decision=now()
 		  WHERE id = $1 AND statut = 'EN_ATTENTE'`, reverseID)

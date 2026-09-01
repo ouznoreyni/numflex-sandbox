@@ -7,14 +7,14 @@ import (
 
 	"github.com/ouznoreyni/numflex-sandbox/internal/config"
 	"github.com/ouznoreyni/numflex-sandbox/internal/entity"
+	"github.com/ouznoreyni/numflex-sandbox/internal/framework/persistence"
 	"github.com/ouznoreyni/numflex-sandbox/internal/seed"
-	"github.com/ouznoreyni/numflex-sandbox/internal/store"
 	"github.com/ouznoreyni/numflex-sandbox/internal/testsupport"
 	"github.com/stretchr/testify/require"
 )
 
 // insererDemande crée une demande directement en base, à l'étape voulue.
-func insererDemande(t *testing.T, db *store.DB, id string, etape entity.Step, ageEtape time.Duration) {
+func insererDemande(t *testing.T, db *persistence.DB, id string, etape entity.Step, ageEtape time.Duration) {
 	t.Helper()
 	debut := time.Now().Add(-ageEtape)
 	_, err := db.Pool.Exec(context.Background(),
@@ -32,7 +32,7 @@ func insererDemande(t *testing.T, db *store.DB, id string, etape entity.Step, ag
 	require.NoError(t, err)
 }
 
-func etatDemande(t *testing.T, db *store.DB, id string) (etape, statutEtape, statutDemande string) {
+func etatDemande(t *testing.T, db *persistence.DB, id string) (etape, statutEtape, statutDemande string) {
 	t.Helper()
 	require.NoError(t, db.Pool.QueryRow(context.Background(),
 		`SELECT etape_actuelle, statut_etape_actuel, statut_demande FROM demande WHERE id = $1`, id).
@@ -40,7 +40,7 @@ func etatDemande(t *testing.T, db *store.DB, id string) (etape, statutEtape, sta
 	return
 }
 
-func moteur(t *testing.T, ajuste ...func(*config.Config)) (*Engine, *store.DB) {
+func moteur(t *testing.T, ajuste ...func(*config.Config)) (*Engine, *persistence.DB) {
 	t.Helper()
 	db := testsupport.NewTestDB(t)
 	cfg := &config.Config{EngineTick: time.Millisecond, EtapeTimeout: 0}

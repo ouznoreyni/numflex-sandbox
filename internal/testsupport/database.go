@@ -7,8 +7,8 @@ import (
 	"os"
 	"testing"
 
+	"github.com/ouznoreyni/numflex-sandbox/internal/framework/persistence"
 	"github.com/ouznoreyni/numflex-sandbox/internal/seed"
-	"github.com/ouznoreyni/numflex-sandbox/internal/store"
 )
 
 const truncateSQL = `TRUNCATE
@@ -18,17 +18,17 @@ const truncateSQL = `TRUNCATE
 	RESTART IDENTITY CASCADE`
 
 // NewTestDB rend une base migrée, vidée et ensemencée.
-func NewTestDB(t *testing.T) *store.DB {
+func NewTestDB(t *testing.T) *persistence.DB {
 	t.Helper()
 	url := os.Getenv("DATABASE_URL")
 	if url == "" {
 		t.Skip("DATABASE_URL absent — lancer via make test")
 	}
-	if err := store.Migrate(url); err != nil {
+	if err := persistence.Migrate(url); err != nil {
 		t.Fatalf("migrations : %v", err)
 	}
 	ctx := context.Background()
-	db, err := store.Open(ctx, url)
+	db, err := persistence.Open(ctx, url)
 	if err != nil {
 		t.Fatalf("ouverture : %v", err)
 	}

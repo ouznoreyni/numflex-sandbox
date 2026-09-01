@@ -17,8 +17,8 @@ import (
 
 	"github.com/ouznoreyni/numflex-sandbox/internal/config"
 	"github.com/ouznoreyni/numflex-sandbox/internal/engine"
+	"github.com/ouznoreyni/numflex-sandbox/internal/framework/persistence"
 	"github.com/ouznoreyni/numflex-sandbox/internal/seed"
-	"github.com/ouznoreyni/numflex-sandbox/internal/store"
 )
 
 func main() {
@@ -44,7 +44,7 @@ func executer(args []string) error {
 	}
 
 	ctx := context.Background()
-	db, err := store.Open(ctx, cfg.DatabaseURL)
+	db, err := persistence.Open(ctx, cfg.DatabaseURL)
 	if err != nil {
 		return fmt.Errorf("ouverture de la base : %w", err)
 	}
@@ -64,7 +64,7 @@ func executer(args []string) error {
 	}
 }
 
-func executerReverse(ctx context.Context, db *store.DB, args []string) error {
+func executerReverse(ctx context.Context, db *persistence.DB, args []string) error {
 	if len(args) == 0 {
 		return usage()
 	}
@@ -104,7 +104,7 @@ func argID(args []string) (string, error) {
 	return args[1], nil
 }
 
-func listerReverses(ctx context.Context, db *store.DB) error {
+func listerReverses(ctx context.Context, db *persistence.DB) error {
 	rows, err := db.Pool.Query(ctx,
 		`SELECT id, numero, operateur_id, statut, date_demande
 		   FROM reverse_request ORDER BY date_demande`)

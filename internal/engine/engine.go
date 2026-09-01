@@ -10,15 +10,15 @@ import (
 	"time"
 
 	"github.com/ouznoreyni/numflex-sandbox/internal/config"
-	"github.com/ouznoreyni/numflex-sandbox/internal/store"
+	"github.com/ouznoreyni/numflex-sandbox/internal/framework/persistence"
 )
 
 type Engine struct {
 	cfg *config.Config
-	db  *store.DB
+	db  *persistence.DB
 }
 
-func New(cfg *config.Config, db *store.DB) *Engine {
+func New(cfg *config.Config, db *persistence.DB) *Engine {
 	return &Engine{cfg: cfg, db: db}
 }
 
