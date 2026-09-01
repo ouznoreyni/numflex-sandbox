@@ -33,4 +33,7 @@ services:
     environment:
       DATABASE_URL: postgres://numflex:numflex@postgres:5432/numflex?sslmode=disable
       FIDELITY: real
+      # Permet à la page Swagger (make swagger, port 8081) d'appeler l'API
+      # depuis un navigateur. La plateforme réelle n'envoie pas de CORS.
+      CORS_ALLOWED_ORIGINS: http://localhost:8081
     ports: ["8080:8080"]

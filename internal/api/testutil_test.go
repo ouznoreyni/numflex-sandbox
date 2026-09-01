@@ -137,3 +137,31 @@ func (h *harnais) liste(chemin, jeton string) []any {
 	require.Truef(h.t, ok, "%s : data n'est pas un tableau (%v)", chemin, corps)
 	return data
 }
+
+// brutAvecEnTetes exécute une requête en ajoutant des en-têtes arbitraires —
+// nécessaire pour les tests CORS, qui portent sur Origin et sur le préambule.
+func (h *harnais) brutAvecEnTetes(methode, chemin, jeton string, corps any,
+	entetes map[string]string) *http.Response {
+	h.t.Helper()
+	var body *bytes.Reader
+	if corps != nil {
+		b, err := json.Marshal(corps)
+		require.NoError(h.t, err)
+		body = bytes.NewReader(b)
+	} else {
+		body = bytes.NewReader(nil)
+	}
+	req, err := http.NewRequest(methode, h.srv.URL+chemin, body)
+	require.NoError(h.t, err)
+	req.Header.Set("Content-Type", "application/json")
+	if jeton != "" {
+		req.Header.Set("Authorization", "Bearer "+jeton)
+	}
+	for k, v := range entetes {
+		req.Header.Set(k, v)
+	}
+	rep, err := http.DefaultClient.Do(req)
+	require.NoError(h.t, err)
+	h.t.Cleanup(func() { rep.Body.Close() })
+	return rep
+}

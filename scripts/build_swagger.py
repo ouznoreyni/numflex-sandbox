@@ -33,8 +33,10 @@ GABARIT = """<!doctype html>
   Sandbox sur <code>http://localhost:8080</code> — comptes <code>yas/yas2026</code>,
   <code>orange/orange2026</code>, <code>expresso/expresso2026</code>. Cette page est servie hors
   de la gateway : le sandbox n'expose que les 33 routes du contrat.
-  <strong>« Try it out » depuis cette page échouera</strong> — le sandbox n'envoie pas d'en-têtes CORS,
-  comme la plateforme réelle. Utilisez la collection Postman ou <code>curl</code> pour appeler.
+  <strong>« Try it out »</strong> fonctionne si le sandbox tourne avec
+  <code>CORS_ALLOWED_ORIGINS=http://localhost:8081</code> — c'est le cas via <code>make run</code>
+  et via <code>docker compose up</code>. Sans cette variable, le sandbox n'envoie aucun en-tête CORS,
+  comme la plateforme réelle, et le navigateur bloque l'appel : utilisez alors Postman ou <code>curl</code>.
 </div>
 <div id="swagger-ui"></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.17.14/swagger-ui-bundle.min.js"></script>

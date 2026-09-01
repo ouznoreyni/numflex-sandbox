@@ -9,8 +9,12 @@ test: up
 	COMPLETION_LATENCY_MS=0 CLOCK_SKEW_SECONDS=0 \
 	go test ./... -p 1 -count=1
 
+# CORS_ALLOWED_ORIGINS autorise la page Swagger (port 8081) a appeler l'API
+# depuis un navigateur. La plateforme reelle n'envoie pas de CORS : retirer
+# cette variable pour retrouver son comportement exact.
 run: up
 	DATABASE_URL="postgres://numflex:numflex@localhost:5432/numflex?sslmode=disable" \
+	CORS_ALLOWED_ORIGINS="http://localhost:8081" \
 	go run ./cmd/server
 
 # Documentation servie hors de la gateway, sur un port distinct : le sandbox ne

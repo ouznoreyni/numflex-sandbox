@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -30,6 +31,13 @@ type Config struct {
 	OTPTTL                time.Duration
 	OTPMaxAttempts        int
 	ReverseAutoValidation time.Duration
+
+	// CORSAllowedOrigins est une commodité de bac à sable, pas un trait du
+	// contrat : elle n'existe que pour qu'une page de documentation servie sur
+	// un autre port puisse appeler l'API depuis un navigateur. Vide — le défaut
+	// — aucun en-tête CORS n'est émis, comme une gateway consommée de serveur à
+	// serveur. `*` autorise toute origine.
+	CORSAllowedOrigins []string
 }
 
 func Load() (*Config, error) {
@@ -39,6 +47,8 @@ func Load() (*Config, error) {
 		JWTSecret:     str("JWT_SECRET", "numflex-sandbox-dev-secret"),
 		Fidelity:      Fidelity(str("FIDELITY", string(FidelityReal))),
 		OTPStaticCode: str("OTP_STATIC_CODE", "123456"),
+
+		CORSAllowedOrigins: liste(str("CORS_ALLOWED_ORIGINS", "")),
 	}
 
 	var err error
@@ -94,6 +104,18 @@ func str(clef, defaut string) string {
 		return v
 	}
 	return defaut
+}
+
+// liste découpe une valeur séparée par des virgules en ignorant les entrées
+// vides — "a, ,b" donne ["a" "b"], "" donne nil.
+func liste(v string) []string {
+	var out []string
+	for _, part := range strings.Split(v, ",") {
+		if p := strings.TrimSpace(part); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 func num(clef string, defaut int) (int, error) {

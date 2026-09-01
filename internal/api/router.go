@@ -16,6 +16,11 @@ func NewRouter(d *Deps) *gin.Engine {
 	r := gin.New()
 	r.Use(gin.Recovery())
 
+	// Avant tout le reste, y compris l'authentification : un préambule CORS part
+	// sans jeton. Inerte tant que CORS_ALLOWED_ORIGINS est vide (le défaut), et
+	// n'enregistre aucune route — voir cors.go.
+	r.Use(d.autoriserCORS())
+
 	r.POST("/api/authenticate", d.postAuthenticate)
 	r.GET("/api/authenticate", d.Authentifier(), d.getAuthenticate)
 
