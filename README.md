@@ -86,6 +86,7 @@ l'état courant. Pour repartir à zéro, supprimer le volume Postgres.
 | `OTP_TTL_SECONDS` | `300` | Validité de l'OTP |
 | `OTP_MAX_ATTEMPTS` | `3` | Tentatives de saisie |
 | `REVERSE_AUTO_VALIDATION_SECONDS` | `0` | `0` = validation par le CLI `artp` uniquement |
+| `CORS_ALLOWED_ORIGINS` | — | Origines autorisées, séparées par des virgules ; vide = aucun en-tête CORS, comme la plateforme réelle. `*` autorise tout |
 
 ### `FIDELITY=real` reproduit les anomalies de la recette, et c'est voulu
 
@@ -206,9 +207,12 @@ sinon il ne présente plus la même surface que la plateforme réelle.
 
 Deux conséquences à connaître :
 
-- **« Try it out » ne fonctionne pas** depuis cette page. Le sandbox n'envoie aucun en-tête CORS,
-  comme la plateforme réelle, et l'appel part d'une autre origine (`8081` → `8080`). Pour appeler
-  réellement, utilisez la collection Postman ou `curl`.
+- **« Try it out » exige que le CORS soit activé.** L'appel part d'une autre origine
+  (`8081` → `8080`) ; sans en-tête `Access-Control-Allow-Origin`, le navigateur le bloque.
+  `make run` et `docker compose up` posent `CORS_ALLOWED_ORIGINS=http://localhost:8081` pour vous.
+  **Cette variable est une commodité de bac à sable, pas un trait du contrat** : la gateway réelle
+  est consommée de serveur à serveur et aucun test du SIT n'a mesuré son comportement cross-origin.
+  Laissez-la vide — le défaut — pour retrouver le comportement exact de la plateforme.
 - **La spécification décrit le contrat**, donc le sandbox lancé en `FIDELITY=contract`. En
   `FIDELITY=real` — le défaut — les réponses d'erreur diffèrent ; chaque description signale
   l'écart par son identifiant SIT.
