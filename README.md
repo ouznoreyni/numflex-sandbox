@@ -54,10 +54,12 @@ disque, tout l'état vit dans la base.
 ```bash
 docker network create numflex-net       # une fois
 
-# La base. C'est elle qui porte le volume — l'API n'en a pas besoin.
+# La base. C'est elle qui porte les données — l'API n'a besoin d'aucun montage.
+# `-v <dossier hôte>:<chemin conteneur>` : le chemin est donné tel quel, il n'y a
+# aucun volume à créer au préalable.
 docker run -d --name numflex-db --network numflex-net \
   -e POSTGRES_USER=numflex -e POSTGRES_PASSWORD=numflex -e POSTGRES_DB=numflex \
-  -v numflex-data:/var/lib/postgresql/data \
+  -v "$PWD/pgdata:/var/lib/postgresql/data" \
   postgres:16-alpine
 
 # L'API. Le .env fournit le socle, -e corrige ce qui dépend du réseau Docker,
@@ -86,10 +88,36 @@ docker run -d --name numflex-api --network numflex-net \
 `/app/migrations`. Le seul montage de l'exemple est le `.env`, et il est facultatif : tout passer
 en `-e` ou en arguments donne le même résultat.
 
-**Plusieurs profils plutôt qu'un `.env`** : monter un répertoire, puis désigner le fichier.
+#### Monter des dossiers de l'hôte
+
+Un chemin en première position de `-v` suffit : Docker le monte tel quel, rien n'est à créer
+d'avance. Le chemin doit être absolu — `$PWD/pgdata`, pas `./pgdata`.
 
 ```bash
-docker run -d --name numflex-api --network numflex-net -p 8096:8096 \
+mkdir -p "$PWD/pgdata"
+
+docker run -d --name numflex-db --network numflex-net \
+  -e POSTGRES_USER=numflex -e POSTGRES_PASSWORD=numflex -e POSTGRES_DB=numflex \
+  -v "$PWD/pgdata:/var/lib/postgresql/data" \
+  postgres:16-alpine
+```
+
+PostgreSQL initialise son cluster directement dans `pgdata/` — `PG_VERSION`, `base/`, `global/` y
+apparaissent, et `docker inspect` rapporte des montages de type `bind`, sans aucun volume nommé.
+Le dossier doit exister avant : Docker le crée sinon, mais vide et possédé par `root`.
+
+Sur macOS et Windows, le dossier doit appartenir aux chemins partagés avec la machine virtuelle
+Docker — `/Users`, `/private`, `/tmp` par défaut sur macOS — sinon le montage échoue au démarrage.
+
+Pour mémoire, `docker volume create --driver local --opt type=none --opt device=<dossier> --opt
+o=bind <nom>` donne un volume *nommé* adossé au même dossier : même résultat à l'exécution, avec en
+plus un nom dans `docker volume ls`. Inutile si vous vous contentez du chemin.
+
+**Plusieurs profils plutôt qu'un `.env`** : monter le dossier qui les contient, en lecture seule,
+puis désigner le fichier voulu.
+
+```bash
+docker run -d --name numflex-api --network numflex-net -p 8097:8097 \
   -v "$PWD/config:/config:ro" \
   numflex-sandbox:latest --env-file /config/recette.env
 ```
@@ -108,8 +136,8 @@ docker run --rm --network numflex-net --entrypoint /usr/local/bin/artp \
 Pour publier :
 
 ```bash
-docker login ghcr.io
-make push                                    # ghcr.io/yas/numflex-sandbox:<git describe>
+docker login
+make push                                    # docker.io/ouzdiop268/numflex-sandbox:<git describe>
 make push REGISTRY=… VERSION=v0.4.0          # ailleurs, sous une version choisie
 ```
 

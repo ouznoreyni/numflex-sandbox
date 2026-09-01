@@ -32,10 +32,10 @@ swagger-build:
 # Le nom local est IMAGE:VERSION, le nom publié REGISTRY/IMAGE:VERSION. Chaque
 # variable se surcharge :
 #   make image VERSION=v0.4.0
-#   make push  REGISTRY=ghcr.io/yas VERSION=v0.4.0
+#   make push  REGISTRY=harbor.noorexe.com/numflex VERSION=v0.4.0
 IMAGE     ?= numflex-sandbox
 VERSION   ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
-REGISTRY  ?= ghcr.io/yas
+REGISTRY  ?= docker.io/ouzdiop268
 PLATFORMS ?= linux/amd64,linux/arm64
 BUILDER   ?= numflex-builder
 
