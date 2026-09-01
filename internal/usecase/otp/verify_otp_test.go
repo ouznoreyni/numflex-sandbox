@@ -2,6 +2,7 @@ package otp_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -9,6 +10,21 @@ import (
 	"github.com/ouznoreyni/numflex-sandbox/internal/usecase/otp"
 	"github.com/ouznoreyni/numflex-sandbox/internal/usecase/port"
 )
+
+var errIncrementBoom = errors.New("boom incrementing attempts")
+
+// incrementFailsGateway wraps an *inmemory.OTPGateway, keeping its Find,
+// Upsert and Consume, but replacing IncrementAttempts with one that always
+// fails — the symmetric counterpart of send_otp_test.go's failingOTPGateway,
+// used to check the failed-comparison branch does not swallow the error.
+type incrementFailsGateway struct {
+	*inmemory.OTPGateway
+	err error
+}
+
+func (g incrementFailsGateway) IncrementAttempts(context.Context, string) error {
+	return g.err
+}
 
 // TestVerifyDoesNotConsume pins TC-021: a successful verification leaves the
 // code usable, so that creating the request afterwards still works. Only
@@ -146,6 +162,32 @@ func TestVerifyCheckOrderMaxAttemptsBeatsExpiry(t *testing.T) {
 		MSISDN: "771000001", Code: "123456"})
 	if f == nil || f.Code != "OTP_MAX_ATTEMPTS" {
 		t.Fatalf("expected OTP_MAX_ATTEMPTS (checked before expiry), got %v", f)
+	}
+}
+
+// TestVerifyIncrementAttemptsFailureSurfaces pins the safeguard around the
+// failed-comparison branch: if the gateway's IncrementAttempts errors, that
+// error must surface as an internal fault rather than being reported as a
+// plain invalid code — swallowing it would let the three-attempt limit
+// silently stop applying. Symmetric to send_otp_test.go's
+// TestSendOTPPropagatesGatewayError.
+func TestVerifyIncrementAttemptsFailureSurfaces(t *testing.T) {
+	inner := inmemory.NewOTPGateway()
+	clock := inmemory.FixedClock{At: time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)}
+	inner.Seed(port.OneTimePassword{
+		MSISDN: "771000001", Code: "123456",
+		ExpiresAt: clock.Now().Add(5 * time.Minute),
+	})
+	g := incrementFailsGateway{OTPGateway: inner, err: errIncrementBoom}
+	i := otp.NewVerifyOTP(g, clock, 3)
+
+	f := i.Execute(context.Background(), otp.VerifyOTPInput{
+		MSISDN: "771000001", Code: "000000"})
+	if f == nil || f.Code == "OTP_INVALID" {
+		t.Fatalf("expected the IncrementAttempts failure to surface as an internal fault, not OTP_INVALID, got %v", f)
+	}
+	if f.Code != "ERREUR_INTERNE" {
+		t.Fatalf("expected ERREUR_INTERNE, got %v", f)
 	}
 }
 

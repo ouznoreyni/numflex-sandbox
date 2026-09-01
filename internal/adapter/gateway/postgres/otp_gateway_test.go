@@ -20,9 +20,12 @@ func must(t *testing.T, err error) {
 }
 
 // TestOTPGatewayUpsertResetsAttempts pins the ON CONFLICT clause: a second
-// send on a number that already failed attempts must reset both tentatives
-// and consomme, otherwise a user could be locked out after three failures
-// forever.
+// send on a number that already failed attempts AND was consumed must reset
+// both tentatives and consomme, otherwise a user could be locked out after
+// three failures forever, or could never be re-challenged after one
+// successful flow. Both Consume and IncrementAttempts are exercised first so
+// the row genuinely holds a non-default value on each field before the
+// reset — otherwise the final assertion on consomme would be trivially true.
 func TestOTPGatewayUpsertResetsAttempts(t *testing.T) {
 	db := testsupport.NewTestDB(t)
 	g := postgres.NewOTPGateway(db.Pool)
@@ -33,6 +36,19 @@ func TestOTPGatewayUpsertResetsAttempts(t *testing.T) {
 		ExpiresAt: time.Now().Add(5 * time.Minute),
 	}))
 	must(t, g.IncrementAttempts(ctx, "771000001"))
+	must(t, g.Consume(ctx, "771000001"))
+
+	// Precondition: both fields genuinely hold a non-default value before the
+	// reset, or the assertions below would prove nothing.
+	before, found, err := g.Find(ctx, "771000001")
+	must(t, err)
+	if !found {
+		t.Fatal("otp not found")
+	}
+	if before.Attempts == 0 || !before.Consumed {
+		t.Fatalf("precondition failed: attempts=%d consumed=%v, want attempts>0 and consumed=true",
+			before.Attempts, before.Consumed)
+	}
 
 	// A second send must reset attempts and the consumed flag: the ON CONFLICT
 	// clause is what makes a number re-challengeable.
