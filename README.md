@@ -6,9 +6,10 @@ ARTP.
 
 ## Ce que c'est
 
-- Les **33 routes** du contrat gateway, plus les deux routes d'authentification. Rien d'autre :
-  aucune route de santé, de metrics ou de debug, pour que la surface exposée soit exactement celle
-  de la plateforme réelle.
+- Les **33 routes** du contrat gateway, plus les deux routes d'authentification. Rien d'autre sous
+  `/api/gateway/v1` : aucune route de santé, de metrics ou de debug, pour que la surface exposée
+  soit exactement celle de la plateforme réelle. La seule commodité de bac à sable — la purge des
+  données de test — vit sous un autre préfixe et reste fermée par défaut.
 - Une **machine à états complète** — `ACCEPTATION` → `DESACTIVATION` → `ACTIVATION` →
   `CONFIRMATION` → `COMPLETION` — avec ses habilitations, son moteur d'expiration et sa fenêtre de
   convergence réglable.
@@ -207,6 +208,7 @@ l'état courant. Pour repartir à zéro, supprimer le volume Postgres.
 | `OTP_MAX_ATTEMPTS` | `3` | Tentatives de saisie |
 | `REVERSE_AUTO_VALIDATION_SECONDS` | `0` | `0` = validation par le CLI `artp` uniquement |
 | `CORS_ALLOWED_ORIGINS` | `*` | Origines autorisées, séparées par des virgules. **Absente = `*`**, toute origine ; **posée vide = aucun en-tête CORS**, comme la plateforme réelle |
+| `SANDBOX_ADMIN` | `false` | Ouvre la purge des données de test sous `/api/sandbox/v1` — hors contrat ARTP, voir ci-dessous |
 | `ENV_FILE` | `.env` | Chemin du fichier d'environnement à charger — voir ci-dessous |
 
 ### D'où viennent les valeurs
@@ -308,6 +310,53 @@ Trois comportements ne sont ni documentés au guide v2, ni mesurés en recette. 
 
 D'autres `[HYP]` plus locaux existent (flotte intégralement rejetée, absence de garde de gel sur
 l'annulation, messages d'erreur non mesurés) : `grep -rn '\[HYP\]' internal/`.
+
+## Purge des données de test — hors contrat
+
+**Cette route n'existe pas chez l'ARTP.** Elle vit délibérément sous un autre préfixe, pour que
+`/api/gateway/v1` reste exactement la surface de la plateforme réelle : un client qui bascule son
+`baseUrl` vers la recette ARTP ne perd que ce qu'il sait ne pas exister là-bas.
+
+```bash
+SANDBOX_ADMIN=true          # défaut : false
+
+DELETE /api/sandbox/v1/demandes     Authorization: Bearer <jeton>
+```
+
+À `false` — le défaut — la route **n'est pas enregistrée** : elle répond `404`, indistinguable d'un
+chemin inconnu, jeton valide ou non. Rien n'est purgeable par accident, et rien ne se découvre par
+balayage.
+
+```json
+{ "success": true, "code": "SUCCESS", "message": "Demandes purgées avec succès",
+  "data": { "demandesSupprimees": 12, "numerosRestaures": 9,
+            "otpSupprimes": 4, "reverseSupprimees": 1 } }
+```
+
+**Le périmètre est `createur_operateur_id`**, pas le filtre de `/mes-demandes`. Une demande
+appartient à deux opérateurs à la fois ; seul son créateur l'a fabriquée. Conséquence à connaître :
+un Port-IN créé par un partenaire pour exercer votre Port-OUT ne se purge pas depuis votre jeton —
+c'est au partenaire de le faire avec le sien.
+
+**Ce qui part, en une transaction :** les demandes créées par l'appelant et tout ce qui en dépend
+(`demande_numero`, `demande_client`, `etape_historique`, `confirmation`, par cascade) ; les OTP des
+numéros concernés — sans quoi le même numéro ne pourrait pas être redemandé sans repasser par
+`otp/send` ; les demandes de reverse de l'appelant, dont la clé étrangère bloquerait sinon la
+suppression. Les incidents et le référentiel du seed ne sont pas touchés.
+
+**Le registre national est restauré** pour chaque numéro concerné :
+
+```
+operateur_actuel_id  = operateur_origine_id
+date_dernier_portage = NULL
+deja_restitue        = false
+```
+
+C'est ce qui rend l'opération utile : sans cette remise en état, un numéro déjà porté resterait
+bloqué par `DELAI_PORTAGE_NON_RESPECTE` pendant trois mois et le scénario ne pourrait pas être
+rejoué. La règle est **« le numéro rentre chez lui »**, pas « le numéro retrouve son état de
+seed » : pour une tranche ensemencée déjà portée — `77200`, détenue par ORANGE mais d'origine YAS —
+la purge la ramène chez YAS, pas chez ORANGE.
 
 ## Tests
 

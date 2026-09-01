@@ -32,6 +32,12 @@ type Config struct {
 	OTPMaxAttempts        int
 	ReverseAutoValidation time.Duration
 
+	// SandboxAdmin ouvre /api/sandbox/v1 — la purge des données de test. Hors
+	// contrat ARTP, donc faux par défaut : à false la route n'est pas
+	// enregistrée du tout et répond 404, comme n'importe quel chemin inconnu.
+	// La gateway, elle, garde ses 33 routes dans les deux cas.
+	SandboxAdmin bool
+
 	// CORSAllowedOrigins est une commodité de bac à sable, pas un trait du
 	// contrat : elle n'existe que pour qu'une page servie sur un autre port —
 	// Swagger, un back-office en développement — puisse appeler l'API depuis un
@@ -91,6 +97,9 @@ func Load() (*Config, error) {
 	if c.OTPMaxAttempts, err = num("OTP_MAX_ATTEMPTS", 3); err != nil {
 		return nil, err
 	}
+	if c.SandboxAdmin, err = booleen("SANDBOX_ADMIN", false); err != nil {
+		return nil, err
+	}
 
 	if c.DatabaseURL == "" {
 		return nil, fmt.Errorf("DATABASE_URL est obligatoire")
@@ -137,6 +146,18 @@ func num(clef string, defaut int) (int, error) {
 		return 0, fmt.Errorf("%s : entier attendu, reçu %q", clef, v)
 	}
 	return n, nil
+}
+
+func booleen(clef string, defaut bool) (bool, error) {
+	v, ok := os.LookupEnv(clef)
+	if !ok || v == "" {
+		return defaut, nil
+	}
+	b, err := strconv.ParseBool(v)
+	if err != nil {
+		return false, fmt.Errorf("%s : booléen attendu, reçu %q", clef, v)
+	}
+	return b, nil
 }
 
 func dur(clef string, defaut int, unite time.Duration) (time.Duration, error) {
