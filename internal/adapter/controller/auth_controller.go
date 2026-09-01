@@ -8,6 +8,7 @@ import (
 	"github.com/ouznoreyni/numflex-sandbox/internal/adapter/presenter"
 	"github.com/ouznoreyni/numflex-sandbox/internal/entity"
 	"github.com/ouznoreyni/numflex-sandbox/internal/usecase/auth"
+	"github.com/ouznoreyni/numflex-sandbox/internal/usecase/port"
 )
 
 // AuthController is the interface-adapter for the two /api/authenticate
@@ -74,12 +75,12 @@ func (ctl *AuthController) PostAuthenticate(c *gin.Context) {
 // GetAuthenticate confirms authentication — 204 No Content, exactly as the
 // legacy handler answered once middleware.Authenticate (registered ahead of
 // this route in internal/api/router.go) had already let the request
-// through. entity.CallerFromContext reads the caller that middleware
+// through. port.CallerFromContext reads the caller that middleware
 // resolved: DescribeCaller's outcome never changes the response, but running
 // it keeps this route driving a use case rather than a bare status write.
 func (ctl *AuthController) GetAuthenticate(c *gin.Context) {
 	ctl.describe.Execute(c.Request.Context(), auth.DescribeCallerInput{
-		Caller: entity.CallerFromContext(c.Request.Context()),
+		Caller: port.CallerFromContext(c.Request.Context()),
 	})
 	c.Status(http.StatusNoContent)
 }
