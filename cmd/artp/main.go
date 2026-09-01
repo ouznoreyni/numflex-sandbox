@@ -33,6 +33,11 @@ func executer(args []string) error {
 		return usage()
 	}
 
+	// Pas d'arguments CLEF=valeur ici : ils entreraient en collision avec les
+	// sous-commandes. Le fichier .env — ou ENV_FILE — reste lu.
+	if err := config.ChargerFichierEnv(); err != nil {
+		return err
+	}
 	cfg, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("configuration : %w", err)

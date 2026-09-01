@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log"
+	"os"
 
 	"github.com/yas/numflex-sandbox/internal/api"
 	"github.com/yas/numflex-sandbox/internal/config"
@@ -13,6 +14,16 @@ import (
 )
 
 func main() {
+	// Les arguments l'emportent sur l'environnement, qui l'emporte sur le
+	// fichier .env : un conteneur se règle indifféremment par `-e`, par un
+	// `.env` monté, ou par des arguments `CLEF=valeur`.
+	if err := config.AppliquerArguments(os.Args[1:]); err != nil {
+		log.Fatalf("arguments : %v", err)
+	}
+	if err := config.ChargerFichierEnv(); err != nil {
+		log.Fatalf("configuration : %v", err)
+	}
+
 	c, err := config.Load()
 	if err != nil {
 		log.Fatalf("configuration : %v", err)

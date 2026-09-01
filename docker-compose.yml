@@ -26,14 +26,24 @@ services:
       retries: 20
 
   api:
-    build: .
+    build:
+      context: .
+    image: numflex-sandbox:latest
     depends_on:
       postgres:
         condition: service_healthy
+    # Le .env du dépôt, s'il existe, alimente le conteneur ; il n'est pas requis.
+    env_file:
+      - path: .env
+        required: false
+    # Ce bloc l'emporte sur le fichier — c'est voulu : ces deux valeurs doivent
+    # être vraies *dans le réseau compose*, où la base ne s'appelle pas
+    # localhost. Tout le reste de la configuration se règle par le .env.
     environment:
       DATABASE_URL: postgres://numflex:numflex@postgres:5432/numflex?sslmode=disable
-      FIDELITY: real
       # Permet à la page Swagger (make swagger, port 8081) d'appeler l'API
       # depuis un navigateur. La plateforme réelle n'envoie pas de CORS.
-      CORS_ALLOWED_ORIGINS: http://localhost:8081
-    ports: ["8080:8080"]
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:8081}
+    # PORT est lu depuis le même .env, côté hôte comme côté conteneur : les deux
+    # extrémités de la publication restent alignées si on le change.
+    ports: ["${PORT:-8080}:${PORT:-8080}"]
