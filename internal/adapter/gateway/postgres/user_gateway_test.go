@@ -7,9 +7,15 @@ import (
 	"testing"
 
 	"github.com/ouznoreyni/numflex-sandbox/internal/adapter/gateway/postgres"
-	"github.com/ouznoreyni/numflex-sandbox/internal/framework/seed"
 	"github.com/ouznoreyni/numflex-sandbox/internal/testsupport"
 )
+
+// operateurYAS is internal/framework/seed.OperateurYAS, recopié en littéral :
+// un test de gateway (couche adapter) ne peut pas importer
+// internal/framework (règle de dépendance, voir test/architecture_test.go),
+// même dans un fichier //go:build integration — précédent déjà posé par
+// internal/adapter/controller/creation_particulier_test.go.
+const operateurYAS = "6a2174c3e6c37b5b5b487ec4"
 
 // TestUserGatewayByCredentialsResolvesSeededAccount pins the two SQL
 // statements moved verbatim from internal/api/auth.go: a seeded account's
@@ -79,8 +85,8 @@ func TestUserGatewayByUsernameJoinsOperateur(t *testing.T) {
 	if !found {
 		t.Fatal("expected the seeded yas account to resolve")
 	}
-	if caller.OperatorID != seed.OperateurYAS {
-		t.Fatalf("operatorId = %q, want %q", caller.OperatorID, seed.OperateurYAS)
+	if caller.OperatorID != operateurYAS {
+		t.Fatalf("operatorId = %q, want %q", caller.OperatorID, operateurYAS)
 	}
 	if caller.OperatorName != "YAS" {
 		t.Fatalf("operatorName = %q, want YAS", caller.OperatorName)

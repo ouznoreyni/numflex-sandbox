@@ -42,7 +42,7 @@ func layerOf(pkg string) (int, bool) {
 }
 
 func TestDependencyRule(t *testing.T) {
-	out, err := exec.Command("go", "list",
+	out, err := exec.Command("go", "list", "-tags=integration",
 		"-f", listFormat, "../...").Output()
 	if err != nil {
 		t.Fatalf("go list: %v", err)
@@ -73,7 +73,7 @@ func TestDependencyRule(t *testing.T) {
 
 // TestEntityIsPure asserts the innermost layer imports nothing from this module.
 func TestEntityIsPure(t *testing.T) {
-	out, err := exec.Command("go", "list",
+	out, err := exec.Command("go", "list", "-tags=integration",
 		"-f", listFormat, "../internal/entity/...").Output()
 	if err != nil {
 		t.Fatalf("go list: %v", err)
