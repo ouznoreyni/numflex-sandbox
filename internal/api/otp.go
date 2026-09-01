@@ -9,7 +9,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5"
-	"github.com/ouznoreyni/numflex-sandbox/internal/apperr"
+	"github.com/ouznoreyni/numflex-sandbox/internal/entity"
 )
 
 var motifMSISDN = regexp.MustCompile(`^[0-9]{9}$`)
@@ -31,11 +31,11 @@ type reqOTPVerify struct {
 func (d *Deps) postOTPSend(c *gin.Context) {
 	var req reqOTPSend
 	if err := c.ShouldBindJSON(&req); err != nil {
-		d.R.Fail(c, apperr.FormatJSONInvalide())
+		d.R.Fail(c, entity.InvalidJSONFormat())
 		return
 	}
 	if !motifMSISDN.MatchString(req.Numero) {
-		d.R.Fail(c, apperr.Validation(apperr.FieldError{
+		d.R.Fail(c, entity.Validation(entity.FieldFault{
 			ObjectName: "otpSendDTO", Field: "numero",
 			Message: "doit correspondre à \"^[0-9]{9}$\"",
 		}))
@@ -51,7 +51,7 @@ func (d *Deps) postOTPSend(c *gin.Context) {
 		       tentatives = 0, consomme = false, cree_le = EXCLUDED.cree_le`,
 		req.Numero, d.Cfg.OTPStaticCode, maintenant.Add(d.Cfg.OTPTTL), maintenant)
 	if err != nil {
-		d.R.Fail(c, apperr.ErreurInterne("enregistrement de l'OTP"))
+		d.R.Fail(c, entity.InternalError("enregistrement de l'OTP"))
 		return
 	}
 
@@ -63,7 +63,7 @@ func (d *Deps) postOTPSend(c *gin.Context) {
 func (d *Deps) postOTPVerify(c *gin.Context) {
 	var req reqOTPVerify
 	if err := c.ShouldBindJSON(&req); err != nil {
-		d.R.Fail(c, apperr.FormatJSONInvalide())
+		d.R.Fail(c, entity.InvalidJSONFormat())
 		return
 	}
 	if e := d.verifierOTP(c, req.Numero, req.OtpCode); e != nil {
@@ -75,7 +75,7 @@ func (d *Deps) postOTPVerify(c *gin.Context) {
 
 // verifierOTP pré-vérifie sans consommer (TC-021) : le code reste utilisable pour
 // créer la demande. Seules les tentatives ratées sont décomptées.
-func (d *Deps) verifierOTP(ctx context.Context, numero, code string) *apperr.Error {
+func (d *Deps) verifierOTP(ctx context.Context, numero, code string) *entity.Fault {
 	var stocke string
 	var expireA time.Time
 	var tentatives int
@@ -85,29 +85,29 @@ func (d *Deps) verifierOTP(ctx context.Context, numero, code string) *apperr.Err
 		`SELECT code, expire_a, tentatives, consomme FROM otp WHERE numero = $1`, numero).
 		Scan(&stocke, &expireA, &tentatives, &consomme)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return apperr.OTPAbsent()
+		return entity.OTPAbsent()
 	}
 	if err != nil {
-		return apperr.ErreurInterne("lecture de l'OTP")
+		return entity.InternalError("lecture de l'OTP")
 	}
 
 	if consomme {
-		return apperr.OTPAlreadyUsed()
+		return entity.OTPAlreadyUsed()
 	}
 	if tentatives >= d.Cfg.OTPMaxAttempts {
-		return apperr.OTPMaxAttempts()
+		return entity.OTPMaxAttempts()
 	}
 	if time.Now().After(expireA) {
-		return apperr.OTPExpired()
+		return entity.OTPExpired()
 	}
 	if code != stocke {
 		// L'échec de cet incrément ne peut pas être avalé : sans lui, la limite
 		// de trois tentatives cesse silencieusement de s'appliquer.
 		if _, err := d.DB.Pool.Exec(ctx,
 			`UPDATE otp SET tentatives = tentatives + 1 WHERE numero = $1`, numero); err != nil {
-			return apperr.ErreurInterne("incrément des tentatives OTP")
+			return entity.InternalError("incrément des tentatives OTP")
 		}
-		return apperr.OTPInvalid()
+		return entity.OTPInvalid()
 	}
 	return nil
 }

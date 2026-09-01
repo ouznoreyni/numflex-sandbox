@@ -4,7 +4,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/ouznoreyni/numflex-sandbox/internal/apperr"
+	"github.com/ouznoreyni/numflex-sandbox/internal/entity"
 )
 
 // prefixeSandbox porte ce que la plateforme réelle n'a pas. Il est délibérément
@@ -35,11 +35,11 @@ func (d *Deps) routesSandbox(g *gin.RouterGroup) {
 // portée (77200, détenue par ORANGE mais d'origine YAS), la purge la ramène
 // chez YAS, pas chez ORANGE.
 func (d *Deps) deletePurgeDemandes(c *gin.Context) {
-	operateurID := Appelant(c).OperateurID
+	operateurID := Appelant(c).OperatorID
 
 	tx, err := d.DB.Pool.Begin(c)
 	if err != nil {
-		d.R.Fail(c, apperr.ErreurInterne("ouverture de transaction"))
+		d.R.Fail(c, entity.InternalError("ouverture de transaction"))
 		return
 	}
 	defer tx.Rollback(c)
@@ -47,21 +47,21 @@ func (d *Deps) deletePurgeDemandes(c *gin.Context) {
 	ids := []string{}
 	rows, err := tx.Query(c, `SELECT id FROM demande WHERE createur_operateur_id = $1`, operateurID)
 	if err != nil {
-		d.R.Fail(c, apperr.ErreurInterne("lecture des demandes à purger"))
+		d.R.Fail(c, entity.InternalError("lecture des demandes à purger"))
 		return
 	}
 	for rows.Next() {
 		var id string
 		if err := rows.Scan(&id); err != nil {
 			rows.Close()
-			d.R.Fail(c, apperr.ErreurInterne("lecture des demandes à purger"))
+			d.R.Fail(c, entity.InternalError("lecture des demandes à purger"))
 			return
 		}
 		ids = append(ids, id)
 	}
 	rows.Close()
 	if err := rows.Err(); err != nil {
-		d.R.Fail(c, apperr.ErreurInterne("lecture des demandes à purger"))
+		d.R.Fail(c, entity.InternalError("lecture des demandes à purger"))
 		return
 	}
 
@@ -74,21 +74,21 @@ func (d *Deps) deletePurgeDemandes(c *gin.Context) {
 		 UNION
 		SELECT numero FROM demande_numero WHERE demande_id = ANY($1)`, ids)
 	if err != nil {
-		d.R.Fail(c, apperr.ErreurInterne("lecture des numéros à restaurer"))
+		d.R.Fail(c, entity.InternalError("lecture des numéros à restaurer"))
 		return
 	}
 	for rows.Next() {
 		var n string
 		if err := rows.Scan(&n); err != nil {
 			rows.Close()
-			d.R.Fail(c, apperr.ErreurInterne("lecture des numéros à restaurer"))
+			d.R.Fail(c, entity.InternalError("lecture des numéros à restaurer"))
 			return
 		}
 		numeros = append(numeros, n)
 	}
 	rows.Close()
 	if err := rows.Err(); err != nil {
-		d.R.Fail(c, apperr.ErreurInterne("lecture des numéros à restaurer"))
+		d.R.Fail(c, entity.InternalError("lecture des numéros à restaurer"))
 		return
 	}
 
@@ -100,7 +100,7 @@ func (d *Deps) deletePurgeDemandes(c *gin.Context) {
 		`DELETE FROM reverse_request WHERE operateur_id = $1 OR demande_id = ANY($2)`,
 		operateurID, ids)
 	if err != nil {
-		d.R.Fail(c, apperr.ErreurInterne("purge des demandes de reverse"))
+		d.R.Fail(c, entity.InternalError("purge des demandes de reverse"))
 		return
 	}
 
@@ -109,7 +109,7 @@ func (d *Deps) deletePurgeDemandes(c *gin.Context) {
 	// ligne sans objet — la table n'a aucune clé étrangère vers demande.
 	tagOTP, err := tx.Exec(c, `DELETE FROM otp WHERE numero = ANY($1)`, numeros)
 	if err != nil {
-		d.R.Fail(c, apperr.ErreurInterne("purge des OTP"))
+		d.R.Fail(c, entity.InternalError("purge des OTP"))
 		return
 	}
 
@@ -117,7 +117,7 @@ func (d *Deps) deletePurgeDemandes(c *gin.Context) {
 	// ON DELETE CASCADE : elles suivent.
 	tagDemandes, err := tx.Exec(c, `DELETE FROM demande WHERE id = ANY($1)`, ids)
 	if err != nil {
-		d.R.Fail(c, apperr.ErreurInterne("purge des demandes"))
+		d.R.Fail(c, entity.InternalError("purge des demandes"))
 		return
 	}
 
@@ -128,12 +128,12 @@ func (d *Deps) deletePurgeDemandes(c *gin.Context) {
 		       deja_restitue = false
 		 WHERE msisdn = ANY($1)`, numeros)
 	if err != nil {
-		d.R.Fail(c, apperr.ErreurInterne("restauration du registre"))
+		d.R.Fail(c, entity.InternalError("restauration du registre"))
 		return
 	}
 
 	if err := tx.Commit(c); err != nil {
-		d.R.Fail(c, apperr.ErreurInterne("validation de la transaction"))
+		d.R.Fail(c, entity.InternalError("validation de la transaction"))
 		return
 	}
 

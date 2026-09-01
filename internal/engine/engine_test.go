@@ -6,14 +6,14 @@ import (
 	"time"
 
 	"github.com/ouznoreyni/numflex-sandbox/internal/config"
-	"github.com/ouznoreyni/numflex-sandbox/internal/domain"
+	"github.com/ouznoreyni/numflex-sandbox/internal/entity"
 	"github.com/ouznoreyni/numflex-sandbox/internal/seed"
 	"github.com/ouznoreyni/numflex-sandbox/internal/store"
 	"github.com/stretchr/testify/require"
 )
 
 // insererDemande crée une demande directement en base, à l'étape voulue.
-func insererDemande(t *testing.T, db *store.DB, id string, etape domain.Etape, ageEtape time.Duration) {
+func insererDemande(t *testing.T, db *store.DB, id string, etape entity.Step, ageEtape time.Duration) {
 	t.Helper()
 	debut := time.Now().Add(-ageEtape)
 	_, err := db.Pool.Exec(context.Background(),
@@ -52,7 +52,7 @@ func moteur(t *testing.T, ajuste ...func(*config.Config)) (*Engine, *store.DB) {
 func TestExpirationFaitAvancerSansAucunAppel(t *testing.T) {
 	// TC-062 / ANO-006 : les étapes progressent seules.
 	e, db := moteur(t, func(c *config.Config) { c.EtapeTimeout = 2 * time.Second })
-	insererDemande(t, db, "d1", domain.EtapeAcceptation, 3*time.Second)
+	insererDemande(t, db, "d1", entity.StepAcceptance, 3*time.Second)
 
 	require.NoError(t, e.Tick(context.Background()))
 
@@ -72,7 +72,7 @@ func TestExpirationFaitAvancerSansAucunAppel(t *testing.T) {
 
 func TestExpirationNAvancePasAvantLeDelai(t *testing.T) {
 	e, db := moteur(t, func(c *config.Config) { c.EtapeTimeout = time.Hour })
-	insererDemande(t, db, "d1", domain.EtapeAcceptation, time.Minute)
+	insererDemande(t, db, "d1", entity.StepAcceptance, time.Minute)
 
 	require.NoError(t, e.Tick(context.Background()))
 
@@ -82,7 +82,7 @@ func TestExpirationNAvancePasAvantLeDelai(t *testing.T) {
 
 func TestExpirationDesactiveeQuandLeDelaiEstNul(t *testing.T) {
 	e, db := moteur(t) // EtapeTimeout = 0
-	insererDemande(t, db, "d1", domain.EtapeAcceptation, 48*time.Hour)
+	insererDemande(t, db, "d1", entity.StepAcceptance, 48*time.Hour)
 
 	require.NoError(t, e.Tick(context.Background()))
 
@@ -93,7 +93,7 @@ func TestExpirationDesactiveeQuandLeDelaiEstNul(t *testing.T) {
 func TestCycleCompletParExpiration(t *testing.T) {
 	// Le portage n°2 du SIT : créé, aucun appel, TERMINE 29 minutes plus tard.
 	e, db := moteur(t, func(c *config.Config) { c.EtapeTimeout = time.Nanosecond })
-	insererDemande(t, db, "d1", domain.EtapeAcceptation, time.Second)
+	insererDemande(t, db, "d1", entity.StepAcceptance, time.Second)
 
 	for i := 0; i < 5; i++ {
 		require.NoError(t, e.Tick(context.Background()))
@@ -120,7 +120,7 @@ func TestCycleCompletParExpiration(t *testing.T) {
 // transition dans l'appel, de sorte que le handler relise l'étape suivante.
 func TestFenetreNulleAppliqueLaTransitionImmediatement(t *testing.T) {
 	e, db := moteur(t)
-	insererDemande(t, db, "d1", domain.EtapeDesactivation, time.Second)
+	insererDemande(t, db, "d1", entity.StepDeactivation, time.Second)
 
 	require.NoError(t, e.PlanifierTransition(context.Background(), "d1"))
 
@@ -139,7 +139,7 @@ func TestFenetreNonNullePlanifiePuisApplique(t *testing.T) {
 		c.ConvergenceMin = 0
 		c.ConvergenceMax = time.Millisecond
 	})
-	insererDemande(t, db, "d1", domain.EtapeDesactivation, time.Second)
+	insererDemande(t, db, "d1", entity.StepDeactivation, time.Second)
 
 	require.NoError(t, e.PlanifierTransition(context.Background(), "d1"))
 
@@ -164,7 +164,7 @@ func TestConvergenceRespecteLeDelai(t *testing.T) {
 		c.ConvergenceMin = time.Hour
 		c.ConvergenceMax = time.Hour
 	})
-	insererDemande(t, db, "d1", domain.EtapeDesactivation, time.Second)
+	insererDemande(t, db, "d1", entity.StepDeactivation, time.Second)
 
 	require.NoError(t, e.PlanifierTransition(context.Background(), "d1"))
 	require.NoError(t, e.Tick(context.Background()))
@@ -175,7 +175,7 @@ func TestConvergenceRespecteLeDelai(t *testing.T) {
 
 func TestRoutageRecalculeAuPassageEnConfirmation(t *testing.T) {
 	e, db := moteur(t)
-	insererDemande(t, db, "d1", domain.EtapeActivation, time.Second)
+	insererDemande(t, db, "d1", entity.StepActivation, time.Second)
 
 	require.NoError(t, e.PlanifierTransition(context.Background(), "d1"))
 	require.NoError(t, e.Tick(context.Background()))
@@ -189,7 +189,7 @@ func TestRoutageRecalculeAuPassageEnConfirmation(t *testing.T) {
 func TestPlaceGeleeSuspendLeMoteur(t *testing.T) {
 	// BR-012 : un incident interne gèle le traitement pour tous.
 	e, db := moteur(t, func(c *config.Config) { c.EtapeTimeout = time.Nanosecond })
-	insererDemande(t, db, "d1", domain.EtapeAcceptation, time.Second)
+	insererDemande(t, db, "d1", entity.StepAcceptance, time.Second)
 
 	_, err := db.Pool.Exec(context.Background(),
 		`INSERT INTO incident (id, operateur_id, type_incident_id, fige_systeme,
@@ -227,7 +227,7 @@ func TestTransfertRegistreExclutNumerosExclusEtRejetes(t *testing.T) {
 	// transférerait — ou routerait vers le destinataire — un numéro rejeté :
 	// un défaut grave dans un système de portabilité.
 	e, db := moteur(t)
-	insererDemande(t, db, "d1", domain.EtapeActivation, time.Second)
+	insererDemande(t, db, "d1", entity.StepActivation, time.Second)
 
 	_, err := db.Pool.Exec(context.Background(),
 		`INSERT INTO demande_numero (demande_id, numero, statut, exclu)

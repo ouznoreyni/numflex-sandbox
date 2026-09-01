@@ -7,8 +7,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/ouznoreyni/numflex-sandbox/internal/apperr"
-	"github.com/ouznoreyni/numflex-sandbox/internal/domain"
+	"github.com/ouznoreyni/numflex-sandbox/internal/entity"
 )
 
 // demandeDTO sérialise une demande au format du guide §7.3, commun à tous les
@@ -101,20 +100,20 @@ func sansClient(dto map[string]any) map[string]any {
 }
 
 // etatNumero lit l'état courant d'un numéro dans le registre et calcule
-// DemandeEnCours par existence d'une demande EN_COURS qui le référence. Un
+// RequestInProgress par existence d'une demande EN_COURS qui le référence. Un
 // numéro absent du registre ne peut pas appartenir à l'opérateur source déclaré.
-func (d *Deps) etatNumero(ctx context.Context, msisdn string) (domain.EtatNumero, *apperr.Error) {
-	n := domain.EtatNumero{MSISDN: msisdn}
+func (d *Deps) etatNumero(ctx context.Context, msisdn string) (entity.NumberState, *entity.Fault) {
+	n := entity.NumberState{MSISDN: msisdn}
 
 	err := d.DB.Pool.QueryRow(ctx,
 		`SELECT operateur_actuel_id, operateur_origine_id, date_dernier_portage, deja_restitue
 		   FROM numero WHERE msisdn = $1`, msisdn).
-		Scan(&n.OperateurActuelID, &n.OperateurOrigineID, &n.DateDernierPortage, &n.DejaRestitue)
+		Scan(&n.CurrentOperatorID, &n.OriginOperatorID, &n.LastPortingDate, &n.AlreadyRestituted)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return domain.EtatNumero{}, apperr.OperateurSourceIncorrect()
+		return entity.NumberState{}, entity.IncorrectSourceOperator()
 	}
 	if err != nil {
-		return domain.EtatNumero{}, apperr.ErreurInterne("lecture du numéro")
+		return entity.NumberState{}, entity.InternalError("lecture du numéro")
 	}
 
 	if err := d.DB.Pool.QueryRow(ctx, `
@@ -125,8 +124,8 @@ func (d *Deps) etatNumero(ctx context.Context, msisdn string) (domain.EtatNumero
 		     AND dm.statut_demande = 'EN_COURS'
 		     AND NOT dn.exclu
 		     AND dn.statut <> 'REJETE')`, msisdn).
-		Scan(&n.DemandeEnCours); err != nil {
-		return domain.EtatNumero{}, apperr.ErreurInterne("lecture des demandes en cours")
+		Scan(&n.RequestInProgress); err != nil {
+		return entity.NumberState{}, entity.InternalError("lecture des demandes en cours")
 	}
 
 	return n, nil

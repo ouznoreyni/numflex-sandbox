@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/ouznoreyni/numflex-sandbox/internal/apperr"
 	"github.com/ouznoreyni/numflex-sandbox/internal/config"
+	"github.com/ouznoreyni/numflex-sandbox/internal/entity"
 	"github.com/stretchr/testify/require"
 )
 
@@ -26,7 +26,7 @@ func contexte(fid config.Fidelity, chemin string) (*gin.Context, *httptest.Respo
 func TestRealErreurEtatSortEn500SansCode(t *testing.T) {
 	c, rec, r := contexte(config.FidelityReal, "/api/gateway/v1/demandes/traitement")
 
-	r.Fail(c, apperr.DemandeNonTrouvee())
+	r.Fail(c, entity.RequestNotFound())
 
 	require.Equal(t, http.StatusInternalServerError, rec.Code)
 	require.Equal(t, "application/problem+json", rec.Header().Get("Content-Type"))
@@ -46,7 +46,7 @@ func TestRealErreurEtatSortEn500SansCode(t *testing.T) {
 func TestRealErreurValidationSortEn400AvecFieldErrors(t *testing.T) {
 	c, rec, r := contexte(config.FidelityReal, "/api/gateway/v1/demandes/particulier")
 
-	r.Fail(c, apperr.Validation(apperr.FieldError{
+	r.Fail(c, entity.Validation(entity.FieldFault{
 		ObjectName: "demandeParticulierDTO",
 		Field:      "client.lieuNaissance",
 		Message:    "ne doit pas être vide",
@@ -73,7 +73,7 @@ func TestRealDetailPersonnalise(t *testing.T) {
 	// ANO-002 : le refus de re-portage à moins de 3 mois se présente comme une panne.
 	c, rec, r := contexte(config.FidelityReal, "/api/gateway/v1/demandes/particulier")
 
-	r.Fail(c, apperr.DelaiPortageNonRespecte())
+	r.Fail(c, entity.PortingDelayNotRespected())
 
 	require.Equal(t, http.StatusInternalServerError, rec.Code)
 	var corps map[string]any
@@ -84,7 +84,7 @@ func TestRealDetailPersonnalise(t *testing.T) {
 func TestContractErreurEtatSortEnveloppee(t *testing.T) {
 	c, rec, r := contexte(config.FidelityContract, "/api/gateway/v1/demandes/traitement")
 
-	r.Fail(c, apperr.DemandeNonTrouvee())
+	r.Fail(c, entity.RequestNotFound())
 
 	require.Equal(t, http.StatusNotFound, rec.Code)
 
@@ -98,15 +98,15 @@ func TestContractErreurEtatSortEnveloppee(t *testing.T) {
 
 func TestContractCorrespondanceKindStatut(t *testing.T) {
 	cas := []struct {
-		err    *apperr.Error
+		err    *entity.Fault
 		statut int
 		code   string
 	}{
-		{apperr.Validation(apperr.FieldError{Field: "numero", Message: "obligatoire"}), 400, "VALIDATION_ECHOUEE"},
-		{apperr.DemandeNonTrouvee(), 404, "DEMANDE_NON_TROUVEE"},
-		{apperr.DemandeAccesRefuse("refusé"), 403, "DEMANDE_ACCES_REFUSE"},
-		{apperr.EtapeInvalide("mauvaise étape"), 409, "ETAPE_INVALIDE"},
-		{apperr.ErreurInterne("boum"), 500, "ERREUR_INTERNE"},
+		{entity.Validation(entity.FieldFault{Field: "numero", Message: "obligatoire"}), 400, "VALIDATION_ECHOUEE"},
+		{entity.RequestNotFound(), 404, "DEMANDE_NON_TROUVEE"},
+		{entity.RequestAccessDenied("refusé"), 403, "DEMANDE_ACCES_REFUSE"},
+		{entity.InvalidStep("mauvaise étape"), 409, "ETAPE_INVALIDE"},
+		{entity.InternalError("boum"), 500, "ERREUR_INTERNE"},
 	}
 	for _, x := range cas {
 		c, rec, r := contexte(config.FidelityContract, "/x")
@@ -162,7 +162,7 @@ func TestSkew(t *testing.T) {
 func TestRealValidationAvecChampsGardeConstraintViolation(t *testing.T) {
 	c, rec, r := contexte(config.FidelityReal, "/api/gateway/v1/demandes/particulier")
 
-	r.Fail(c, apperr.Validation(apperr.FieldError{
+	r.Fail(c, entity.Validation(entity.FieldFault{
 		ObjectName: "demandeParticulierDTO",
 		Field:      "numero",
 		Message:    "ne doit pas être vide",
@@ -185,7 +185,7 @@ func TestRealValidationSansChampsRendMessagePrecis(t *testing.T) {
 	// donc rendre un problem-with-message en 400 qui porte le message métier.
 	c, rec, r := contexte(config.FidelityReal, "/api/gateway/v1/demandes/flotte")
 
-	r.Fail(c, apperr.ValidationEchouee("un message précis"))
+	r.Fail(c, entity.ValidationFailed("un message précis"))
 
 	require.Equal(t, http.StatusBadRequest, rec.Code)
 	var corps map[string]any
@@ -213,11 +213,11 @@ func TestFailAvecErreurNilNePaniquePas(t *testing.T) {
 }
 
 func TestFailAvecApperrErrorTypeNilNePaniquePas(t *testing.T) {
-	// Correction revue #2 : un *apperr.Error typé nil, emballé dans un error,
+	// Correction revue #2 : un *entity.Fault typé nil, emballé dans un error,
 	// fait réussir errors.As avec e == nil ; e.Kind paniquerait sans la garde.
 	c, rec, r := contexte(config.FidelityReal, "/x")
 
-	var e *apperr.Error
+	var e *entity.Fault
 	var err error = e
 
 	require.NotPanics(t, func() {
@@ -230,7 +230,7 @@ func TestFailAvecApperrErrorTypeNilNePaniquePas(t *testing.T) {
 
 func TestFailErreurNueDevient500AvecSonTexte(t *testing.T) {
 	// Correction revue #3 : chemin de repli pour une erreur qui n'est pas un
-	// *apperr.Error.
+	// *entity.Fault.
 	c, rec, r := contexte(config.FidelityReal, "/x")
 
 	r.Fail(c, errors.New("panne imprévue"))
@@ -246,7 +246,7 @@ func TestFailErreurEmballeeConserveKindEtMessage(t *testing.T) {
 	// fmt.Errorf("...: %w", ...), comme le feront les tâches en aval.
 	c, rec, r := contexte(config.FidelityContract, "/x")
 
-	err := fmt.Errorf("contexte : %w", apperr.DemandeNonTrouvee())
+	err := fmt.Errorf("contexte : %w", entity.RequestNotFound())
 	r.Fail(c, err)
 
 	require.Equal(t, http.StatusNotFound, rec.Code)

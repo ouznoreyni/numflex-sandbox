@@ -6,8 +6,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/ouznoreyni/numflex-sandbox/internal/apperr"
-	"github.com/ouznoreyni/numflex-sandbox/internal/domain"
+	"github.com/ouznoreyni/numflex-sandbox/internal/entity"
 	"github.com/ouznoreyni/numflex-sandbox/internal/oid"
 )
 
@@ -43,17 +42,17 @@ type reqParticulier struct {
 func (d *Deps) postDemandeParticulier(c *gin.Context) {
 	var req reqParticulier
 	if err := c.ShouldBindJSON(&req); err != nil {
-		d.R.Fail(c, apperr.FormatJSONInvalide())
+		d.R.Fail(c, entity.InvalidJSONFormat())
 		return
 	}
 	if champs := validerParticulier(req); len(champs) > 0 {
-		d.R.Fail(c, apperr.Validation(champs...))
+		d.R.Fail(c, entity.Validation(champs...))
 		return
 	}
 
 	appelant := Appelant(c)
-	if req.OperateurDestinataireID != appelant.OperateurID {
-		d.R.Fail(c, apperr.DemandeAccesRefuse(
+	if req.OperateurDestinataireID != appelant.OperatorID {
+		d.R.Fail(c, entity.RequestAccessDenied(
 			"L'opérateur connecté doit être l'opérateur destinataire de la demande."))
 		return
 	}
@@ -67,8 +66,8 @@ func (d *Deps) postDemandeParticulier(c *gin.Context) {
 		d.R.Fail(c, err)
 		return
 	}
-	if e := domain.VerifierEligibilitePortage(etat, req.OperateurSourceID,
-		req.OperateurDestinataireID, domain.DelaiEntrePortages); e != nil {
+	if e := entity.CheckPortingEligibility(etat, req.OperateurSourceID,
+		req.OperateurDestinataireID, entity.DelayBetweenPortings); e != nil {
 		d.R.Fail(c, e)
 		return
 	}
@@ -78,7 +77,7 @@ func (d *Deps) postDemandeParticulier(c *gin.Context) {
 
 	tx, err2 := d.DB.Pool.Begin(c)
 	if err2 != nil {
-		d.R.Fail(c, apperr.ErreurInterne("ouverture de transaction"))
+		d.R.Fail(c, entity.InternalError("ouverture de transaction"))
 		return
 	}
 	defer tx.Rollback(c)
@@ -86,7 +85,7 @@ func (d *Deps) postDemandeParticulier(c *gin.Context) {
 	var prefixeSource string
 	if err := tx.QueryRow(c, `SELECT prefixe_routage FROM operateur WHERE id = $1`,
 		req.OperateurSourceID).Scan(&prefixeSource); err != nil {
-		d.R.Fail(c, apperr.ValidationEchouee("Opérateur source inconnu"))
+		d.R.Fail(c, entity.ValidationFailed("Opérateur source inconnu"))
 		return
 	}
 
@@ -99,13 +98,13 @@ func (d *Deps) postDemandeParticulier(c *gin.Context) {
 		         $3,$4,$4,$5,$6,$7,$7)`,
 		id, req.Numero, req.OperateurSourceID, req.OperateurDestinataireID,
 		req.TypePortabilite, prefixeSource, maintenant); err != nil {
-		d.R.Fail(c, apperr.ErreurInterne("création de la demande"))
+		d.R.Fail(c, entity.InternalError("création de la demande"))
 		return
 	}
 	if _, err := tx.Exec(c,
 		`INSERT INTO demande_numero (demande_id, numero, statut, routage_info)
 		 VALUES ($1,$2,'EN_COURS',$3)`, id, req.Numero, prefixeSource); err != nil {
-		d.R.Fail(c, apperr.ErreurInterne("enregistrement du numéro"))
+		d.R.Fail(c, entity.InternalError("enregistrement du numéro"))
 		return
 	}
 	if _, err := tx.Exec(c,
@@ -114,22 +113,22 @@ func (d *Deps) postDemandeParticulier(c *gin.Context) {
 		 VALUES ($1,$2,$3,$4,$5,$6,$7)`,
 		id, req.Client.Nom, req.Client.Prenom, req.Client.DateNaissance,
 		req.Client.LieuNaissance, req.Client.TypePiece, req.Client.NumeroPiece); err != nil {
-		d.R.Fail(c, apperr.ErreurInterne("enregistrement du client"))
+		d.R.Fail(c, entity.InternalError("enregistrement du client"))
 		return
 	}
 	if _, err := tx.Exec(c,
 		`UPDATE otp SET consomme = true WHERE numero = $1`, req.Numero); err != nil {
-		d.R.Fail(c, apperr.ErreurInterne("consommation de l'OTP"))
+		d.R.Fail(c, entity.InternalError("consommation de l'OTP"))
 		return
 	}
 	if err := tx.Commit(c); err != nil {
-		d.R.Fail(c, apperr.ErreurInterne("validation de la transaction"))
+		d.R.Fail(c, entity.InternalError("validation de la transaction"))
 		return
 	}
 
 	dto, err3 := d.demandeDTO(c, id)
 	if err3 != nil {
-		d.R.Fail(c, apperr.ErreurInterne("relecture de la demande"))
+		d.R.Fail(c, entity.InternalError("relecture de la demande"))
 		return
 	}
 	d.R.OK(c, http.StatusCreated, "Demande particulier créée avec succès", dto)
@@ -137,18 +136,18 @@ func (d *Deps) postDemandeParticulier(c *gin.Context) {
 
 // validerParticulier reproduit la validation de la plateforme, y compris son écart
 // au guide : lieuNaissance est documenté facultatif mais rejeté si absent (ANO-010).
-func validerParticulier(r reqParticulier) []apperr.FieldError {
-	var champs []apperr.FieldError
+func validerParticulier(r reqParticulier) []entity.FieldFault {
+	var champs []entity.FieldFault
 	obligatoire := func(champ, valeur string) {
 		if valeur == "" {
-			champs = append(champs, apperr.FieldError{
+			champs = append(champs, entity.FieldFault{
 				ObjectName: "demandeParticulierDTO", Field: champ,
 				Message: "ne doit pas être vide",
 			})
 		}
 	}
 	if !motifMSISDN.MatchString(r.Numero) {
-		champs = append(champs, apperr.FieldError{
+		champs = append(champs, entity.FieldFault{
 			ObjectName: "demandeParticulierDTO", Field: "numero",
 			Message: "doit correspondre à \"^[0-9]{9}$\"",
 		})
@@ -163,7 +162,7 @@ func validerParticulier(r reqParticulier) []apperr.FieldError {
 	obligatoire("client.typePiece", r.Client.TypePiece)
 	obligatoire("client.numeroPiece", r.Client.NumeroPiece)
 	if r.TypePortabilite != "PREPAID" && r.TypePortabilite != "POSTPAID" {
-		champs = append(champs, apperr.FieldError{
+		champs = append(champs, entity.FieldFault{
 			ObjectName: "demandeParticulierDTO", Field: "typePortabilite",
 			Message: "doit valoir PREPAID ou POSTPAID",
 		})
@@ -194,23 +193,23 @@ type numeroExclu struct {
 func (d *Deps) postDemandeEntreprise(c *gin.Context) {
 	var req reqEntreprise
 	if err := c.ShouldBindJSON(&req); err != nil {
-		d.R.Fail(c, apperr.FormatJSONInvalide())
+		d.R.Fail(c, entity.InvalidJSONFormat())
 		return
 	}
 	if champs := validerEntreprise(req); len(champs) > 0 {
-		d.R.Fail(c, apperr.Validation(champs...))
+		d.R.Fail(c, entity.Validation(champs...))
 		return
 	}
 	// §9 : le catalogue réserve un code à ce cas précis. Le traiter comme une
 	// violation de bean validation le rendrait inatteignable.
 	if len(req.NumerosFlotte) == 0 {
-		d.R.Fail(c, apperr.FlotteVide())
+		d.R.Fail(c, entity.FleetEmpty())
 		return
 	}
 
 	appelant := Appelant(c)
-	if req.OperateurDestinataireID != appelant.OperateurID {
-		d.R.Fail(c, apperr.DemandeAccesRefuse(
+	if req.OperateurDestinataireID != appelant.OperatorID {
+		d.R.Fail(c, entity.RequestAccessDenied(
 			"L'opérateur connecté doit être l'opérateur destinataire de la demande."))
 		return
 	}
@@ -221,7 +220,7 @@ func (d *Deps) postDemandeEntreprise(c *gin.Context) {
 		return
 	}
 
-	etats := make(map[string]domain.EtatNumero, len(req.NumerosFlotte))
+	etats := make(map[string]entity.NumberState, len(req.NumerosFlotte))
 	for _, numero := range req.NumerosFlotte {
 		etat, e := d.etatNumero(c, numero)
 		if e != nil {
@@ -231,8 +230,8 @@ func (d *Deps) postDemandeEntreprise(c *gin.Context) {
 		etats[numero] = etat
 	}
 	for _, numero := range req.NumerosFlotte {
-		if etats[numero].OperateurActuelID != etats[req.NumerosFlotte[0]].OperateurActuelID {
-			d.R.Fail(c, apperr.FlotteOperateursMixtes())
+		if etats[numero].CurrentOperatorID != etats[req.NumerosFlotte[0]].CurrentOperatorID {
+			d.R.Fail(c, entity.FleetMixedOperators())
 			return
 		}
 	}
@@ -240,15 +239,15 @@ func (d *Deps) postDemandeEntreprise(c *gin.Context) {
 	var retenus []string
 	exclus := []numeroExclu{}
 	for _, numero := range req.NumerosFlotte {
-		if e := domain.VerifierEligibilitePortage(etats[numero], req.OperateurSourceID,
-			req.OperateurDestinataireID, domain.DelaiEntrePortages); e != nil {
+		if e := entity.CheckPortingEligibility(etats[numero], req.OperateurSourceID,
+			req.OperateurDestinataireID, entity.DelayBetweenPortings); e != nil {
 			exclus = append(exclus, numeroExclu{Numero: numero, Raison: e.Message, CodeErreur: e.Code})
 			continue
 		}
 		retenus = append(retenus, numero)
 	}
 	if len(retenus) == 0 {
-		d.R.Fail(c, apperr.AucunNumeroEligible())
+		d.R.Fail(c, entity.NoEligibleNumber())
 		return
 	}
 
@@ -257,7 +256,7 @@ func (d *Deps) postDemandeEntreprise(c *gin.Context) {
 
 	tx, err2 := d.DB.Pool.Begin(c)
 	if err2 != nil {
-		d.R.Fail(c, apperr.ErreurInterne("ouverture de transaction"))
+		d.R.Fail(c, entity.InternalError("ouverture de transaction"))
 		return
 	}
 	defer tx.Rollback(c)
@@ -265,7 +264,7 @@ func (d *Deps) postDemandeEntreprise(c *gin.Context) {
 	var prefixeSource string
 	if err := tx.QueryRow(c, `SELECT prefixe_routage FROM operateur WHERE id = $1`,
 		req.OperateurSourceID).Scan(&prefixeSource); err != nil {
-		d.R.Fail(c, apperr.ValidationEchouee("Opérateur source inconnu"))
+		d.R.Fail(c, entity.ValidationFailed("Opérateur source inconnu"))
 		return
 	}
 
@@ -278,7 +277,7 @@ func (d *Deps) postDemandeEntreprise(c *gin.Context) {
 		         $3,$4,$4,$5,$6,$7,$7)`,
 		id, req.NumeroPorteurFlotte, req.OperateurSourceID, req.OperateurDestinataireID,
 		req.TypePortabilite, prefixeSource, maintenant); err != nil {
-		d.R.Fail(c, apperr.ErreurInterne("création de la demande"))
+		d.R.Fail(c, entity.InternalError("création de la demande"))
 		return
 	}
 
@@ -286,7 +285,7 @@ func (d *Deps) postDemandeEntreprise(c *gin.Context) {
 		if _, err := tx.Exec(c,
 			`INSERT INTO demande_numero (demande_id, numero, statut, routage_info)
 			 VALUES ($1,$2,'EN_COURS',$3)`, id, numero, prefixeSource); err != nil {
-			d.R.Fail(c, apperr.ErreurInterne("enregistrement du numéro"))
+			d.R.Fail(c, entity.InternalError("enregistrement du numéro"))
 			return
 		}
 	}
@@ -296,7 +295,7 @@ func (d *Deps) postDemandeEntreprise(c *gin.Context) {
 			   (demande_id, numero, statut, exclu, raison_exclusion, code_erreur_exclusion)
 			 VALUES ($1,$2,'REJETE',true,$3,$4)`,
 			id, ex.Numero, ex.Raison, ex.CodeErreur); err != nil {
-			d.R.Fail(c, apperr.ErreurInterne("enregistrement du numéro exclu"))
+			d.R.Fail(c, entity.InternalError("enregistrement du numéro exclu"))
 			return
 		}
 	}
@@ -309,16 +308,16 @@ func (d *Deps) postDemandeEntreprise(c *gin.Context) {
 		id, req.Client.Nom, req.Client.Prenom, req.Client.DateNaissance,
 		req.Client.LieuNaissance, req.Client.TypePiece, req.Client.NumeroPiece,
 		req.Client.RaisonSociale, req.Client.NumRC); err != nil {
-		d.R.Fail(c, apperr.ErreurInterne("enregistrement du client"))
+		d.R.Fail(c, entity.InternalError("enregistrement du client"))
 		return
 	}
 	if _, err := tx.Exec(c,
 		`UPDATE otp SET consomme = true WHERE numero = $1`, req.NumeroPorteurFlotte); err != nil {
-		d.R.Fail(c, apperr.ErreurInterne("consommation de l'OTP"))
+		d.R.Fail(c, entity.InternalError("consommation de l'OTP"))
 		return
 	}
 	if err := tx.Commit(c); err != nil {
-		d.R.Fail(c, apperr.ErreurInterne("validation de la transaction"))
+		d.R.Fail(c, entity.InternalError("validation de la transaction"))
 		return
 	}
 
@@ -344,18 +343,18 @@ func (d *Deps) postDemandeEntreprise(c *gin.Context) {
 // mêmes champs obligatoires qu'une demande particulier, mais numeroPorteurFlotte
 // à la place de numero, raisonSociale/numRC à la place d'une identité seule, et
 // numerosFlotte dont la vacuité relève du code FLOTTE_VIDE, hors de cette fonction.
-func validerEntreprise(r reqEntreprise) []apperr.FieldError {
-	var champs []apperr.FieldError
+func validerEntreprise(r reqEntreprise) []entity.FieldFault {
+	var champs []entity.FieldFault
 	obligatoire := func(champ, valeur string) {
 		if valeur == "" {
-			champs = append(champs, apperr.FieldError{
+			champs = append(champs, entity.FieldFault{
 				ObjectName: "demandeEntrepriseDTO", Field: champ,
 				Message: "ne doit pas être vide",
 			})
 		}
 	}
 	if !motifMSISDN.MatchString(r.NumeroPorteurFlotte) {
-		champs = append(champs, apperr.FieldError{
+		champs = append(champs, entity.FieldFault{
 			ObjectName: "demandeEntrepriseDTO", Field: "numeroPorteurFlotte",
 			Message: "doit correspondre à \"^[0-9]{9}$\"",
 		})
@@ -371,7 +370,7 @@ func validerEntreprise(r reqEntreprise) []apperr.FieldError {
 	obligatoire("client.typePiece", r.Client.TypePiece)
 	obligatoire("client.numeroPiece", r.Client.NumeroPiece)
 	if r.TypePortabilite != "PREPAID" && r.TypePortabilite != "POSTPAID" {
-		champs = append(champs, apperr.FieldError{
+		champs = append(champs, entity.FieldFault{
 			ObjectName: "demandeEntrepriseDTO", Field: "typePortabilite",
 			Message: "doit valoir PREPAID ou POSTPAID",
 		})
@@ -390,11 +389,11 @@ type reqRestitution struct {
 func (d *Deps) postDemandeRestitution(c *gin.Context) {
 	var req reqRestitution
 	if err := c.ShouldBindJSON(&req); err != nil {
-		d.R.Fail(c, apperr.FormatJSONInvalide())
+		d.R.Fail(c, entity.InvalidJSONFormat())
 		return
 	}
 	if !motifMSISDN.MatchString(req.Numero) {
-		d.R.Fail(c, apperr.Validation(apperr.FieldError{
+		d.R.Fail(c, entity.Validation(entity.FieldFault{
 			ObjectName: "demandeRestitutionDTO", Field: "numero",
 			Message: "doit correspondre à \"^[0-9]{9}$\"",
 		}))
@@ -411,13 +410,13 @@ func (d *Deps) postDemandeRestitution(c *gin.Context) {
 	// le projet a choisi que l'appelant doit être l'opérateur d'origine du numéro
 	// et devient destinataire (il récupère le numéro). Voir §9.4 de la spec.
 	appelant := Appelant(c)
-	if etat.OperateurOrigineID != appelant.OperateurID {
-		d.R.Fail(c, apperr.DemandeAccesRefuse(
+	if etat.OriginOperatorID != appelant.OperatorID {
+		d.R.Fail(c, entity.RequestAccessDenied(
 			"Seul l'opérateur d'origine du numéro peut demander sa restitution."))
 		return
 	}
 
-	if e := domain.VerifierEligibiliteRestitution(etat, domain.DelaiAvantRestitution); e != nil {
+	if e := entity.CheckRestitutionEligibility(etat, entity.DelayBeforeRestitution); e != nil {
 		d.R.Fail(c, e)
 		return
 	}
@@ -427,7 +426,7 @@ func (d *Deps) postDemandeRestitution(c *gin.Context) {
 
 	tx, err2 := d.DB.Pool.Begin(c)
 	if err2 != nil {
-		d.R.Fail(c, apperr.ErreurInterne("ouverture de transaction"))
+		d.R.Fail(c, entity.InternalError("ouverture de transaction"))
 		return
 	}
 	defer tx.Rollback(c)
@@ -444,24 +443,24 @@ func (d *Deps) postDemandeRestitution(c *gin.Context) {
 		    createur_operateur_id, date_demande, date_debut_etape)
 		 VALUES ($1,$2,'PARTICULIER','RESTITUTION','EN_COURS','ACCEPTATION','EN_COURS',
 		         $3,$4,$4,$5,$5)`,
-		id, req.Numero, etat.OperateurActuelID, etat.OperateurOrigineID, maintenant); err != nil {
-		d.R.Fail(c, apperr.ErreurInterne("création de la demande"))
+		id, req.Numero, etat.CurrentOperatorID, etat.OriginOperatorID, maintenant); err != nil {
+		d.R.Fail(c, entity.InternalError("création de la demande"))
 		return
 	}
 	if _, err := tx.Exec(c,
 		`INSERT INTO demande_numero (demande_id, numero, statut)
 		 VALUES ($1,$2,'EN_COURS')`, id, req.Numero); err != nil {
-		d.R.Fail(c, apperr.ErreurInterne("enregistrement du numéro"))
+		d.R.Fail(c, entity.InternalError("enregistrement du numéro"))
 		return
 	}
 	if err := tx.Commit(c); err != nil {
-		d.R.Fail(c, apperr.ErreurInterne("validation de la transaction"))
+		d.R.Fail(c, entity.InternalError("validation de la transaction"))
 		return
 	}
 
 	dto, err3 := d.demandeDTO(c, id)
 	if err3 != nil {
-		d.R.Fail(c, apperr.ErreurInterne("relecture de la demande"))
+		d.R.Fail(c, entity.InternalError("relecture de la demande"))
 		return
 	}
 	d.R.OK(c, http.StatusCreated, "Demande de restitution créée avec succès", dto)

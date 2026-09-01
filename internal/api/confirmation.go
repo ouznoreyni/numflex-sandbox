@@ -8,8 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/ouznoreyni/numflex-sandbox/internal/apperr"
-	"github.com/ouznoreyni/numflex-sandbox/internal/domain"
+	"github.com/ouznoreyni/numflex-sandbox/internal/entity"
 )
 
 func (d *Deps) routesConfirmation(g *gin.RouterGroup) {
@@ -25,7 +24,7 @@ type reqConfirmation struct {
 // solde quand tous les opérateurs de la place SAUF le destinataire ont
 // confirmé (celui-ci est auto-confirmé) ; une RESTITUTION ou un REVERSE exige
 // tout le monde, destinataire compris. La décision d'appartenance passe
-// exclusivement par domain.ConfirmateursAttendus — la même fonction que la
+// exclusivement par entity.ExpectedConfirmers — la même fonction que la
 // file /a-confirmer (Task 13) — pour que les deux ne puissent jamais diverger.
 func (d *Deps) postAConfirmer(c *gin.Context) {
 	if d.verifierGel(c) {
@@ -34,11 +33,11 @@ func (d *Deps) postAConfirmer(c *gin.Context) {
 
 	var req reqConfirmation
 	if err := c.ShouldBindJSON(&req); err != nil {
-		d.R.Fail(c, apperr.FormatJSONInvalide())
+		d.R.Fail(c, entity.InvalidJSONFormat())
 		return
 	}
 	if req.IDDemande == "" {
-		d.R.Fail(c, apperr.Validation(apperr.FieldError{
+		d.R.Fail(c, entity.Validation(entity.FieldFault{
 			ObjectName: "confirmationDTO", Field: "idDemande",
 			Message: "ne doit pas être vide",
 		}))
@@ -50,32 +49,32 @@ func (d *Deps) postAConfirmer(c *gin.Context) {
 		d.R.Fail(c, errCh)
 		return
 	}
-	if dm.StatutDemande != domain.StatutEnCours || dm.EtapeActuelle != domain.EtapeConfirmation {
-		d.R.Fail(c, apperr.EtapeInvalide(fmt.Sprintf(
-			"Cette demande n'est pas à l'étape CONFIRMATION (étape actuelle : %s).", dm.EtapeActuelle)))
+	if dm.Status != entity.RequestInProgress || dm.CurrentStep != entity.StepConfirmation {
+		d.R.Fail(c, entity.InvalidStep(fmt.Sprintf(
+			"Cette demande n'est pas à l'étape CONFIRMATION (étape actuelle : %s).", dm.CurrentStep)))
 		return
 	}
-	if dm.TransitionEnAttente {
-		d.R.Fail(c, apperr.EtapeInvalide(
+	if dm.PendingTransition {
+		d.R.Fail(c, entity.InvalidStep(
 			"L'étape CONFIRMATION a déjà été soldée pour cette demande."))
 		return
 	}
 
 	tousOps, errOps := d.tousOperateurs(c)
 	if errOps != nil {
-		d.R.Fail(c, apperr.ErreurInterne("lecture des opérateurs"))
+		d.R.Fail(c, entity.InternalError("lecture des opérateurs"))
 		return
 	}
-	appelantID := Appelant(c).OperateurID
+	appelantID := Appelant(c).OperatorID
 	attendu := false
-	for _, op := range domain.ConfirmateursAttendus(dm, tousOps) {
+	for _, op := range entity.ExpectedConfirmers(dm, tousOps) {
 		if op == appelantID {
 			attendu = true
 			break
 		}
 	}
 	if !attendu {
-		d.R.Fail(c, apperr.DemandeAccesRefuse(
+		d.R.Fail(c, entity.RequestAccessDenied(
 			"Votre opérateur n'a pas à confirmer cette demande."))
 		return
 	}
@@ -90,11 +89,11 @@ func (d *Deps) postAConfirmer(c *gin.Context) {
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
-			d.R.Fail(c, apperr.DemandeAccesRefuse(
+			d.R.Fail(c, entity.RequestAccessDenied(
 				"Votre opérateur a déjà confirmé cette demande."))
 			return
 		}
-		d.R.Fail(c, apperr.ErreurInterne("enregistrement de la confirmation"))
+		d.R.Fail(c, entity.InternalError("enregistrement de la confirmation"))
 		return
 	}
 
@@ -102,19 +101,19 @@ func (d *Deps) postAConfirmer(c *gin.Context) {
 	if err := d.DB.Pool.QueryRow(c,
 		`SELECT COUNT(*) FROM confirmation WHERE demande_id = $1`, dm.ID).
 		Scan(&nbConfirmations); err != nil {
-		d.R.Fail(c, apperr.ErreurInterne("comptage des confirmations"))
+		d.R.Fail(c, entity.InternalError("comptage des confirmations"))
 		return
 	}
-	if nbConfirmations >= len(domain.ConfirmateursAttendus(dm, tousOps)) {
+	if nbConfirmations >= len(entity.ExpectedConfirmers(dm, tousOps)) {
 		if err := d.Moteur.PlanifierTransition(c, dm.ID); err != nil {
-			d.R.Fail(c, apperr.ErreurInterne("planification de la transition"))
+			d.R.Fail(c, entity.InternalError("planification de la transition"))
 			return
 		}
 	}
 
 	dto, errDTO := d.demandeDTO(c, dm.ID)
 	if errDTO != nil {
-		d.R.Fail(c, apperr.ErreurInterne("relecture de la demande"))
+		d.R.Fail(c, entity.InternalError("relecture de la demande"))
 		return
 	}
 	// Sans client : les captures des deux confirmations, orange puis expresso,

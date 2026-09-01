@@ -4,7 +4,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/ouznoreyni/numflex-sandbox/internal/apperr"
+	"github.com/ouznoreyni/numflex-sandbox/internal/entity"
 )
 
 func (d *Deps) routesReferentiels(g *gin.RouterGroup) {
@@ -23,7 +23,7 @@ type operateurDTO struct {
 func (d *Deps) getOperateurs(c *gin.Context) {
 	rows, err := d.DB.Pool.Query(c, `SELECT id, nom FROM operateur ORDER BY nom`)
 	if err != nil {
-		d.R.Fail(c, apperr.ErreurInterne("lecture des opérateurs"))
+		d.R.Fail(c, entity.InternalError("lecture des opérateurs"))
 		return
 	}
 	defer rows.Close()
@@ -32,7 +32,7 @@ func (d *Deps) getOperateurs(c *gin.Context) {
 	for rows.Next() {
 		var o operateurDTO
 		if err := rows.Scan(&o.ID, &o.Nom); err != nil {
-			d.R.Fail(c, apperr.ErreurInterne("lecture des opérateurs"))
+			d.R.Fail(c, entity.InternalError("lecture des opérateurs"))
 			return
 		}
 		out = append(out, o)
@@ -40,7 +40,7 @@ func (d *Deps) getOperateurs(c *gin.Context) {
 	// Next() renvoyant false signifie « fin des lignes » ou « erreur » : sans
 	// ce contrôle, une panne en cours d'itération passerait pour un succès partiel.
 	if err := rows.Err(); err != nil {
-		d.R.Fail(c, apperr.ErreurInterne("lecture des opérateurs"))
+		d.R.Fail(c, entity.InternalError("lecture des opérateurs"))
 		return
 	}
 	d.R.OK(c, http.StatusOK, "Opérateurs récupérés avec succès", out)
@@ -54,7 +54,7 @@ type motifRejetDTO struct {
 func (d *Deps) getMotifsRejet(c *gin.Context) {
 	rows, err := d.DB.Pool.Query(c, `SELECT id, motif FROM motif_rejet ORDER BY motif`)
 	if err != nil {
-		d.R.Fail(c, apperr.ErreurInterne("lecture des motifs de rejet"))
+		d.R.Fail(c, entity.InternalError("lecture des motifs de rejet"))
 		return
 	}
 	defer rows.Close()
@@ -63,7 +63,7 @@ func (d *Deps) getMotifsRejet(c *gin.Context) {
 	for rows.Next() {
 		var m motifRejetDTO
 		if err := rows.Scan(&m.ID, &m.Motif); err != nil {
-			d.R.Fail(c, apperr.ErreurInterne("lecture des motifs de rejet"))
+			d.R.Fail(c, entity.InternalError("lecture des motifs de rejet"))
 			return
 		}
 		out = append(out, m)
@@ -71,7 +71,7 @@ func (d *Deps) getMotifsRejet(c *gin.Context) {
 	// Next() renvoyant false signifie « fin des lignes » ou « erreur » : sans
 	// ce contrôle, une panne en cours d'itération passerait pour un succès partiel.
 	if err := rows.Err(); err != nil {
-		d.R.Fail(c, apperr.ErreurInterne("lecture des motifs de rejet"))
+		d.R.Fail(c, entity.InternalError("lecture des motifs de rejet"))
 		return
 	}
 	d.R.OK(c, http.StatusOK, "Motifs de rejet récupérés avec succès", out)
@@ -85,7 +85,7 @@ type typeDemandeDTO struct {
 func (d *Deps) getTypesDemande(c *gin.Context) {
 	rows, err := d.DB.Pool.Query(c, `SELECT id, type FROM type_demande ORDER BY type`)
 	if err != nil {
-		d.R.Fail(c, apperr.ErreurInterne("lecture des types de demande"))
+		d.R.Fail(c, entity.InternalError("lecture des types de demande"))
 		return
 	}
 	defer rows.Close()
@@ -94,7 +94,7 @@ func (d *Deps) getTypesDemande(c *gin.Context) {
 	for rows.Next() {
 		var t typeDemandeDTO
 		if err := rows.Scan(&t.ID, &t.Type); err != nil {
-			d.R.Fail(c, apperr.ErreurInterne("lecture des types de demande"))
+			d.R.Fail(c, entity.InternalError("lecture des types de demande"))
 			return
 		}
 		out = append(out, t)
@@ -102,7 +102,7 @@ func (d *Deps) getTypesDemande(c *gin.Context) {
 	// Next() renvoyant false signifie « fin des lignes » ou « erreur » : sans
 	// ce contrôle, une panne en cours d'itération passerait pour un succès partiel.
 	if err := rows.Err(); err != nil {
-		d.R.Fail(c, apperr.ErreurInterne("lecture des types de demande"))
+		d.R.Fail(c, entity.InternalError("lecture des types de demande"))
 		return
 	}
 	d.R.OK(c, http.StatusOK, "Types de demande récupérés avec succès", out)
@@ -116,7 +116,7 @@ type processusDTO struct {
 func (d *Deps) getProcessus(c *gin.Context) {
 	rows, err := d.DB.Pool.Query(c, `SELECT id, type FROM processus ORDER BY type`)
 	if err != nil {
-		d.R.Fail(c, apperr.ErreurInterne("lecture des processus"))
+		d.R.Fail(c, entity.InternalError("lecture des processus"))
 		return
 	}
 	defer rows.Close()
@@ -125,7 +125,7 @@ func (d *Deps) getProcessus(c *gin.Context) {
 	for rows.Next() {
 		var p processusDTO
 		if err := rows.Scan(&p.ID, &p.Type); err != nil {
-			d.R.Fail(c, apperr.ErreurInterne("lecture des processus"))
+			d.R.Fail(c, entity.InternalError("lecture des processus"))
 			return
 		}
 		out = append(out, p)
@@ -133,7 +133,7 @@ func (d *Deps) getProcessus(c *gin.Context) {
 	// Next() renvoyant false signifie « fin des lignes » ou « erreur » : sans
 	// ce contrôle, une panne en cours d'itération passerait pour un succès partiel.
 	if err := rows.Err(); err != nil {
-		d.R.Fail(c, apperr.ErreurInterne("lecture des processus"))
+		d.R.Fail(c, entity.InternalError("lecture des processus"))
 		return
 	}
 	d.R.OK(c, http.StatusOK, "Processus récupérés avec succès", out)
@@ -148,7 +148,7 @@ type typeIncidentDTO struct {
 func (d *Deps) getTypesIncident(c *gin.Context) {
 	rows, err := d.DB.Pool.Query(c, `SELECT id, libelle, fige_systeme FROM type_incident ORDER BY libelle`)
 	if err != nil {
-		d.R.Fail(c, apperr.ErreurInterne("lecture des types d'incident"))
+		d.R.Fail(c, entity.InternalError("lecture des types d'incident"))
 		return
 	}
 	defer rows.Close()
@@ -157,7 +157,7 @@ func (d *Deps) getTypesIncident(c *gin.Context) {
 	for rows.Next() {
 		var ti typeIncidentDTO
 		if err := rows.Scan(&ti.ID, &ti.Libelle, &ti.FigeSysteme); err != nil {
-			d.R.Fail(c, apperr.ErreurInterne("lecture des types d'incident"))
+			d.R.Fail(c, entity.InternalError("lecture des types d'incident"))
 			return
 		}
 		out = append(out, ti)
@@ -165,7 +165,7 @@ func (d *Deps) getTypesIncident(c *gin.Context) {
 	// Next() renvoyant false signifie « fin des lignes » ou « erreur » : sans
 	// ce contrôle, une panne en cours d'itération passerait pour un succès partiel.
 	if err := rows.Err(); err != nil {
-		d.R.Fail(c, apperr.ErreurInterne("lecture des types d'incident"))
+		d.R.Fail(c, entity.InternalError("lecture des types d'incident"))
 		return
 	}
 	d.R.OK(c, http.StatusOK, "Types d'incident récupérés avec succès", out)

@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/ouznoreyni/numflex-sandbox/internal/domain"
+	"github.com/ouznoreyni/numflex-sandbox/internal/entity"
 )
 
 // AppliquerTransition solde l'étape courante et fait passer la demande à la
@@ -18,26 +18,26 @@ func (e *Engine) AppliquerTransition(ctx context.Context, demandeID, origine str
 	}
 	defer tx.Rollback(ctx)
 
-	var d domain.Demande
+	var d entity.PortingRequest
 	var etape, statutDem, typeDem string
 	err = tx.QueryRow(ctx,
 		`SELECT etape_actuelle, statut_demande, type_demande,
 		        operateur_source_id, operateur_destinataire_id, numero
 		   FROM demande WHERE id = $1 FOR UPDATE`, demandeID).
-		Scan(&etape, &statutDem, &typeDem, &d.OperateurSourceID,
-			&d.OperateurDestinataireID, &d.Numero)
+		Scan(&etape, &statutDem, &typeDem, &d.SourceOperatorID,
+			&d.RecipientOperatorID, &d.MSISDN)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return nil
 		}
 		return err
 	}
-	if domain.StatutDemande(statutDem) != domain.StatutEnCours {
+	if entity.RequestStatus(statutDem) != entity.RequestInProgress {
 		return nil
 	}
 
-	courante := domain.Etape(etape)
-	typeDemande := domain.TypeDemande(typeDem)
+	courante := entity.Step(etape)
+	typeDemande := entity.RequestType(typeDem)
 	maintenant := time.Now()
 
 	// Une étape soldée par une action porte TERMINE, y compris la COMPLETION :
@@ -45,9 +45,9 @@ func (e *Engine) AppliquerTransition(ctx context.Context, demandeID, origine str
 	// COMPLETION », et ce qu'ANO-013 décrivait déjà (TERMINE en nominal, EXPIRE
 	// par expiration). Le VALIDE que ce code posait sur la COMPLETION n'avait
 	// aucune source.
-	statutEtapeSoldee := string(domain.EtapeTerminee)
+	statutEtapeSoldee := string(entity.StepCompleted)
 	if origine == "EXPIRATION" {
-		statutEtapeSoldee = string(domain.EtapeExpiree)
+		statutEtapeSoldee = string(entity.StepExpired)
 	}
 
 	if _, err := tx.Exec(ctx,
@@ -57,8 +57,8 @@ func (e *Engine) AppliquerTransition(ctx context.Context, demandeID, origine str
 		return err
 	}
 
-	suivante, existe := domain.EtapeSuivante(courante)
-	if !existe && courante != domain.EtapeCompletion {
+	suivante, existe := entity.NextStep(courante)
+	if !existe && courante != entity.StepCompletion {
 		// etape_actuelle n'a pas de contrainte CHECK en base : une valeur
 		// corrompue ne doit pas être traitée comme si COMPLETION était soldée
 		// (ce qui clôturerait la demande et transférerait le numéro).
@@ -80,7 +80,7 @@ func (e *Engine) AppliquerTransition(ctx context.Context, demandeID, origine str
 	}
 
 	// Effets de bord attachés à la sortie de l'étape.
-	if courante == domain.EtapeActivation && typeDemande == domain.TypePortage {
+	if courante == entity.StepActivation && typeDemande == entity.RequestTypePorting {
 		if err := e.transfererAuRegistre(ctx, tx, demandeID, d); err != nil {
 			return err
 		}
@@ -102,25 +102,25 @@ func (e *Engine) AppliquerTransition(ctx context.Context, demandeID, origine str
 // transfererAuRegistre inscrit le changement d'opérateur au registre national.
 // C'est le constat central du SIT : quand une étape expire, ce transfert a lieu
 // alors qu'aucun HLR n'a été touché.
-func (e *Engine) transfererAuRegistre(ctx context.Context, tx pgx.Tx, demandeID string, d domain.Demande) error {
+func (e *Engine) transfererAuRegistre(ctx context.Context, tx pgx.Tx, demandeID string, d entity.PortingRequest) error {
 	_, err := tx.Exec(ctx,
 		`UPDATE numero SET operateur_actuel_id = $2, date_dernier_portage = now()
 		  WHERE msisdn IN (SELECT numero FROM demande_numero
 		                    WHERE demande_id = $1 AND NOT exclu AND statut <> 'REJETE')`,
-		demandeID, d.OperateurDestinataireID)
+		demandeID, d.RecipientOperatorID)
 	return err
 }
 
 // recalculerRoutage finalise le routage numéro par numéro (§7.10) : préfixe du
 // destinataire pour les numéros portés, de la source pour les numéros rejetés.
-func (e *Engine) recalculerRoutage(ctx context.Context, tx pgx.Tx, demandeID string, d domain.Demande) error {
+func (e *Engine) recalculerRoutage(ctx context.Context, tx pgx.Tx, demandeID string, d entity.PortingRequest) error {
 	var prefixeDest, prefixeSource string
 	if err := tx.QueryRow(ctx, `SELECT prefixe_routage FROM operateur WHERE id = $1`,
-		d.OperateurDestinataireID).Scan(&prefixeDest); err != nil {
+		d.RecipientOperatorID).Scan(&prefixeDest); err != nil {
 		return err
 	}
 	if err := tx.QueryRow(ctx, `SELECT prefixe_routage FROM operateur WHERE id = $1`,
-		d.OperateurSourceID).Scan(&prefixeSource); err != nil {
+		d.SourceOperatorID).Scan(&prefixeSource); err != nil {
 		return err
 	}
 	if _, err := tx.Exec(ctx,
@@ -137,20 +137,20 @@ func (e *Engine) recalculerRoutage(ctx context.Context, tx pgx.Tx, demandeID str
 // effetsFinDeDemande : pour une RESTITUTION ou un REVERSE, le numéro rejoint son
 // opérateur d'origine et routageInfo n'apparaît qu'ici (§7.10).
 func (e *Engine) effetsFinDeDemande(ctx context.Context, tx pgx.Tx, demandeID string,
-	td domain.TypeDemande, d domain.Demande) error {
+	td entity.RequestType, d entity.PortingRequest) error {
 
-	if td == domain.TypePortage {
+	if td == entity.RequestTypePorting {
 		return nil
 	}
 	if _, err := tx.Exec(ctx,
 		`UPDATE numero
 		    SET operateur_actuel_id = $2, date_dernier_portage = now(), deja_restitue = true
-		  WHERE msisdn = $1`, d.Numero, d.OperateurDestinataireID); err != nil {
+		  WHERE msisdn = $1`, d.MSISDN, d.RecipientOperatorID); err != nil {
 		return err
 	}
 	var prefixe string
 	if err := tx.QueryRow(ctx, `SELECT prefixe_routage FROM operateur WHERE id = $1`,
-		d.OperateurDestinataireID).Scan(&prefixe); err != nil {
+		d.RecipientOperatorID).Scan(&prefixe); err != nil {
 		return err
 	}
 	_, err := tx.Exec(ctx, `UPDATE demande SET routage_info = $2 WHERE id = $1`, demandeID, prefixe)

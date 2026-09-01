@@ -5,6 +5,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/ouznoreyni/numflex-sandbox/internal/config"
+	"github.com/ouznoreyni/numflex-sandbox/internal/entity"
 	"github.com/ouznoreyni/numflex-sandbox/internal/httpx"
 	"github.com/ouznoreyni/numflex-sandbox/internal/store"
 )
@@ -24,18 +25,10 @@ type Moteur interface {
 	PlanifierTransition(ctx context.Context, demandeID string) error
 }
 
-// Identite décrit l'opérateur derrière le jeton présenté.
-type Identite struct {
-	UtilisateurID string
-	Username      string
-	OperateurID   string
-	OperateurNom  string
-}
-
 const cleIdentite = "numflex.identite"
 
-func Appelant(c *gin.Context) Identite {
+func Appelant(c *gin.Context) entity.Caller {
 	v, _ := c.Get(cleIdentite)
-	id, _ := v.(Identite)
+	id, _ := v.(entity.Caller)
 	return id
 }

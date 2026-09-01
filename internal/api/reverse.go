@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/ouznoreyni/numflex-sandbox/internal/apperr"
+	"github.com/ouznoreyni/numflex-sandbox/internal/entity"
 	"github.com/ouznoreyni/numflex-sandbox/internal/oid"
 )
 
@@ -31,11 +31,11 @@ type reqReverse struct {
 func (d *Deps) postReverseRequest(c *gin.Context) {
 	var req reqReverse
 	if err := c.ShouldBindJSON(&req); err != nil {
-		d.R.Fail(c, apperr.FormatJSONInvalide())
+		d.R.Fail(c, entity.InvalidJSONFormat())
 		return
 	}
 	if !motifMSISDN.MatchString(req.Numero) {
-		d.R.Fail(c, apperr.Validation(apperr.FieldError{
+		d.R.Fail(c, entity.Validation(entity.FieldFault{
 			ObjectName: "reverseRequestDTO", Field: "numero",
 			Message: "doit correspondre à \"^[0-9]{9}$\"",
 		}))
@@ -49,14 +49,14 @@ func (d *Deps) postReverseRequest(c *gin.Context) {
 	}
 
 	appelant := Appelant(c)
-	if etat.OperateurOrigineID != appelant.OperateurID {
-		d.R.Fail(c, apperr.DemandeAccesRefuse(
+	if etat.OriginOperatorID != appelant.OperatorID {
+		d.R.Fail(c, entity.RequestAccessDenied(
 			"Seul l'opérateur source (opérateur d'origine du numéro) peut soumettre "+
 				"une demande de reverse pour ce numéro."))
 		return
 	}
-	if etat.OperateurActuelID == etat.OperateurOrigineID {
-		d.R.Fail(c, apperr.NumeroNonPorte())
+	if etat.CurrentOperatorID == etat.OriginOperatorID {
+		d.R.Fail(c, entity.NumberNotPorted())
 		return
 	}
 
@@ -65,14 +65,14 @@ func (d *Deps) postReverseRequest(c *gin.Context) {
 	if _, err := d.DB.Pool.Exec(c,
 		`INSERT INTO reverse_request (id, numero, operateur_id, statut, date_demande)
 		 VALUES ($1,$2,$3,'EN_ATTENTE',$4)`,
-		id, req.Numero, appelant.OperateurID, maintenant); err != nil {
-		d.R.Fail(c, apperr.ErreurInterne("création de la demande de reverse"))
+		id, req.Numero, appelant.OperatorID, maintenant); err != nil {
+		d.R.Fail(c, entity.InternalError("création de la demande de reverse"))
 		return
 	}
 
 	dto, errDTO := d.reverseRequestDTO(c, id)
 	if errDTO != nil {
-		d.R.Fail(c, apperr.ErreurInterne("relecture de la demande de reverse"))
+		d.R.Fail(c, entity.InternalError("relecture de la demande de reverse"))
 		return
 	}
 	d.R.OK(c, http.StatusCreated, "Demande de reverse soumise avec succès", dto)
@@ -86,9 +86,9 @@ func (d *Deps) getMesReverseRequests(c *gin.Context) {
 	size := parseQueryInt(c, "size", 20)
 
 	appelant := Appelant(c)
-	ids, err := d.idsReverseRequests(c, appelant.OperateurID, page, size)
+	ids, err := d.idsReverseRequests(c, appelant.OperatorID, page, size)
 	if err != nil {
-		d.R.Fail(c, apperr.ErreurInterne("lecture des demandes de reverse"))
+		d.R.Fail(c, entity.InternalError("lecture des demandes de reverse"))
 		return
 	}
 
@@ -96,7 +96,7 @@ func (d *Deps) getMesReverseRequests(c *gin.Context) {
 	for _, id := range ids {
 		dto, errDTO := d.reverseRequestDTO(c, id)
 		if errDTO != nil {
-			d.R.Fail(c, apperr.ErreurInterne("lecture de la demande de reverse"))
+			d.R.Fail(c, entity.InternalError("lecture de la demande de reverse"))
 			return
 		}
 		out = append(out, dto)

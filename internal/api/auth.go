@@ -5,8 +5,8 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/ouznoreyni/numflex-sandbox/internal/apperr"
 	"github.com/ouznoreyni/numflex-sandbox/internal/auth"
+	"github.com/ouznoreyni/numflex-sandbox/internal/entity"
 	"github.com/ouznoreyni/numflex-sandbox/internal/httpx"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -20,7 +20,7 @@ type demandeAuth struct {
 func (d *Deps) postAuthenticate(c *gin.Context) {
 	var req demandeAuth
 	if err := c.ShouldBindJSON(&req); err != nil {
-		d.R.Fail(c, apperr.FormatJSONInvalide())
+		d.R.Fail(c, entity.InvalidJSONFormat())
 		return
 	}
 
@@ -45,7 +45,7 @@ func (d *Deps) postAuthenticate(c *gin.Context) {
 
 	jeton, err := auth.Emettre(d.Cfg.JWTSecret, d.Cfg.JWTTTL, req.Username, roles)
 	if err != nil {
-		d.R.Fail(c, apperr.ErreurInterne("émission du jeton impossible"))
+		d.R.Fail(c, entity.InternalError("émission du jeton impossible"))
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"id_token": jeton})
@@ -61,7 +61,7 @@ func (d *Deps) Authentifier() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		entete := c.GetHeader("Authorization")
 		if !strings.HasPrefix(entete, "Bearer ") || strings.TrimSpace(entete[7:]) == "" {
-			e := apperr.AccesInterdit()
+			e := entity.AccessForbidden()
 			c.JSON(http.StatusUnauthorized, httpx.Envelope{
 				Success: false, Code: e.Code, Message: e.Message, Data: nil,
 			})
@@ -76,14 +76,14 @@ func (d *Deps) Authentifier() gin.HandlerFunc {
 			return
 		}
 
-		var ident Identite
+		var ident entity.Caller
 		err = d.DB.Pool.QueryRow(c,
 			`SELECT u.id, u.username, o.id, o.nom
 			   FROM utilisateur u JOIN operateur o ON o.id = u.operateur_id
 			  WHERE u.username = $1`, username).
-			Scan(&ident.UtilisateurID, &ident.Username, &ident.OperateurID, &ident.OperateurNom)
+			Scan(&ident.UserID, &ident.Username, &ident.OperatorID, &ident.OperatorName)
 		if err != nil {
-			d.R.Fail(c, apperr.OperateurNonTrouve())
+			d.R.Fail(c, entity.OperatorNotFound())
 			return
 		}
 

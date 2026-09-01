@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/ouznoreyni/numflex-sandbox/internal/apperr"
 	"github.com/ouznoreyni/numflex-sandbox/internal/config"
+	"github.com/ouznoreyni/numflex-sandbox/internal/entity"
 )
 
 type Renderer struct {
@@ -53,26 +53,26 @@ type problem struct {
 	Detail      string              `json:"detail,omitempty"`
 	Path        string              `json:"path"`
 	Message     string              `json:"message"`
-	FieldErrors []apperr.FieldError `json:"fieldErrors,omitempty"`
+	FieldErrors []entity.FieldFault `json:"fieldErrors,omitempty"`
 }
 
 func (r *Renderer) Fail(c *gin.Context, err error) {
-	var e *apperr.Error
+	var e *entity.Fault
 	trouve := errors.As(err, &e)
 	switch {
 	case trouve && e != nil:
-		// e déjà renseigné : soit err était un *apperr.Error, soit il en
+		// e déjà renseigné : soit err était un *entity.Fault, soit il en
 		// enveloppait un (fmt.Errorf("...: %w", ...)).
 	case err == nil:
-		e = apperr.ErreurInterne("erreur interne")
+		e = entity.InternalError("erreur interne")
 	case trouve:
-		// errors.As a réussi sur un *apperr.Error typé nil enveloppé dans err :
+		// errors.As a réussi sur un *entity.Fault typé nil enveloppé dans err :
 		// err.Error() appellerait la méthode sur ce récepteur nil et paniquerait.
-		e = apperr.ErreurInterne("erreur interne")
+		e = entity.InternalError("erreur interne")
 	default:
-		// Pas un *apperr.Error, pas nil : une erreur "normale" en amont ; son
+		// Pas un *entity.Fault, pas nil : une erreur "normale" en amont ; son
 		// texte devient le message métier du 500.
-		e = apperr.ErreurInterne(err.Error())
+		e = entity.InternalError(err.Error())
 	}
 	if r.fid == config.FidelityContract {
 		r.failContrat(c, e)
@@ -83,7 +83,7 @@ func (r *Renderer) Fail(c *gin.Context, err error) {
 
 // failReel reproduit ANO-001, ANO-003 et ANO-004 : aucune enveloppe, aucun champ
 // code, les erreurs métier en 500, et le nom de la classe d'exception Java exposé.
-func (r *Renderer) failReel(c *gin.Context, e *apperr.Error) {
+func (r *Renderer) failReel(c *gin.Context, e *entity.Fault) {
 	chemin := ""
 	if c.Request != nil {
 		chemin = c.Request.URL.Path
@@ -91,7 +91,7 @@ func (r *Renderer) failReel(c *gin.Context, e *apperr.Error) {
 
 	// KindValidation avec Fields : une vraie violation de bean validation Spring,
 	// qui porte toujours au moins un fieldError.
-	if e.Kind == apperr.KindValidation && len(e.Fields) > 0 {
+	if e.Kind == entity.FaultValidation && len(e.Fields) > 0 {
 		c.Header("Content-Type", "application/problem+json")
 		c.JSON(http.StatusBadRequest, problem{
 			Type:        "https://www.jhipster.tech/problem/constraint-violation",
@@ -110,7 +110,7 @@ func (r *Renderer) failReel(c *gin.Context, e *apperr.Error) {
 	// Une pile Spring/JHipster ne répond jamais constraint-violation avec zéro
 	// fieldErrors ; ce corps-là est un problem-with-message ordinaire en 400, et le
 	// message métier reste lisible (pas de préfixe RuntimeException:, réservé aux 500).
-	if e.Kind == apperr.KindValidation {
+	if e.Kind == entity.FaultValidation {
 		detail := e.RealDetail
 		if detail == "" {
 			detail = e.Message
@@ -144,7 +144,7 @@ func (r *Renderer) failReel(c *gin.Context, e *apperr.Error) {
 	c.Abort()
 }
 
-func (r *Renderer) failContrat(c *gin.Context, e *apperr.Error) {
+func (r *Renderer) failContrat(c *gin.Context, e *entity.Fault) {
 	c.JSON(statutContrat(e.Kind), Envelope{
 		Success: false,
 		Code:    e.Code,
@@ -154,15 +154,15 @@ func (r *Renderer) failContrat(c *gin.Context, e *apperr.Error) {
 	c.Abort()
 }
 
-func statutContrat(k apperr.Kind) int {
+func statutContrat(k entity.FaultKind) int {
 	switch k {
-	case apperr.KindValidation:
+	case entity.FaultValidation:
 		return http.StatusBadRequest
-	case apperr.KindIntrouvable:
+	case entity.FaultNotFound:
 		return http.StatusNotFound
-	case apperr.KindAcces:
+	case entity.FaultAccess:
 		return http.StatusForbidden
-	case apperr.KindEtat:
+	case entity.FaultState:
 		return http.StatusConflict
 	default:
 		return http.StatusInternalServerError

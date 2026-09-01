@@ -7,9 +7,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5"
-	"github.com/ouznoreyni/numflex-sandbox/internal/apperr"
 	"github.com/ouznoreyni/numflex-sandbox/internal/config"
-	"github.com/ouznoreyni/numflex-sandbox/internal/domain"
+	"github.com/ouznoreyni/numflex-sandbox/internal/entity"
 )
 
 func (d *Deps) routesLecture(g *gin.RouterGroup) {
@@ -67,7 +66,7 @@ func (d *Deps) rendreListeAvec(c *gin.Context, message string, ids []string,
 	for _, id := range ids {
 		dto, err := d.demandeDTO(c, id)
 		if err != nil {
-			d.R.Fail(c, apperr.ErreurInterne("lecture de la demande"))
+			d.R.Fail(c, entity.InternalError("lecture de la demande"))
 			return
 		}
 		out = append(out, transforme(dto))
@@ -81,9 +80,9 @@ func (d *Deps) getMesDemandes(c *gin.Context) {
 	appelant := Appelant(c)
 	ids, err := d.idsDemandes(c,
 		`dm.operateur_source_id = $1 OR dm.operateur_destinataire_id = $1`,
-		appelant.OperateurID)
+		appelant.OperatorID)
 	if err != nil {
-		d.R.Fail(c, apperr.ErreurInterne("lecture des demandes"))
+		d.R.Fail(c, entity.InternalError("lecture des demandes"))
 		return
 	}
 	d.rendreListe(c, "Demandes récupérées avec succès", ids)
@@ -98,21 +97,21 @@ func filtreAAccepter() string {
 
 func (d *Deps) getAAccepter(c *gin.Context) {
 	appelant := Appelant(c)
-	ids, err := d.idsDemandes(c, filtreAAccepter(), appelant.OperateurID)
+	ids, err := d.idsDemandes(c, filtreAAccepter(), appelant.OperatorID)
 	if err != nil {
-		d.R.Fail(c, apperr.ErreurInterne("lecture des demandes à accepter"))
+		d.R.Fail(c, entity.InternalError("lecture des demandes à accepter"))
 		return
 	}
 	d.rendreListe(c, "Demandes à accepter récupérées avec succès", ids)
 }
 
 func (d *Deps) getAAccepterDetail(c *gin.Context) {
-	d.detailFiltre(c, filtreAAccepter(), c.Param("id"), Appelant(c).OperateurID)
+	d.detailFiltre(c, filtreAAccepter(), c.Param("id"), Appelant(c).OperatorID)
 }
 
 // --- a-traiter ------------------------------------------------------------
 
-// filtreATraiter exprime en SQL domain.ResponsableEtape : DESACTIVATION incombe
+// filtreATraiter exprime en SQL entity.StepOwner : DESACTIVATION incombe
 // à la source, ACTIVATION et COMPLETION au destinataire, sauf la COMPLETION
 // d'un REVERSE qui revient à l'ARTP (aucun opérateur ne la voit ici).
 func filtreATraiter() string {
@@ -132,32 +131,32 @@ func filtreATraiter() string {
 
 func (d *Deps) getATraiter(c *gin.Context) {
 	appelant := Appelant(c)
-	ids, err := d.idsDemandes(c, filtreATraiter(), appelant.OperateurID)
+	ids, err := d.idsDemandes(c, filtreATraiter(), appelant.OperatorID)
 	if err != nil {
-		d.R.Fail(c, apperr.ErreurInterne("lecture des demandes à traiter"))
+		d.R.Fail(c, entity.InternalError("lecture des demandes à traiter"))
 		return
 	}
 	d.rendreListe(c, "Demandes à traiter récupérées avec succès", ids)
 }
 
 func (d *Deps) getATraiterDetail(c *gin.Context) {
-	d.detailFiltre(c, filtreATraiter(), c.Param("id"), Appelant(c).OperateurID)
+	d.detailFiltre(c, filtreATraiter(), c.Param("id"), Appelant(c).OperatorID)
 }
 
 // --- a-confirmer ------------------------------------------------------------
 //
 // Le filtre ne se réduit pas à une clause WHERE sur demande : l'appartenance à
-// ConfirmateursAttendus dépend du type de demande et n'est pas exprimable par
+// ExpectedConfirmers dépend du type de demande et n'est pas exprimable par
 // une seule comparaison de colonnes (elle exclut le destinataire seulement pour
 // un PORTAGE). On charge donc les candidats EN_COURS/CONFIRMATION puis on filtre
-// en Go avec la règle de domain.ConfirmateursAttendus, pour ne jamais dupliquer
+// en Go avec la règle de entity.ExpectedConfirmers, pour ne jamais dupliquer
 // cette règle en SQL.
 
 func (d *Deps) getAConfirmer(c *gin.Context) {
 	appelant := Appelant(c)
-	ids, err := d.idsAConfirmer(c, appelant.OperateurID)
+	ids, err := d.idsAConfirmer(c, appelant.OperatorID)
 	if err != nil {
-		d.R.Fail(c, apperr.ErreurInterne("lecture des demandes à confirmer"))
+		d.R.Fail(c, entity.InternalError("lecture des demandes à confirmer"))
 		return
 	}
 	d.rendreListeAvec(c, "Demandes à confirmer récupérées avec succès", ids, sansClient)
@@ -165,16 +164,16 @@ func (d *Deps) getAConfirmer(c *gin.Context) {
 
 func (d *Deps) getAConfirmerDetail(c *gin.Context) {
 	appelant := Appelant(c)
-	ids, err := d.idsAConfirmer(c, appelant.OperateurID)
+	ids, err := d.idsAConfirmer(c, appelant.OperatorID)
 	if err != nil {
-		d.R.Fail(c, apperr.ErreurInterne("lecture des demandes à confirmer"))
+		d.R.Fail(c, entity.InternalError("lecture des demandes à confirmer"))
 		return
 	}
 	d.detailParmiAvec(c, ids, c.Param("id"), sansClient)
 }
 
 // idsAConfirmer liste les demandes EN_COURS/CONFIRMATION où l'opérateur donné
-// est un confirmateur attendu (domain.ConfirmateursAttendus) et n'a pas encore
+// est un confirmateur attendu (entity.ExpectedConfirmers) et n'a pas encore
 // confirmé.
 func (d *Deps) idsAConfirmer(ctx context.Context, operateurID string) ([]string, error) {
 	// Chargé avant d'ouvrir le curseur des candidats, pour ne jamais tenir deux
@@ -206,12 +205,12 @@ func (d *Deps) idsAConfirmer(ctx context.Context, operateurID string) ([]string,
 		if dejaConfirme {
 			continue
 		}
-		dm := domain.Demande{
-			TypeDemande:             domain.TypeDemande(typeDem),
-			OperateurDestinataireID: destinataireID,
+		dm := entity.PortingRequest{
+			RequestType:         entity.RequestType(typeDem),
+			RecipientOperatorID: destinataireID,
 		}
 		attendu := false
-		for _, op := range domain.ConfirmateursAttendus(dm, tousOps) {
+		for _, op := range entity.ExpectedConfirmers(dm, tousOps) {
 			if op == operateurID {
 				attendu = true
 				break
@@ -231,9 +230,9 @@ func (d *Deps) idsAConfirmer(ctx context.Context, operateurID string) ([]string,
 
 func (d *Deps) getDejaConfirmees(c *gin.Context) {
 	appelant := Appelant(c)
-	ids, err := d.idsDejaConfirmees(c, appelant.OperateurID)
+	ids, err := d.idsDejaConfirmees(c, appelant.OperatorID)
 	if err != nil {
-		d.R.Fail(c, apperr.ErreurInterne("lecture des demandes déjà confirmées"))
+		d.R.Fail(c, entity.InternalError("lecture des demandes déjà confirmées"))
 		return
 	}
 	d.rendreListe(c, "Demandes déjà confirmées récupérées avec succès", ids)
@@ -282,9 +281,9 @@ func (d *Deps) getIn(c *gin.Context) {
 	appelant := Appelant(c)
 	ids, err := d.idsDemandes(c,
 		`dm.type_demande = 'PORTAGE' AND dm.statut_demande = 'TERMINE'
-		  AND dm.operateur_destinataire_id = $1`, appelant.OperateurID)
+		  AND dm.operateur_destinataire_id = $1`, appelant.OperatorID)
 	if err != nil {
-		d.R.Fail(c, apperr.ErreurInterne("lecture des demandes IN"))
+		d.R.Fail(c, entity.InternalError("lecture des demandes IN"))
 		return
 	}
 	d.rendreListe(c, "Demandes IN récupérées avec succès", ids)
@@ -294,9 +293,9 @@ func (d *Deps) getOut(c *gin.Context) {
 	appelant := Appelant(c)
 	ids, err := d.idsDemandes(c,
 		`dm.type_demande = 'PORTAGE' AND dm.statut_demande = 'TERMINE'
-		  AND dm.operateur_source_id = $1`, appelant.OperateurID)
+		  AND dm.operateur_source_id = $1`, appelant.OperatorID)
 	if err != nil {
-		d.R.Fail(c, apperr.ErreurInterne("lecture des demandes OUT"))
+		d.R.Fail(c, entity.InternalError("lecture des demandes OUT"))
 		return
 	}
 	d.rendreListe(c, "Demandes OUT récupérées avec succès", ids)
@@ -312,11 +311,11 @@ func (d *Deps) detailFiltre(c *gin.Context, filtre, id, operateurID string) {
 		`SELECT EXISTS (SELECT 1 FROM demande dm WHERE dm.id = $2 AND `+filtre+`)`,
 		operateurID, id).Scan(&trouve)
 	if err != nil {
-		d.R.Fail(c, apperr.ErreurInterne("lecture de la demande"))
+		d.R.Fail(c, entity.InternalError("lecture de la demande"))
 		return
 	}
 	if !trouve {
-		d.R.Fail(c, apperr.DemandeNonTrouvee())
+		d.R.Fail(c, entity.RequestNotFound())
 		return
 	}
 	d.detailUnique(c, id)
@@ -336,7 +335,7 @@ func (d *Deps) detailParmiAvec(c *gin.Context, ids []string, id string,
 			return
 		}
 	}
-	d.R.Fail(c, apperr.DemandeNonTrouvee())
+	d.R.Fail(c, entity.RequestNotFound())
 }
 
 func (d *Deps) detailUnique(c *gin.Context, id string) {
@@ -347,7 +346,7 @@ func (d *Deps) detailUniqueAvec(c *gin.Context, id string,
 	transforme func(map[string]any) map[string]any) {
 	dto, err := d.demandeDTO(c, id)
 	if err != nil {
-		d.R.Fail(c, apperr.ErreurInterne("lecture de la demande"))
+		d.R.Fail(c, entity.InternalError("lecture de la demande"))
 		return
 	}
 	// [HYP] Le guide ne documente pas le message de succès d'un détail unitaire ;
@@ -358,8 +357,8 @@ func (d *Deps) detailUniqueAvec(c *gin.Context, id string,
 
 // --- helpers exposés aux tâches suivantes ------------------------------------
 
-func (d *Deps) chargerDemande(ctx context.Context, id string) (domain.Demande, *apperr.Error) {
-	var dm domain.Demande
+func (d *Deps) chargerDemande(ctx context.Context, id string) (entity.PortingRequest, *entity.Fault) {
+	var dm entity.PortingRequest
 	var etape, statutDem, statutEtape, typeDem, typeAb string
 	var transition *string
 
@@ -368,22 +367,22 @@ func (d *Deps) chargerDemande(ctx context.Context, id string) (domain.Demande, *
 		        statut_etape_actuel, operateur_source_id, operateur_destinataire_id,
 		        createur_operateur_id, transition_prevue_a::text
 		   FROM demande WHERE id = $1`, id).
-		Scan(&dm.ID, &dm.Numero, &typeDem, &typeAb, &statutDem, &etape, &statutEtape,
-			&dm.OperateurSourceID, &dm.OperateurDestinataireID,
-			&dm.CreateurOperateurID, &transition)
+		Scan(&dm.ID, &dm.MSISDN, &typeDem, &typeAb, &statutDem, &etape, &statutEtape,
+			&dm.SourceOperatorID, &dm.RecipientOperatorID,
+			&dm.CreatorOperatorID, &transition)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return dm, apperr.DemandeNonTrouvee()
+		return dm, entity.RequestNotFound()
 	}
 	if err != nil {
-		return dm, apperr.ErreurInterne("lecture de la demande")
+		return dm, entity.InternalError("lecture de la demande")
 	}
 
-	dm.TypeDemande = domain.TypeDemande(typeDem)
-	dm.TypeAbonne = domain.TypeAbonne(typeAb)
-	dm.StatutDemande = domain.StatutDemande(statutDem)
-	dm.EtapeActuelle = domain.Etape(etape)
-	dm.StatutEtapeActuel = domain.StatutEtape(statutEtape)
-	dm.TransitionEnAttente = transition != nil
+	dm.RequestType = entity.RequestType(typeDem)
+	dm.SubscriberType = entity.SubscriberType(typeAb)
+	dm.Status = entity.RequestStatus(statutDem)
+	dm.CurrentStep = entity.Step(etape)
+	dm.CurrentStepStatus = entity.StepStatus(statutEtape)
+	dm.PendingTransition = transition != nil
 	return dm, nil
 }
 

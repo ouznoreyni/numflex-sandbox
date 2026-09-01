@@ -11,7 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/ouznoreyni/numflex-sandbox/internal/apperr"
+	"github.com/ouznoreyni/numflex-sandbox/internal/entity"
 	"github.com/ouznoreyni/numflex-sandbox/internal/oid"
 )
 
@@ -42,7 +42,7 @@ func (d *Deps) declarerIncident(segment string, figeSysteme bool) gin.HandlerFun
 	return func(c *gin.Context) {
 		var req reqIncident
 		if err := c.ShouldBindJSON(&req); err != nil {
-			d.R.Fail(c, apperr.FormatJSONInvalide())
+			d.R.Fail(c, entity.InvalidJSONFormat())
 			return
 		}
 
@@ -51,7 +51,7 @@ func (d *Deps) declarerIncident(segment string, figeSysteme bool) gin.HandlerFun
 			`SELECT id, libelle FROM type_incident WHERE fige_systeme = $1 LIMIT 1`,
 			figeSysteme).Scan(&typeID, &typeLibelle)
 		if err != nil {
-			d.R.Fail(c, apperr.ErreurInterne("résolution du type d'incident"))
+			d.R.Fail(c, entity.InternalError("résolution du type d'incident"))
 			return
 		}
 
@@ -67,12 +67,12 @@ func (d *Deps) declarerIncident(segment string, figeSysteme bool) gin.HandlerFun
 			if err := d.DB.Pool.QueryRow(c,
 				`SELECT EXISTS (SELECT 1 FROM incident
 				   WHERE operateur_id = $1 AND statut = 'EN_COURS' AND fige_systeme)`,
-				appelant.OperateurID).Scan(&dejaOuvert); err != nil {
-				d.R.Fail(c, apperr.ErreurInterne("vérification des incidents ouverts"))
+				appelant.OperatorID).Scan(&dejaOuvert); err != nil {
+				d.R.Fail(c, entity.InternalError("vérification des incidents ouverts"))
 				return
 			}
 			if dejaOuvert {
-				d.R.Fail(c, apperr.EtapeInvalide(
+				d.R.Fail(c, entity.InvalidStep(
 					"Un incident interne est déjà ouvert pour votre opérateur."))
 				return
 			}
@@ -84,21 +84,21 @@ func (d *Deps) declarerIncident(segment string, figeSysteme bool) gin.HandlerFun
 			`INSERT INTO incident
 			   (id, operateur_id, type_incident_id, fige_systeme, description, statut, date_ouverture)
 			 VALUES ($1,$2,$3,$4,$5,'EN_COURS',$6)`,
-			id, appelant.OperateurID, typeID, figeSysteme, req.Commentaire, maintenant)
+			id, appelant.OperatorID, typeID, figeSysteme, req.Commentaire, maintenant)
 		if err != nil {
 			var pgErr *pgconn.PgError
 			if errors.As(err, &pgErr) && pgErr.Code == "23505" {
-				d.R.Fail(c, apperr.EtapeInvalide(
+				d.R.Fail(c, entity.InvalidStep(
 					"Un incident interne est déjà ouvert pour votre opérateur."))
 				return
 			}
-			d.R.Fail(c, apperr.ErreurInterne("déclaration de l'incident"))
+			d.R.Fail(c, entity.InternalError("déclaration de l'incident"))
 			return
 		}
 
 		dto, errDTO := d.incidentDTO(c, id)
 		if errDTO != nil {
-			d.R.Fail(c, apperr.ErreurInterne("relecture de l'incident"))
+			d.R.Fail(c, entity.InternalError("relecture de l'incident"))
 			return
 		}
 		d.R.OK(c, http.StatusCreated, "Incident déclaré avec succès", dto)
@@ -118,7 +118,7 @@ func (d *Deps) resoudreIncident(segment string) gin.HandlerFunc {
 
 		var req reqIncident
 		if err := c.ShouldBindJSON(&req); err != nil {
-			d.R.Fail(c, apperr.FormatJSONInvalide())
+			d.R.Fail(c, entity.InvalidJSONFormat())
 			return
 		}
 
@@ -130,13 +130,13 @@ func (d *Deps) resoudreIncident(segment string) gin.HandlerFunc {
 		if errors.Is(err, pgx.ErrNoRows) {
 			// [HYP] Le guide ne fixe pas le message d'un incident inexistant.
 			// Décision 4 de la tâche : réutiliser le Kind du catalogue demande,
-			// mais avec le libellé incident — apperr.DemandeNonTrouvee() ne
+			// mais avec le libellé incident — entity.RequestNotFound() ne
 			// peut pas être réutilisée telle quelle, son message étant figé.
-			d.R.Fail(c, apperr.New(apperr.KindIntrouvable, "DEMANDE_NON_TROUVEE", "Incident introuvable"))
+			d.R.Fail(c, entity.New(entity.FaultNotFound, "DEMANDE_NON_TROUVEE", "Incident introuvable"))
 			return
 		}
 		if err != nil {
-			d.R.Fail(c, apperr.ErreurInterne("lecture de l'incident"))
+			d.R.Fail(c, entity.InternalError("lecture de l'incident"))
 			return
 		}
 
@@ -149,14 +149,14 @@ func (d *Deps) resoudreIncident(segment string) gin.HandlerFunc {
 			// endpoint ». L'indication doit atteindre le client — portée par un
 			// fieldError, elle serait perdue, l'enveloppe de contrat (§8) ne
 			// transportant que success, code, message et data.
-			d.R.Fail(c, apperr.ValidationEchouee(
+			d.R.Fail(c, entity.ValidationFailed(
 				"Cet incident se résout via POST "+cheminResolution(segmentAttendu)+"."))
 			return
 		}
 
 		appelant := Appelant(c)
-		if operateurID != appelant.OperateurID {
-			d.R.Fail(c, apperr.DemandeAccesRefuse(
+		if operateurID != appelant.OperatorID {
+			d.R.Fail(c, entity.RequestAccessDenied(
 				"Seul l'opérateur ayant déclaré l'incident peut le résoudre."))
 			return
 		}
@@ -165,13 +165,13 @@ func (d *Deps) resoudreIncident(segment string) gin.HandlerFunc {
 			`UPDATE incident SET statut = 'RESOLU', date_resolution = $2, commentaire_resolution = $3
 			  WHERE id = $1`, id, time.Now(), req.Commentaire)
 		if err != nil {
-			d.R.Fail(c, apperr.ErreurInterne("résolution de l'incident"))
+			d.R.Fail(c, entity.InternalError("résolution de l'incident"))
 			return
 		}
 
 		dto, errDTO := d.incidentDTO(c, id)
 		if errDTO != nil {
-			d.R.Fail(c, apperr.ErreurInterne("relecture de l'incident"))
+			d.R.Fail(c, entity.InternalError("relecture de l'incident"))
 			return
 		}
 		d.R.OK(c, http.StatusOK, "Incident résolu avec succès", dto)
@@ -189,9 +189,9 @@ func (d *Deps) mesIncidents(segment string) gin.HandlerFunc {
 		size := parseQueryInt(c, "size", 20)
 
 		appelant := Appelant(c)
-		ids, err := d.idsIncidents(c, appelant.OperateurID, figeSysteme, page, size)
+		ids, err := d.idsIncidents(c, appelant.OperatorID, figeSysteme, page, size)
 		if err != nil {
-			d.R.Fail(c, apperr.ErreurInterne("lecture des incidents"))
+			d.R.Fail(c, entity.InternalError("lecture des incidents"))
 			return
 		}
 
@@ -199,7 +199,7 @@ func (d *Deps) mesIncidents(segment string) gin.HandlerFunc {
 		for _, id := range ids {
 			dto, errDTO := d.incidentDTO(c, id)
 			if errDTO != nil {
-				d.R.Fail(c, apperr.ErreurInterne("lecture de l'incident"))
+				d.R.Fail(c, entity.InternalError("lecture de l'incident"))
 				return
 			}
 			out = append(out, dto)
