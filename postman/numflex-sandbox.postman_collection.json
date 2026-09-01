@@ -1,0 +1,1078 @@
+{
+  "info": {
+    "_postman_id": "5c092150-a3de-4b58-91fb-4cd7de51f3c3",
+    "name": "NumFlex Sandbox",
+    "description": "Collection calquée sur celle de l'ARTP pour l'API Gateway NumFlex. Basculer entre ce sandbox et la recette ARTP ne demande que de changer la variable d'environnement baseUrl.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "authentication",
+      "item": [
+        {
+          "name": "POST /api/authenticate",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/authenticate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "authenticate"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"yas\",\n  \"password\": \"yas2026\",\n  \"rememberMe\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Authentifie un compte du seed et rend id_token. Le script de test enregistre automatiquement {{token}}."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set(\"token\", pm.response.json().id_token);"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "GET /api/authenticate",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/authenticate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "authenticate"
+              ]
+            },
+            "description": "204 No Content si le jeton {{token}} est valide."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "gateway",
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{token}}",
+            "type": "string"
+          }
+        ]
+      },
+      "item": [
+        {
+          "name": "7.1 Référentiels",
+          "item": [
+            {
+              "name": "GET /operateurs",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/gateway/v1/operateurs",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "gateway",
+                    "v1",
+                    "operateurs"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "GET /motifs-rejet",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/gateway/v1/motifs-rejet",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "gateway",
+                    "v1",
+                    "motifs-rejet"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "GET /types-demande",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/gateway/v1/types-demande",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "gateway",
+                    "v1",
+                    "types-demande"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "GET /processus",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/gateway/v1/processus",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "gateway",
+                    "v1",
+                    "processus"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "GET /types-incident",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/gateway/v1/types-incident",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "gateway",
+                    "v1",
+                    "types-incident"
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "7.2 OTP",
+          "item": [
+            {
+              "name": "POST /otp/send",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/gateway/v1/otp/send",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "gateway",
+                    "v1",
+                    "otp",
+                    "send"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"numero\": \"771000001\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "POST /otp/verify",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/gateway/v1/otp/verify",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "gateway",
+                    "v1",
+                    "otp",
+                    "verify"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"numero\": \"771000001\",\n  \"otpCode\": \"123456\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "7.3 Demande particulier",
+          "item": [
+            {
+              "name": "POST /demandes/particulier",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/gateway/v1/demandes/particulier",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "gateway",
+                    "v1",
+                    "demandes",
+                    "particulier"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"numero\": \"771000001\",\n  \"otpCode\": \"123456\",\n  \"operateurSourceId\": \"6a21745ce6c37b5b5b487ec1\",\n  \"operateurDestinataireId\": \"6a2174c3e6c37b5b5b487ec4\",\n  \"typePortabilite\": \"PREPAID\",\n  \"client\": {\n    \"nom\": \"Diallo\",\n    \"prenom\": \"Mamadou\",\n    \"dateNaissance\": \"1975-03-20\",\n    \"lieuNaissance\": \"Dakar\",\n    \"typePiece\": \"CNI\",\n    \"numeroPiece\": \"1234567890123\"\n  }\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "7.4 Demande entreprise (flotte)",
+          "item": [
+            {
+              "name": "POST /demandes/entreprise",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/gateway/v1/demandes/entreprise",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "gateway",
+                    "v1",
+                    "demandes",
+                    "entreprise"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"numeroPorteurFlotte\": \"771000002\",\n  \"otpCode\": \"123456\",\n  \"operateurSourceId\": \"6a21745ce6c37b5b5b487ec1\",\n  \"operateurDestinataireId\": \"6a2174c3e6c37b5b5b487ec4\",\n  \"typePortabilite\": \"POSTPAID\",\n  \"numerosFlotte\": [\n    \"771000002\",\n    \"771000003\"\n  ],\n  \"client\": {\n    \"raisonSociale\": \"SARL Exemple\",\n    \"numRC\": \"SN-DKR-2020-B-1234\",\n    \"nom\": \"Diallo\",\n    \"prenom\": \"Mamadou\",\n    \"dateNaissance\": \"1975-03-20\",\n    \"lieuNaissance\": \"Dakar\",\n    \"typePiece\": \"CNI\",\n    \"numeroPiece\": \"1234567890123\"\n  }\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "7.5 Restitution",
+          "item": [
+            {
+              "name": "POST /demandes/restitution",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/gateway/v1/demandes/restitution",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "gateway",
+                    "v1",
+                    "demandes",
+                    "restitution"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"numero\": \"773000001\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "7.6 Reverse",
+          "item": [
+            {
+              "name": "POST /reverse-requests",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/gateway/v1/reverse-requests",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "gateway",
+                    "v1",
+                    "reverse-requests"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"numero\": \"773000001\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "GET /reverse-requests/mes-demandes",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/gateway/v1/reverse-requests/mes-demandes?page=0&size=20",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "gateway",
+                    "v1",
+                    "reverse-requests",
+                    "mes-demandes"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "0"
+                    },
+                    {
+                      "key": "size",
+                      "value": "20"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "7.7 Consultation",
+          "item": [
+            {
+              "name": "GET /demandes/mes-demandes",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/gateway/v1/demandes/mes-demandes",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "gateway",
+                    "v1",
+                    "demandes",
+                    "mes-demandes"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "GET /demandes/a-accepter",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/gateway/v1/demandes/a-accepter",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "gateway",
+                    "v1",
+                    "demandes",
+                    "a-accepter"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "GET /demandes/a-accepter/{id}",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/gateway/v1/demandes/a-accepter/{{idDemande}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "gateway",
+                    "v1",
+                    "demandes",
+                    "a-accepter",
+                    "{{idDemande}}"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "GET /demandes/a-traiter",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/gateway/v1/demandes/a-traiter",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "gateway",
+                    "v1",
+                    "demandes",
+                    "a-traiter"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "GET /demandes/a-traiter/{id}",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/gateway/v1/demandes/a-traiter/{{idDemande}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "gateway",
+                    "v1",
+                    "demandes",
+                    "a-traiter",
+                    "{{idDemande}}"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "GET /demandes/a-confirmer",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/gateway/v1/demandes/a-confirmer",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "gateway",
+                    "v1",
+                    "demandes",
+                    "a-confirmer"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "GET /demandes/a-confirmer/{id}",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/gateway/v1/demandes/a-confirmer/{{idDemande}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "gateway",
+                    "v1",
+                    "demandes",
+                    "a-confirmer",
+                    "{{idDemande}}"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "GET /demandes/deja-confirmees",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/gateway/v1/demandes/deja-confirmees",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "gateway",
+                    "v1",
+                    "demandes",
+                    "deja-confirmees"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "GET /demandes/in",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/gateway/v1/demandes/in",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "gateway",
+                    "v1",
+                    "demandes",
+                    "in"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "GET /demandes/out",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/gateway/v1/demandes/out",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "gateway",
+                    "v1",
+                    "demandes",
+                    "out"
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "7.8 Acceptation",
+          "item": [
+            {
+              "name": "POST /demandes/acceptation",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/gateway/v1/demandes/acceptation",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "gateway",
+                    "v1",
+                    "demandes",
+                    "acceptation"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"idDemande\": \"{{idDemande}}\",\n  \"accepte\": true,\n  \"motifRejetId\": \"\",\n  \"commentaire\": \"\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "POST /demandes/{id}/acceptation",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/gateway/v1/demandes/{{idDemande}}/acceptation",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "gateway",
+                    "v1",
+                    "demandes",
+                    "{{idDemande}}",
+                    "acceptation"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"accepte\": true,\n  \"numerosRejetes\": [],\n  \"motifRejetId\": \"\",\n  \"commentaire\": \"\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "7.9 Confirmation",
+          "item": [
+            {
+              "name": "POST /demandes/a-confirmer",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/gateway/v1/demandes/a-confirmer",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "gateway",
+                    "v1",
+                    "demandes",
+                    "a-confirmer"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"idDemande\": \"{{idDemande}}\",\n  \"commentaire\": \"\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "7.10 Traitement",
+          "item": [
+            {
+              "name": "POST /demandes/traitement",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/gateway/v1/demandes/traitement",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "gateway",
+                    "v1",
+                    "demandes",
+                    "traitement"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"idDemande\": \"{{idDemande}}\",\n  \"commentaire\": \"\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "7.11 Annulation",
+          "item": [
+            {
+              "name": "POST /demandes/{id}/annuler",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/gateway/v1/demandes/{{idDemande}}/annuler",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "gateway",
+                    "v1",
+                    "demandes",
+                    "{{idDemande}}",
+                    "annuler"
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "7.12 Incidents",
+          "item": [
+            {
+              "name": "POST /incidents/gateway",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/gateway/v1/incidents/gateway",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "gateway",
+                    "v1",
+                    "incidents",
+                    "gateway"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"commentaire\": \"Incident de test\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "POST /incidents/gateway/{id}/resoudre",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/gateway/v1/incidents/gateway/{{idIncident}}/resoudre",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "gateway",
+                    "v1",
+                    "incidents",
+                    "gateway",
+                    "{{idIncident}}",
+                    "resoudre"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"commentaire\": \"Résolu\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "GET /incidents/gateway/mes-incidents",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/gateway/v1/incidents/gateway/mes-incidents?page=0&size=20",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "gateway",
+                    "v1",
+                    "incidents",
+                    "gateway",
+                    "mes-incidents"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "0"
+                    },
+                    {
+                      "key": "size",
+                      "value": "20"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "POST /incidents/interne",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/gateway/v1/incidents/interne",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "gateway",
+                    "v1",
+                    "incidents",
+                    "interne"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"commentaire\": \"Incident interne de test\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "POST /incidents/interne/{id}/resoudre",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/gateway/v1/incidents/interne/{{idIncident}}/resoudre",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "gateway",
+                    "v1",
+                    "incidents",
+                    "interne",
+                    "{{idIncident}}",
+                    "resoudre"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"commentaire\": \"Résolu\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "GET /incidents/interne/mes-incidents",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/gateway/v1/incidents/interne/mes-incidents?page=0&size=20",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "gateway",
+                    "v1",
+                    "incidents",
+                    "interne",
+                    "mes-incidents"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "0"
+                    },
+                    {
+                      "key": "size",
+                      "value": "20"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "variable": []
+}
