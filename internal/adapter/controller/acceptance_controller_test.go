@@ -1,13 +1,18 @@
 package controller_test
 
-// These 9 test functions are moved, unchanged in assertion, from the
-// deleted internal/api/acceptation_test.go (Task 14). They still exercise
-// the real, live router — routerharness.NewRouterHarness wraps
+// The first 9 test functions below are moved, unchanged in assertion, from
+// the deleted internal/api/acceptation_test.go (Task 14). They still
+// exercise the real, live router — routerharness.NewRouterHarness wraps
 // api.NewRouter, wired exactly as cmd/server/main.go wires it — so a green
 // run here proves a real HTTP request to /demandes/acceptation or
 // /demandes/:id/acceptation goes through the new AcceptanceController, the
 // two acceptance interactors and port.UnitOfWork, not through any leftover
 // handler.
+//
+// TestAcceptationPlaceGeleePrimeSurCorpsInvalide, at the end of this file,
+// is new — fix round 1 on this task: it pins the frozen-market gate's
+// position relative to JSON binding, which no test caught the first time
+// around.
 //
 import (
 	"context"
@@ -186,4 +191,29 @@ func TestAcceptationAccepteAvecMotifRejetInconnuRefuse(t *testing.T) {
 
 	require.Equal(t, http.StatusBadRequest, rep.StatusCode, corps)
 	require.Equal(t, "Motif de rejet inconnu", corps["detail"])
+}
+
+// TestAcceptationPlaceGeleePrimeSurCorpsInvalide pins fix round 1's
+// correction: the frozen-market gate must run BEFORE the request body is
+// even decoded, so a request that carries both a frozen market and a
+// malformed body gets the frozen-market response, not a JSON-format error.
+// A caller sends "corps-invalide" — a bare JSON string, which fails to bind
+// into acceptationRequest exactly as a syntactically broken body would —
+// and the response must still be the frozen-market one: proof the check
+// really does run first, not merely that it runs at all.
+func TestAcceptationPlaceGeleePrimeSurCorpsInvalide(t *testing.T) {
+	h := routerharness.NewRouterHarness(t)
+
+	rep, corps := h.Appel(http.MethodPost, "/api/gateway/v1/incidents/interne",
+		h.Jeton("expresso", "expresso2026"),
+		map[string]any{"commentaire": "Panne du système de routage interne, portages bloqués"})
+	require.Equal(t, http.StatusCreated, rep.StatusCode, corps)
+
+	rep, corps = h.Appel(http.MethodPost, "/api/gateway/v1/demandes/acceptation",
+		h.Jeton("orange", "orange2026"), "corps-invalide")
+
+	require.Equal(t, http.StatusInternalServerError, rep.StatusCode, corps)
+	require.Equal(t,
+		"RuntimeException: Le traitement des demandes est gelé par un incident interne en cours.",
+		corps["detail"])
 }

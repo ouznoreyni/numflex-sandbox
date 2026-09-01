@@ -13,11 +13,12 @@ import (
 
 // AcceptanceController is the interface-adapter for the two acceptance
 // routes: POST /demandes/acceptation (particulier/restitution) and
-// POST /demandes/:id/acceptation (entreprise/flotte). Each handler binds
-// JSON, applies the one shape validation that is not the interactor's
-// business (idDemande must not be empty), delegates to a boundary, and
-// renders the result — the same division CreationController and
-// QueryController already establish.
+// POST /demandes/:id/acceptation (entreprise/flotte). Each handler checks
+// the frozen-market gate FIRST — before binding any JSON — then binds,
+// applies the one shape validation that is not the interactor's business
+// (idDemande must not be empty), delegates to a boundary, and renders the
+// result — the same division CreationController and QueryController
+// already establish for everything after the frozen-market gate.
 type AcceptanceController struct {
 	individual acceptance.AcceptRequestBoundary
 	fleet      acceptance.AcceptFleetRequestBoundary
@@ -26,17 +27,25 @@ type AcceptanceController struct {
 	// CreationController's own clock field for why this is the
 	// controller's job, not the presenter's.
 	clock port.Clock
+	// engine backs the frozen-market check both handlers make before
+	// binding their body (see acceptance.MarketFrozen's doc comment for
+	// why that order matters, and why this lives here rather than inside
+	// each Execute).
+	engine port.Engine
 }
 
 // NewAcceptanceController wires a controller against the two boundaries, a
-// presenter and a clock.
+// presenter, a clock and the engine port the frozen-market gate reads.
 func NewAcceptanceController(
 	individual acceptance.AcceptRequestBoundary,
 	fleet acceptance.AcceptFleetRequestBoundary,
 	p presenter.Presenter,
 	clock port.Clock,
+	engine port.Engine,
 ) *AcceptanceController {
-	return &AcceptanceController{individual: individual, fleet: fleet, pres: p, clock: clock}
+	return &AcceptanceController{
+		individual: individual, fleet: fleet, pres: p, clock: clock, engine: engine,
+	}
 }
 
 // requestViewDTO sérialise une demande au format du guide §7.3 — a third
@@ -105,6 +114,11 @@ type acceptationRequest struct {
 
 // Acceptation handles POST /demandes/acceptation.
 func (ctl *AcceptanceController) Acceptation(c *gin.Context) {
+	if f := acceptance.MarketFrozen(c.Request.Context(), ctl.engine); f != nil {
+		render(c, ctl.pres.Failure(f, c.Request.URL.Path))
+		return
+	}
+
 	var req acceptationRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		render(c, ctl.pres.Failure(entity.InvalidJSONFormat(), c.Request.URL.Path))
@@ -147,6 +161,11 @@ type acceptationFlotteRequest struct {
 
 // AcceptationFlotte handles POST /demandes/:id/acceptation.
 func (ctl *AcceptanceController) AcceptationFlotte(c *gin.Context) {
+	if f := acceptance.MarketFrozen(c.Request.Context(), ctl.engine); f != nil {
+		render(c, ctl.pres.Failure(f, c.Request.URL.Path))
+		return
+	}
+
 	var req acceptationFlotteRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		render(c, ctl.pres.Failure(entity.InvalidJSONFormat(), c.Request.URL.Path))

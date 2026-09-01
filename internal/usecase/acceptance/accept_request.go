@@ -2,12 +2,12 @@
 // POST /demandes/acceptation and POST /demandes/:id/acceptation — the
 // individual/restitution accept-or-reject decision and its fleet
 // counterpart, which can reject some fleet numbers while accepting the
-// rest. Both interactors share the same shape: a frozen market blocks
-// either (BR-012, routed through port.Engine.MarketFrozen rather than
-// reimplemented here), entity.CanAccept already holds the sole
-// authorization rule (only the source operator, only at ACCEPTATION,
-// neither interactor restates it), and a rejection's writes go through
-// exactly one port.UnitOfWork.Do, as request creation's already do.
+// rest. Both interactors share the same shape: entity.CanAccept already
+// holds the sole authorization rule (only the source operator, only at
+// ACCEPTATION, neither interactor restates it), and a rejection's writes
+// go through exactly one port.UnitOfWork.Do, as request creation's already
+// do. The frozen-market gate (BR-012) is NOT one of Execute's own checks —
+// see MarketFrozen below for why.
 package acceptance
 
 import (
@@ -17,14 +17,22 @@ import (
 	"github.com/ouznoreyni/numflex-sandbox/internal/usecase/port"
 )
 
-// marketFrozen reproduces the deleted internal/api/acceptation.go's
+// MarketFrozen reproduces the deleted internal/api/acceptation.go's
 // Deps.verifierGel: a frozen market — BR-012, §6.5 of the guide — blocks
-// acceptance, individual or fleet alike. The comment on the original noted
-// the same call would open /a-confirmer (Task 15) and /traitement
-// (Task 16); each capability's own interactor makes its own call to
-// port.Engine.MarketFrozen rather than sharing this function across
-// packages, since usecase packages do not import one another.
-func marketFrozen(ctx context.Context, engine port.Engine) *entity.Fault {
+// acceptance, individual or fleet alike. It is exported and called by
+// AcceptanceController itself, BEFORE either handler binds its request
+// body — the deleted handler's own order, shared by both
+// postAcceptation and postAcceptationFlotte behind one doc comment
+// presenting it as their universal first gate. A request that arrives
+// while the market is frozen AND carries a malformed body must still get
+// the frozen-market response, not a JSON-format error: an Execute-level
+// check, running only after the controller has already bound the body,
+// cannot reproduce that. Fix round 1 (Task 14) moved this out of Execute
+// for exactly that reason. Each capability's own controller makes its own
+// call rather than sharing this one across packages, since usecase
+// packages do not import one another; the same call opens /a-confirmer
+// (Task 15) and /traitement (Task 16), per the deleted original's comment.
+func MarketFrozen(ctx context.Context, engine port.Engine) *entity.Fault {
 	frozen, err := engine.MarketFrozen(ctx)
 	if err != nil {
 		return entity.InternalError("vérification du gel de la place")
@@ -94,21 +102,19 @@ func NewAcceptRequest(
 }
 
 // Execute reproduces the deleted internal/api/acceptation.go's
-// postAcceptation order of checks: the market must not be frozen, the
-// request must exist, entity.CanAccept must let this caller decide on it,
-// any motifRejetId given must exist, and only then the accept/reject
-// branch — a rejection requiring its own motif and closing the request
-// inside one transaction, an acceptance recording its comment (also inside
-// one transaction, for the same reason every write here goes through
+// postAcceptation order of checks that are its own to make: the request
+// must exist, entity.CanAccept must let this caller decide on it, any
+// motifRejetId given must exist, and only then the accept/reject branch —
+// a rejection requiring its own motif and closing the request inside one
+// transaction, an acceptance recording its comment (also inside one
+// transaction, for the same reason every write here goes through
 // port.UnitOfWork rather than a bare gateway call) before the engine
-// schedules its transition.
+// schedules its transition. The frozen-market check comes first of all,
+// but it is AcceptanceController's call, made before Execute is even
+// reached — see MarketFrozen's own doc comment for why.
 func (i *AcceptRequestInteractor) Execute(
 	ctx context.Context, in AcceptRequestInput,
 ) (port.RequestView, *entity.Fault) {
-	if f := marketFrozen(ctx, i.engine); f != nil {
-		return port.RequestView{}, f
-	}
-
 	caller := port.CallerFromContext(ctx)
 	dm, found, err := i.requests.ByID(ctx, in.RequestID)
 	if err != nil {

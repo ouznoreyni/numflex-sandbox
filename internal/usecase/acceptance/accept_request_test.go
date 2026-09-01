@@ -80,17 +80,44 @@ func TestAcceptRequestNominal(t *testing.T) {
 	require.Equal(t, "Demande conforme", f.requests.Comment("d1"))
 }
 
-func TestAcceptRequestGeleRefuse(t *testing.T) {
+// TestAcceptRequestExecuteNeVerifiePlusLeGel documente le déplacement du
+// fix round 1 : le gel de la place n'est plus l'affaire d'Execute — il doit
+// être vérifié par AcceptanceController, AVANT le décodage du corps de la
+// requête, pour que le cas « place gelée + corps invalide » réponde bien
+// « place gelée » plutôt qu'une erreur de format JSON (voir
+// TestAcceptationPlaceGeleePrimeSurCorpsInvalide au niveau HTTP). Un
+// Execute qui vérifiait encore le gel après ce déplacement referait exactement
+// l'erreur d'ordre que ce fix corrige : ce test le garantit en prouvant
+// qu'une place gelée n'empêche plus Execute d'aboutir.
+func TestAcceptRequestExecuteNeVerifiePlusLeGel(t *testing.T) {
 	f := newFixture()
 	seedRequest(f)
 	f.engine.Frozen = true
 
-	_, fault := acceptInteractor(f).Execute(ctxCaller(orangeID), acceptance.AcceptRequestInput{
+	view, fault := acceptInteractor(f).Execute(ctxCaller(orangeID), acceptance.AcceptRequestInput{
 		RequestID: "d1", Accept: true,
 	})
+	require.Nil(t, fault)
+	require.Equal(t, "d1", view.ID)
+}
+
+// TestMarketFrozen couvre directement la fonction exportée
+// qu'AcceptanceController appelle désormais avant tout décodage — la seule
+// vérification du gel qui subsiste, au niveau contrôleur plutôt qu'Execute.
+func TestMarketFrozen(t *testing.T) {
+	f := newFixture()
+	require.Nil(t, acceptance.MarketFrozen(context.Background(), f.engine))
+
+	f.engine.Frozen = true
+	fault := acceptance.MarketFrozen(context.Background(), f.engine)
 	require.NotNil(t, fault)
 	require.Equal(t, "ERREUR_INTERNE", fault.Code)
-	require.Empty(t, f.engine.Scheduled, "aucune transition planifiée place gelée")
+
+	f.engine.Frozen = false
+	f.engine.FailQuery = errBoom
+	fault = acceptance.MarketFrozen(context.Background(), f.engine)
+	require.NotNil(t, fault)
+	require.Equal(t, "ERREUR_INTERNE", fault.Code)
 }
 
 func TestAcceptRequestParLeDestinataireRefuse(t *testing.T) {

@@ -52,9 +52,12 @@ func NewAcceptFleetRequest(
 }
 
 // Execute reproduces the deleted internal/api/acceptation.go's
-// postAcceptationFlotte order of checks: the market must not be frozen, the
+// postAcceptationFlotte order of checks that are its own to make: the
 // request must exist, entity.CanAccept must let this caller decide on it,
-// a top-level motifRejetId — given on either branch — must exist.
+// a top-level motifRejetId — given on either branch — must exist. The
+// frozen-market check comes first of all, but — as for AcceptRequest — it
+// is AcceptanceController's call, made before Execute is even reached; see
+// accept_request.go's MarketFrozen doc comment for why.
 //
 // A total rejection (accepte:false) takes the same path an individual
 // rejection does: entity.RequestGateway.Reject inside one transaction, no
@@ -77,10 +80,6 @@ func NewAcceptFleetRequest(
 func (i *AcceptFleetRequestInteractor) Execute(
 	ctx context.Context, in AcceptFleetRequestInput,
 ) (port.RequestView, *entity.Fault) {
-	if f := marketFrozen(ctx, i.engine); f != nil {
-		return port.RequestView{}, f
-	}
-
 	caller := port.CallerFromContext(ctx)
 	dm, found, err := i.requests.ByID(ctx, in.RequestID)
 	if err != nil {

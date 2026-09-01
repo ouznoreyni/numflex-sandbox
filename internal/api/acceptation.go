@@ -50,5 +50,5 @@ func (d *Deps) acceptanceController() *controller.AcceptanceController {
 	individual := acceptance.NewAcceptRequest(requests, reasons, uow, eng, clk)
 	fleet := acceptance.NewAcceptFleetRequest(requests, reasons, uow, eng, clk)
 
-	return controller.NewAcceptanceController(individual, fleet, d.presenter(), clk)
+	return controller.NewAcceptanceController(individual, fleet, d.presenter(), clk, eng)
 }
