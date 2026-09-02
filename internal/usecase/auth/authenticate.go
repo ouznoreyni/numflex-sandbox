@@ -1,10 +1,3 @@
-// Package auth holds the authentication use cases: issuing a token for a
-// login (AuthenticateInteractor) and confirming an already-resolved caller
-// (DescribeCallerInteractor, the GET /api/authenticate probe). Like
-// internal/usecase/otp, it depends on nothing but stdlib, internal/entity
-// and internal/usecase/port — no pgx, no Gin, and critically no JWT
-// library: issuing a token is delegated to an injected TokenIssuer so this
-// layer stays ignorant of the concrete token technology.
 package auth
 
 import (

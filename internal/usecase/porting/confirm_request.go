@@ -1,12 +1,3 @@
-// Package porting holds the three use cases behind the transitions a
-// request goes through once accepted: POST /demandes/a-confirmer (the
-// CONFIRMATION step, shared by every operator on the market bar an
-// occasional recipient — entity.ExpectedConfirmers decides which),
-// POST /demandes/traitement (every other step — entity.CanProcess decides
-// who and when) and POST /demandes/:id/annuler (withdrawing a request that
-// has not yet moved — entity.CanCancel decides who and when). All three sit
-// downstream of request creation and acceptance, over the same
-// port.RequestGateway those already share.
 package porting
 
 import (

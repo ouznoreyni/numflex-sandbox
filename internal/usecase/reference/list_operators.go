@@ -1,14 +1,3 @@
-// Package reference holds the five read-only reference-data use cases
-// behind /operateurs, /motifs-rejet, /types-demande, /processus and
-// /types-incident. There is no business rule to apply to a reference list —
-// no validation to invent, no filtering, no defensive re-checking of what
-// the gateway returned — so each interactor here is a direct pass-through:
-// it calls one port.ReferenceGateway method and turns a gateway error into
-// an *entity.Fault, exactly as internal/api/referentiels.go's five handlers
-// did before this task moved their SQL into
-// internal/adapter/gateway/postgres/reference_gateway.go. Five files of
-// ceremony that did nothing would be worse than the handlers they replace,
-// so none of them is padded with logic that isn't there.
 package reference
 
 import (

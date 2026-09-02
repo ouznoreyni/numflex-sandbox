@@ -1,6 +1,3 @@
-// Package postgres holds the gateway implementations of the interfaces
-// declared in internal/usecase/port. This is the only place in the module
-// allowed to name a French table or column.
 package postgres
 
 import (

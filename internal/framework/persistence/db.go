@@ -1,6 +1,3 @@
-// Package persistence is the framework-layer home of the pgx pool, the
-// migrations runner, and the UnitOfWork implementation. It is the only
-// package allowed to construct a pgxpool.Pool or a pgx.Tx.
 package persistence
 
 import (

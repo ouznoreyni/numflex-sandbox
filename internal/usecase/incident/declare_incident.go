@@ -1,11 +1,3 @@
-// Package incident holds the three use cases behind guide §7.12's six
-// routes — two families, gateway and interne, sharing the same logic
-// parameterized by systemLocked (fige_systeme), the only dimension where
-// they really diverge: the interne segment alone carries the rule "one open
-// internal incident per operator", and freezes the market
-// (port.Engine.MarketFrozen simply reads the incident table these
-// interactors write, so nothing here needs to drive that state directly —
-// see DeclareIncidentInteractor's own doc comment).
 package incident
 
 import (

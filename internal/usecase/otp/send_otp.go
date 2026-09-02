@@ -1,6 +1,3 @@
-// Package otp holds the OTP use cases: sending a challenge and verifying it.
-// It depends on nothing but stdlib, internal/entity and internal/usecase/port
-// — no pgx, no Gin, no concrete technology.
 package otp
 
 import (

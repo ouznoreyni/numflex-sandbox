@@ -1,13 +1,3 @@
-// Package acceptance holds the two use cases behind
-// POST /demandes/acceptation and POST /demandes/:id/acceptation — the
-// individual/restitution accept-or-reject decision and its fleet
-// counterpart, which can reject some fleet numbers while accepting the
-// rest. Both interactors share the same shape: entity.CanAccept already
-// holds the sole authorization rule (only the source operator, only at
-// ACCEPTATION, neither interactor restates it), and a rejection's writes
-// go through exactly one port.UnitOfWork.Do, as request creation's already
-// do. The frozen-market gate (BR-012) is NOT one of Execute's own checks —
-// see MarketFrozen below for why.
 package acceptance
 
 import (

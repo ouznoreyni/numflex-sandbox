@@ -1,8 +1,3 @@
-// Package web is the framework-layer home of the sandbox's Gin engine: the
-// engine constructor, the gateway prefix guard, and — under ./middleware —
-// authentication and CORS. It stays additive to internal/api, which remains
-// the router actually served until Task 18 wires this package up in its
-// place.
 package web
 
 import (

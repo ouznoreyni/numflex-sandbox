@@ -1,14 +1,3 @@
-// Package controller holds the interface-adapter layer: one type per
-// capability, translating an inbound HTTP request into a use case's input
-// and its outcome into a presenter.ViewModel. A controller binds JSON,
-// applies validation that is not the interactor's business (a field shape,
-// say), calls a use case boundary, and hands the result to a
-// presenter.Presenter — nothing else: no SQL, no business rule.
-//
-// Controllers depend on *gin.Context because that is the request/response
-// type the sandbox's single driving framework (internal/framework/web) uses;
-// they must never import internal/framework itself (see
-// test/architecture_test.go's dependency rule).
 package controller
 
 import (

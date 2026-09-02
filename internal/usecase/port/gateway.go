@@ -1,6 +1,3 @@
-// Package port declares what the use case layer needs from the outside world.
-// Every interface here is implemented in the adapter layer; nothing in this
-// package may name pgx, Gin, or any concrete technology.
 package port
 
 import (

@@ -1,6 +1,3 @@
-// Package entity holds the enterprise rules of number portability. It knows
-// nothing about HTTP, SQL, or the fidelity mode: a business rule is the same
-// in both modes, only its rendering differs.
 package entity
 
 type Step string

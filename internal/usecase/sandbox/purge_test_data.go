@@ -1,7 +1,3 @@
-// Package sandbox holds the one use case behind
-// DELETE /api/sandbox/v1/demandes — hors gateway, hors contrat ARTP. The
-// route only exists when config.SandboxAdmin is true; internal/api decides
-// that, not this package.
 package sandbox
 
 import (

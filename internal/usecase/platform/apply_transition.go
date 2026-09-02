@@ -1,10 +1,3 @@
-// Package platform holds the part of the NumFlex platform's behaviour that
-// no call drives: expiring an overdue step (ANO-006), applying a deferred
-// convergence (R-10), and the reverse lifecycle reserved to the ARTP
-// (validation, rejection, completion — §6). internal/framework/engine's
-// ticker is the only caller of the interactors here; cmd/artp is the only
-// caller of ValidateReverse and RejectReverse directly, for the ARTP's own
-// manual acts.
 package platform
 
 import (

@@ -1,5 +1,3 @@
-// Package testsupport holds test-only infrastructure shared across packages:
-// the test database helper today, in-memory port doubles under ./inmemory.
 package testsupport
 
 import (

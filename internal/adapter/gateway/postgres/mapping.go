@@ -1,9 +1,8 @@
-// Package postgres — this file is the border post between the English Go
-// identifiers used from internal/entity and internal/usecase/port upward,
-// and the French SQL vocabulary that stays frozen (table and column names,
-// per the project's global constraint). It carries no logic: each block
-// below documents, for one table, which column backs which field. Later
-// tasks extend this file table by table as their gateways land.
+// mapping.go is the border post between the English Go identifiers used
+// from internal/entity and internal/usecase/port upward, and the French SQL
+// vocabulary that stays frozen (table and column names, per the project's
+// global constraint). It carries no logic: each block below documents, for
+// one table, which column backs which field.
 
 package postgres
 

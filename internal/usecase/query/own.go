@@ -1,20 +1,3 @@
-// Package query holds the seven read-only use cases behind
-// GET /demandes/{mes-demandes,a-accepter,a-traiter,a-confirmer,
-// deja-confirmees,in,out} — internal/api/demandes_lecture.go before this
-// task. Each interactor resolves ids through port.QueryGateway (the
-// per-queue filter, one method per queue) and turns them into views through
-// port.RequestGateway.Get — already built for request creation, reused
-// rather than duplicated — returning []port.RequestView for the controller
-// to render. The map-building and clock skew that used to happen inline in
-// Deps.demandeDTO is the controller's job now, not this package's: see
-// internal/adapter/controller/query_controller.go's requestViewDTO, which
-// mirrors CreationController's assembly rather than inventing a third one
-// (ruling R28).
-//
-// ToAccept, ToProcess and ToConfirm carry a second method, Detail, for the
-// three queues with a single-id route (/a-accepter/:id, /a-traiter/:id,
-// /a-confirmer/:id) — Own, AlreadyConfirmed, Incoming and Outgoing have none
-// in the guide.
 package query
 
 import (

@@ -1,9 +1,3 @@
-// Package reverse holds the two use cases behind guide §6:
-// POST /reverse-requests and GET /reverse-requests/mes-demandes. There is
-// no annulation route — the guide excludes it explicitly ("il n'existe pas
-// d'endpoint pour annuler une demande de reverse") — and the ARTP's own
-// acts on a reverse request (validation, rejection, completion) live in
-// internal/engine, outside this API's scope.
 package reverse
 
 import (
