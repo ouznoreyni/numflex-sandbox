@@ -98,7 +98,7 @@ bout, et seul le presenter décide si elle sort en `problem+json` HTTP 500
 
 ## La frontière du contrat
 
-Trois vocabulaires restent français, mot pour mot, parce qu'ils **sont** le
+Quatre vocabulaires restent français, mot pour mot, parce qu'ils **sont** le
 contrat. Tout le reste du code est anglais.
 
 | Vocabulaire | Exemple | Où il a le droit d'apparaître |
@@ -106,6 +106,7 @@ contrat. Tout le reste du code est anglais.
 | Chemins de route | `/api/gateway/v1/demandes/a-accepter` | `internal/framework/web` (câblage), les tests |
 | Noms et valeurs JSON | `{"idDemande":…,"etapeActuelle":"ACCEPTATION"}` | Tags de struct dans `internal/adapter/controller` et `presenter` |
 | Tables et colonnes SQL | `demande.etape_actuelle` | `internal/adapter/gateway/postgres` uniquement, `mapping.go` en tenant le registre |
+| Messages de réponse et de faute | `"Demande particulier créée avec succès"`, `VALIDATION_ECHOUEE` | `internal/entity` (catalogue), `internal/adapter/controller` et `presenter` |
 
 Corollaire vérifiable : la valeur des constantes ne bouge pas non plus.
 `entity.StepAcceptance` vaut toujours `"ACCEPTATION"` — le nom Go est anglais,

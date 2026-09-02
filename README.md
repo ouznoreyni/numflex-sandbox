@@ -41,7 +41,7 @@ Postgres démarre, les migrations sont appliquées, le seed est joué, l'API éc
 ### L'image seule
 
 ```bash
-make image        # ou : docker build -t numflex-sandbox .
+make image        # ou : docker build --target runtime -t numflex-sandbox .
 ```
 
 Le seul réglage sans défaut est `DATABASE_URL` : le serveur refuse de démarrer sans elle.
@@ -192,15 +192,19 @@ Pour publier :
 
 ```bash
 docker login
-make push                                    # docker.io/ouzdiop268/numflex-sandbox:<git describe>
-make push REGISTRY=… VERSION=v0.4.0          # ailleurs, sous une version choisie
+make push                                    # docker.io/ouzdiop268/numflex-sandbox:latest
+make push VERSION=v0.4.0                     # :latest **et** :v0.4.0
+make push REGISTRY=harbor.example.com/numflex   # ailleurs
 ```
 
 `make push` construit et pousse en une passe, pour `linux/amd64` et `linux/arm64` — un manifeste
 multi-architecture ne pouvant pas être chargé dans le démon local, il n'y a pas de `make image`
-préalable. Le constructeur `buildx` dédié est créé au premier appel. La cible refuse de publier
-depuis un arbre de travail modifié : `ALLOW_DIRTY=1` pour passer outre, la version portant alors le
-suffixe `-dirty`.
+préalable. Le constructeur `buildx` dédié est créé au premier appel.
+
+`latest` est toujours produit et toujours publié ; `VERSION=…` ajoute un second tag figé. La garde
+d'arbre propre **ne vaut que pour ce tag de version** : lui doit rester reproductible, donc
+correspondre à un commit, tandis que `latest` est par nature un pointeur mouvant et se publie depuis
+un arbre modifié. `ALLOW_DIRTY=1` lève la garde.
 
 L'image finale part de `scratch` — deux binaires statiques, les migrations, les racines de
 confiance TLS, rien d'autre : ni shell, ni gestionnaire de paquets, ni CVE de base à suivre. Elle
@@ -340,7 +344,10 @@ Toutes portent leur identifiant du rapport SIT.
 | ANO-005 | `COMPLETION` répond en ~30,5 s, et aucun en-tête `Idempotency-Key` n'est lu |
 | ANO-006 | Les étapes expirent seules en ~349 s : un cycle complet s'achève sans qu'aucun opérateur n'agisse |
 | ANO-008 | Jeton **invalide ou expiré** → `401` à corps vide, sans `Content-Type` |
+| ANO-009 | Le référentiel des motifs de rejet expose le champ `motif`, non `libelle` |
+| ANO-010 | `client.lieuNaissance` est documenté facultatif, mais **rejeté s'il est absent** |
 | ANO-011 | `POST /otp/send` omet le champ `data` de l'enveloppe au lieu de le porter à `null` |
+| ANO-013 | Une étape franchie par une action porte `statutEtapeActuel: TERMINE`, non `VALIDE` |
 | ANO-014 | Les états d'OTP sortent en `500` avec des messages libres, hors catalogue |
 | ANO-015 | Dérive d'horloge de ~9 min : une demande créée est horodatée dans le futur |
 | ANO-016 | Échec d'authentification servi hors enveloppe, en `problem+json` |
@@ -433,20 +440,44 @@ internal/
     presenter/       couche 2 — view model, dans l'un des deux modes de fidélité
     gateway/postgres/ couche 2 — les gateways. Seul endroit qui nomme une colonne française
   framework/
-    web/             couche 3 — moteur Gin, middlewares, câblage des 36 routes
+    web/             couche 3 — moteur Gin, middlewares, câblage des 35 routes (36 avec SANDBOX_ADMIN)
     persistence/     couche 3 — pool pgx, migrations, unité de travail
     engine/          couche 3 — le ticker : expiration, convergence, cycle du reverse
     clock/ config/ identifier/ seed/ token/
   testsupport/       base de test, doubles en mémoire, harnais de routeur
 test/                scénarios de bout en bout, captures de conformité, garde d'architecture
 migrations/          le schéma, en français — voir ADR 0001
+scripts/             point d'entrée de l'image `standalone`, génération de la page Swagger
 ```
 
 Le détail — le diagramme des couches, le trajet complet d'une requête de Gin à pgx et retour, et
-la table des trois vocabulaires qui restent français parce qu'ils *sont* le contrat — est dans
+la table des vocabulaires qui restent français parce qu'ils *sont* le contrat — est dans
 [`docs/architecture.md`](docs/architecture.md). Les quatre décisions structurantes sont dans
 [`docs/adr/`](docs/adr/) : colonnes SQL françaises, unité de travail, fidélité portée par les
 presenters, tag de build des tests d'intégration.
+
+### Français et anglais : la frontière est la destination du texte
+
+Le dépôt est en anglais — identifiants, commentaires, messages d'assertion, sorties du CLI et des
+journaux, jusqu'aux textes passés à `entity.InternalError`. Ce n'est pas une préférence de style :
+c'est ce qui rend `grep` utilisable comme test. **Un mot français hors des cas ci-dessous est un
+défaut.**
+
+Reste français tout ce qu'un client de l'API peut observer, parce que le sandbox doit être
+indiscernable de la plateforme :
+
+| Ce qui reste français | Exemple |
+|---|---|
+| Chemins de route | `/api/gateway/v1/demandes/a-accepter` |
+| Noms et valeurs JSON | `{"idDemande":…,"etapeActuelle":"ACCEPTATION"}` |
+| Messages de réponse et de faute | `"Demande particulier créée avec succès"`, `RuntimeException: …`, `VALIDATION_ECHOUEE` |
+| Tables et colonnes SQL | `demande.etape_actuelle` — voir [ADR 0001](docs/adr/0001-french-sql-columns.md) |
+| Données de référence ensemencées | les motifs de rejet : `Identité non prouvée`, `Numéro Inactif` |
+
+S'y ajoutent, dans des commentaires par ailleurs anglais, les **citations** entre guillemets : noms
+des requêtes Postman capturées, extraits du guide ARTP, symboles supprimés que l'historique cite
+encore. Traduire l'une de ces chaînes casse la fidélité au contrat, et les captures du 2026-08-27
+avec elle.
 
 ## Tests
 
@@ -476,10 +507,10 @@ go build -o artp ./cmd/artp
 
 export DATABASE_URL='postgres://numflex:numflex@localhost:5432/numflex?sslmode=disable'
 
-./artp reverse list          # les demandes de reverse et leur statut
+./artp reverse list             # les demandes de reverse et leur statut
 ./artp reverse validate <id>    # crée la Demande REVERSE, à CONFIRMATION
 ./artp reverse reject <id>
-./artp seed                    # rejoue le seed (idempotent)
+./artp seed                     # rejoue le seed (idempotent)
 ```
 
 Le binaire est aussi dans l'image, à côté du serveur. Comme il n'en est pas le point d'entrée, il

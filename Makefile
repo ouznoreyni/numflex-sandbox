@@ -65,7 +65,7 @@ image:
 # The clean-tree guard only applies to a version tag: that one must stay
 # reproducible, hence match a commit. `latest` is by nature a moving pointer,
 # and is published from a modified tree. ALLOW_DIRTY=1 lifts the guard — the
-# version then carries the `-dirty` suffix.
+# tag is then published as is, from a tree that matches no commit.
 push:
 	@test -z "$(VERSION)" || git diff --quiet HEAD 2>/dev/null || test -n "$(ALLOW_DIRTY)" || \
 	  { echo "modified tree: a version tag must match a commit (ALLOW_DIRTY=1 to override)"; exit 1; }
