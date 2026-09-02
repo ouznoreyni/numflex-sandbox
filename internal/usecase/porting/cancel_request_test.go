@@ -30,11 +30,10 @@ func TestCancelRequestNominal(t *testing.T) {
 	require.Equal(t, entity.RequestCancelled, f.requests.Status("d1"))
 }
 
-// TestCancelRequestDelegueLAutorisationAEntityCanCancel documente que
-// CancelRequestInteractor ne réimplémente aucune des deux règles
-// d'entity.CanCancel : seul le créateur peut annuler, seule ACCEPTATION peut
-// l'être.
-func TestCancelRequestParLaSourceRefuse(t *testing.T) {
+// TestCancelRequestDelegatesAuthorizationToEntityCanCancel documents that
+// CancelRequestInteractor reimplements neither of entity.CanCancel's two
+// rules: only the creator may cancel, only ACCEPTATION may be cancelled.
+func TestCancelRequestBySourceRefused(t *testing.T) {
 	f := newFixture()
 	seedCancellableRequest(f)
 
@@ -44,9 +43,9 @@ func TestCancelRequestParLaSourceRefuse(t *testing.T) {
 	require.NotEqual(t, entity.RequestCancelled, f.requests.Status("d1"))
 }
 
-func TestCancelRequestApresAcceptationRefuse(t *testing.T) {
+func TestCancelRequestAfterAcceptanceRefused(t *testing.T) {
 	f := newFixture()
-	seedRequest(f) // DESACTIVATION par défaut : l'ACCEPTATION est déjà passée
+	seedRequest(f) // DESACTIVATION by default: ACCEPTATION has already passed
 
 	_, fault := cancelInteractor(f).Execute(ctxCaller(yasID), "d1")
 	require.NotNil(t, fault)
@@ -54,20 +53,20 @@ func TestCancelRequestApresAcceptationRefuse(t *testing.T) {
 	require.Contains(t, fault.Message, "DESACTIVATION")
 }
 
-func TestCancelRequestIdInconnu(t *testing.T) {
+func TestCancelRequestUnknownID(t *testing.T) {
 	f := newFixture()
 	_, fault := cancelInteractor(f).Execute(ctxCaller(yasID), "inconnu")
 	require.NotNil(t, fault)
 	require.Equal(t, "DEMANDE_NON_TROUVEE", fault.Code)
 }
 
-// TestCancelRequestEchecEcritureNArretePasAvantLaTransaction est la preuve,
-// au niveau interactor, qu'un échec d'écriture n'aboutit jamais à un statut
-// modifié. La preuve qu'un UnitOfWork RÉEL défait vraiment ses deux
-// écritures (etape_historique, demande) vit dans
-// internal/framework/persistence (Postgres, //go:build integration) : un
-// double en mémoire n'annule rien.
-func TestCancelRequestEchecEcritureNArretePasAvantLaTransaction(t *testing.T) {
+// TestCancelRequestWriteFailureStopsBeforeTransaction is the proof, at the
+// interactor level, that a write failure never results in a modified
+// status. The proof that a REAL UnitOfWork really undoes both of its
+// writes (etape_historique, demande) lives in
+// internal/framework/persistence (Postgres, //go:build integration): an
+// in-memory double cancels nothing.
+func TestCancelRequestWriteFailureStopsBeforeTransaction(t *testing.T) {
 	f := newFixture()
 	seedCancellableRequest(f)
 	f.requests.FailCancel = errBoom

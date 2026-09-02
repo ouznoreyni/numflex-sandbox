@@ -15,12 +15,12 @@ import (
 	"github.com/ouznoreyni/numflex-sandbox/internal/usecase/port"
 )
 
-// seedDemande inserts a bare PARTICULIER/PORTAGE request directly by SQL, at
+// seedRequest inserts a bare PARTICULIER/PORTAGE request directly by SQL, at
 // the given step — internal/usecase/porting has no Create of its own to
 // reuse (it starts from a request creation and acceptance already produced),
-// the same level of directness seedFleetDemande (acceptance_transaction_test.go)
+// the same level of directness seedFleetRequest (acceptance_transaction_test.go)
 // uses.
-func seedDemande(t *testing.T, db *persistence.DB, id, numero, etape string) {
+func seedRequest(t *testing.T, db *persistence.DB, id, msisdn, step string) {
 	t.Helper()
 	now := time.Now()
 	_, err := db.Pool.Exec(context.Background(), `
@@ -30,7 +30,7 @@ func seedDemande(t *testing.T, db *persistence.DB, id, numero, etape string) {
 		   createur_operateur_id, date_demande, date_debut_etape)
 		VALUES ($1, $2, 'PARTICULIER', 'PORTAGE', 'EN_COURS', $3, 'EN_COURS',
 		        $4, $5, $5, $6, $6)`,
-		id, numero, etape, seed.OperateurOrange, seed.OperateurYAS, now)
+		id, msisdn, step, seed.OperatorOrangeID, seed.OperatorYASID, now)
 	if err != nil {
 		t.Fatalf("seed demande : %v", err)
 	}
@@ -47,13 +47,13 @@ func TestPortingConfirmRollsBack(t *testing.T) {
 	db := testsupport.NewTestDB(t)
 	ctx := context.Background()
 	const id = "6a2100000000000000000004"
-	seedDemande(t, db, id, "771000004", "CONFIRMATION")
+	seedRequest(t, db, id, "771000004", "CONFIRMATION")
 
 	uow := persistence.NewUnitOfWork(db)
 	boom := errors.New("boom")
 
 	err := uow.Do(ctx, func(repos port.Repositories) error {
-		if err := repos.Confirmations.Confirm(ctx, id, seed.OperateurOrange, "test", time.Now()); err != nil {
+		if err := repos.Confirmations.Confirm(ctx, id, seed.OperatorOrangeID, "test", time.Now()); err != nil {
 			return err
 		}
 		// Simulates a later write of the same closure failing — the
@@ -84,7 +84,7 @@ func TestPortingProcessStepCommentRollsBack(t *testing.T) {
 	db := testsupport.NewTestDB(t)
 	ctx := context.Background()
 	const id = "6a2100000000000000000006"
-	seedDemande(t, db, id, "771000006", "DESACTIVATION")
+	seedRequest(t, db, id, "771000006", "DESACTIVATION")
 
 	uow := persistence.NewUnitOfWork(db)
 	boom := errors.New("boom")
@@ -117,13 +117,13 @@ func TestPortingCancelRollsBack(t *testing.T) {
 	db := testsupport.NewTestDB(t)
 	ctx := context.Background()
 	const id = "6a2100000000000000000005"
-	seedDemande(t, db, id, "771000005", "ACCEPTATION")
+	seedRequest(t, db, id, "771000005", "ACCEPTATION")
 
 	uow := persistence.NewUnitOfWork(db)
 	boom := errors.New("boom")
 
 	err := uow.Do(ctx, func(repos port.Repositories) error {
-		if err := repos.Requests.Cancel(ctx, id, seed.OperateurYAS, entity.StepAcceptance, time.Now()); err != nil {
+		if err := repos.Requests.Cancel(ctx, id, seed.OperatorYASID, entity.StepAcceptance, time.Now()); err != nil {
 			return err
 		}
 		return boom
@@ -132,13 +132,13 @@ func TestPortingCancelRollsBack(t *testing.T) {
 		t.Fatalf("expected boom, got %v", err)
 	}
 
-	var statut string
+	var status string
 	if err := db.Pool.QueryRow(ctx,
-		"SELECT statut_demande FROM demande WHERE id = $1", id).Scan(&statut); err != nil {
+		"SELECT statut_demande FROM demande WHERE id = $1", id).Scan(&status); err != nil {
 		t.Fatal(err)
 	}
-	if statut != "EN_COURS" {
-		t.Fatalf("la demande a survécu ANNULE malgré le rollback (statut = %s)", statut)
+	if status != "EN_COURS" {
+		t.Fatalf("la demande a survécu ANNULE malgré le rollback (statut = %s)", status)
 	}
 
 	var n int

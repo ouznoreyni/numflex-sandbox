@@ -21,7 +21,7 @@ import (
 // EnvFilePath gives the file to load, and says whether it was requested
 // explicitly. An explicit request that is not satisfied is an error; the
 // absence of the implicit `.env` is the normal case.
-func EnvFilePath() (chemin string, explicite bool) {
+func EnvFilePath() (path string, explicit bool) {
 	if v, ok := os.LookupEnv("ENV_FILE"); ok && v != "" {
 		return v, true
 	}
@@ -32,10 +32,10 @@ func EnvFilePath() (chemin string, explicite bool) {
 // overwriting what is already set: a variable passed to the container
 // always wins over the file.
 func LoadEnvFile() error {
-	chemin, explicite := EnvFilePath()
-	f, err := os.Open(chemin)
+	path, explicit := EnvFilePath()
+	f, err := os.Open(path)
 	if err != nil {
-		if os.IsNotExist(err) && !explicite {
+		if os.IsNotExist(err) && !explicit {
 			return nil
 		}
 		return fmt.Errorf("fichier d'environnement : %w", err)
@@ -43,20 +43,20 @@ func LoadEnvFile() error {
 	defer f.Close()
 
 	sc := bufio.NewScanner(f)
-	for numero := 1; sc.Scan(); numero++ {
-		clef, valeur, err := analyserLigne(sc.Text())
+	for lineNumber := 1; sc.Scan(); lineNumber++ {
+		key, value, err := parseLine(sc.Text())
 		if err != nil {
-			return fmt.Errorf("%s:%d : %w", chemin, numero, err)
+			return fmt.Errorf("%s:%d : %w", path, lineNumber, err)
 		}
-		if clef == "" {
+		if key == "" {
 			continue
 		}
 		// An empty value counts as absent, as in str(): `-e PORT=` therefore
 		// does not shadow the file.
-		if v, ok := os.LookupEnv(clef); ok && v != "" {
+		if v, ok := os.LookupEnv(key); ok && v != "" {
 			continue
 		}
-		if err := os.Setenv(clef, valeur); err != nil {
+		if err := os.Setenv(key, value); err != nil {
 			return err
 		}
 	}
@@ -87,11 +87,11 @@ func ApplyArguments(args []string) error {
 		case strings.HasPrefix(arg, "-"):
 			return fmt.Errorf("argument inconnu %q ; formes acceptées : --env-file <chemin>, CLEF=valeur", arg)
 		default:
-			clef, valeur, err := analyserAffectation(arg)
+			key, value, err := parseAssignment(arg)
 			if err != nil {
 				return err
 			}
-			if err := os.Setenv(clef, valeur); err != nil {
+			if err := os.Setenv(key, value); err != nil {
 				return err
 			}
 		}
@@ -99,32 +99,32 @@ func ApplyArguments(args []string) error {
 	return nil
 }
 
-// analyserLigne returns an empty key for blank lines and comments.
-func analyserLigne(ligne string) (string, string, error) {
-	l := strings.TrimSpace(ligne)
+// parseLine returns an empty key for blank lines and comments.
+func parseLine(line string) (string, string, error) {
+	l := strings.TrimSpace(line)
 	if l == "" || strings.HasPrefix(l, "#") {
 		return "", "", nil
 	}
-	return analyserAffectation(strings.TrimPrefix(l, "export "))
+	return parseAssignment(strings.TrimPrefix(l, "export "))
 }
 
-func analyserAffectation(s string) (string, string, error) {
-	clef, valeur, ok := strings.Cut(s, "=")
+func parseAssignment(s string) (string, string, error) {
+	key, value, ok := strings.Cut(s, "=")
 	if !ok {
 		return "", "", fmt.Errorf("affectation attendue sous la forme CLEF=valeur, reçu %q", s)
 	}
-	clef = strings.TrimSpace(clef)
-	if !clefValide(clef) {
-		return "", "", fmt.Errorf("nom de variable invalide : %q", clef)
+	key = strings.TrimSpace(key)
+	if !validKey(key) {
+		return "", "", fmt.Errorf("nom de variable invalide : %q", key)
 	}
-	return clef, deciter(strings.TrimSpace(valeur)), nil
+	return key, unquote(strings.TrimSpace(value)), nil
 }
 
-func clefValide(clef string) bool {
-	if clef == "" {
+func validKey(key string) bool {
+	if key == "" {
 		return false
 	}
-	for i, r := range clef {
+	for i, r := range key {
 		alpha := r == '_' || (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z')
 		if !alpha && !(i > 0 && r >= '0' && r <= '9') {
 			return false
@@ -133,11 +133,11 @@ func clefValide(clef string) bool {
 	return true
 }
 
-// deciter strips surrounding quotes and, for double quotes, interprets the
+// unquote strips surrounding quotes and, for double quotes, interprets the
 // usual escapes. Outside quotes the value is taken as-is: a `#` belongs to
 // the value — a secret happily contains one — so a comment must occupy its
 // own line.
-func deciter(v string) string {
+func unquote(v string) string {
 	if len(v) < 2 {
 		return v
 	}

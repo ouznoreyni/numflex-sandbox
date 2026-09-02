@@ -34,7 +34,7 @@ func NewReverseController(
 }
 
 // reverseViewDTO serializes a reverse request per guide §6:
-// {id, numero, statut, dateDemande, operateur{id,nom}}.
+// {id, numero, statut, dateDemande, operateur{id,name}}.
 func reverseViewDTO(clk port.Clock, v port.ReverseView) map[string]any {
 	return map[string]any{
 		"id":          v.ID,
@@ -46,17 +46,17 @@ func reverseViewDTO(clk port.Clock, v port.ReverseView) map[string]any {
 }
 
 type reverseRequestBody struct {
-	Numero string `json:"numero"`
+	MSISDN string `json:"numero"`
 }
 
-// Soumission handles POST /reverse-requests.
-func (ctl *ReverseController) Soumission(c *gin.Context) {
+// Submit handles POST /reverse-requests.
+func (ctl *ReverseController) Submit(c *gin.Context) {
 	var req reverseRequestBody
 	if err := c.ShouldBindJSON(&req); err != nil {
 		render(c, ctl.pres.Failure(entity.InvalidJSONFormat(), c.Request.URL.Path))
 		return
 	}
-	if !motifMSISDN.MatchString(req.Numero) {
+	if !msisdnPattern.MatchString(req.MSISDN) {
 		render(c, ctl.pres.Failure(entity.Validation(entity.FieldFault{
 			ObjectName: "reverseRequestDTO", Field: "numero",
 			Message: "doit correspondre à \"^[0-9]{9}$\"",
@@ -65,7 +65,7 @@ func (ctl *ReverseController) Soumission(c *gin.Context) {
 	}
 
 	view, fault := ctl.submit.Execute(c.Request.Context(), reverse.SubmitReverseRequestInput{
-		MSISDN: req.Numero,
+		MSISDN: req.MSISDN,
 	})
 	if fault != nil {
 		render(c, ctl.pres.Failure(fault, c.Request.URL.Path))
@@ -75,13 +75,13 @@ func (ctl *ReverseController) Soumission(c *gin.Context) {
 		reverseViewDTO(ctl.clock, view)))
 }
 
-// MesDemandes handles GET /reverse-requests/mes-demandes.
-func (ctl *ReverseController) MesDemandes(c *gin.Context) {
+// Own handles GET /reverse-requests/mes-demandes.
+func (ctl *ReverseController) Own(c *gin.Context) {
 	page := parseQueryInt(c, "page", 0)
 	size := parseQueryInt(c, "size", 20)
 
-	appelant := port.CallerFromContext(c.Request.Context())
-	views, fault := ctl.listOwn.Execute(c.Request.Context(), appelant.OperatorID, page, size)
+	caller := port.CallerFromContext(c.Request.Context())
+	views, fault := ctl.listOwn.Execute(c.Request.Context(), caller.OperatorID, page, size)
 	if fault != nil {
 		render(c, ctl.pres.Failure(fault, c.Request.URL.Path))
 		return

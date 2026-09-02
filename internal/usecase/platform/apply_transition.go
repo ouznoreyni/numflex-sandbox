@@ -39,12 +39,12 @@ func applyTransitionLocked(ctx context.Context, requests port.RequestGateway, cl
 	}
 
 	now := clock.Now()
-	courante := dm.CurrentStep
+	current := dm.CurrentStep
 
-	// Une étape soldée par une action porte TERMINE, y compris la COMPLETION :
-	// c'est ce que rendent les captures « in » et « 2_yas_confirmer-a
-	// COMPLETION », et ce qu'ANO-013 décrivait déjà (TERMINE en nominal, EXPIRE
-	// par expiration).
+	// A step closed by an action carries TERMINE, COMPLETION included: that
+	// is what the "in" and "2_yas_confirmer-a COMPLETION" captures render,
+	// and what ANO-013 already described (TERMINE on the nominal path,
+	// EXPIRE on expiry).
 	closedStatus := entity.StepCompleted
 	if origin == "EXPIRATION" {
 		closedStatus = entity.StepExpired
@@ -53,15 +53,15 @@ func applyTransitionLocked(ctx context.Context, requests port.RequestGateway, cl
 		return err
 	}
 
-	suivante, existe := entity.NextStep(courante)
-	if !existe && courante != entity.StepCompletion {
-		// etape_actuelle n'a pas de contrainte CHECK en base : une valeur
-		// corrompue ne doit pas être traitée comme si COMPLETION était soldée
-		// (ce qui clôturerait la demande et transférerait le numéro).
-		return fmt.Errorf("étape inconnue %q sur la demande %s", courante, id)
+	next, exists := entity.NextStep(current)
+	if !exists && current != entity.StepCompletion {
+		// etape_actuelle carries no CHECK constraint in the database: a
+		// corrupted value must not be treated as if COMPLETION were closed
+		// (which would close the request and transfer the number).
+		return fmt.Errorf("étape inconnue %q sur la demande %s", current, id)
 	}
-	if !existe {
-		// COMPLETION soldée : la demande se termine.
+	if !exists {
+		// COMPLETION closed: the request ends.
 		if dm.RequestType != entity.RequestTypePorting {
 			prefix, err := requests.RoutingPrefix(ctx, dm.RecipientOperatorID)
 			if err != nil {
@@ -74,8 +74,8 @@ func applyTransitionLocked(ctx context.Context, requests port.RequestGateway, cl
 		return requests.CompleteRequest(ctx, id, closedStatus, now)
 	}
 
-	// Effets de bord attachés à la sortie de l'étape.
-	if courante == entity.StepActivation && dm.RequestType == entity.RequestTypePorting {
+	// Side effects attached to leaving the step.
+	if current == entity.StepActivation && dm.RequestType == entity.RequestTypePorting {
 		if err := requests.TransferToRegistry(ctx, id, dm.RecipientOperatorID); err != nil {
 			return err
 		}
@@ -92,5 +92,5 @@ func applyTransitionLocked(ctx context.Context, requests port.RequestGateway, cl
 		}
 	}
 
-	return requests.AdvanceStep(ctx, id, suivante, now)
+	return requests.AdvanceStep(ctx, id, next, now)
 }

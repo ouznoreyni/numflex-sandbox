@@ -27,7 +27,7 @@ func seedFleetRequest(f *fixture, numbers ...string) entity.PortingRequest {
 	return pr
 }
 
-func TestAcceptFleetRequestAvecRejetPartiel(t *testing.T) {
+func TestAcceptFleetRequestWithPartialRejection(t *testing.T) {
 	f := newFixture()
 	seedFleetRequest(f, "771000001", "771000002", "771000003")
 	f.reasons.SeedRejectionReason(motifID, "Numéro Inactif")
@@ -47,10 +47,10 @@ func TestAcceptFleetRequestAvecRejetPartiel(t *testing.T) {
 	require.Equal(t, "EN_COURS", f.requests.NumberStatus("flotte1", "771000001"))
 	require.NotEqual(t, entity.RequestRejected, f.requests.Status("flotte1"))
 	require.Equal(t, []string{"flotte1"}, f.engine.Scheduled,
-		"une flotte encore active planifie sa transition")
+		"a still-active fleet schedules its transition")
 }
 
-func TestAcceptFleetRequestRejetTotal(t *testing.T) {
+func TestAcceptFleetRequestTotalRejection(t *testing.T) {
 	f := newFixture()
 	seedFleetRequest(f, "771000001", "771000002")
 	f.reasons.SeedRejectionReason(motifID, "Données manquantes")
@@ -65,11 +65,11 @@ func TestAcceptFleetRequestRejetTotal(t *testing.T) {
 	require.Empty(t, f.engine.Scheduled)
 }
 
-// TestAcceptFleetRequestEpuiseeNumeroParNumeroBascule is the proof of the
+// TestAcceptFleetRequestExhaustedNumberByNumberFlips is the proof of the
 // [HYP] documented on accept_fleet_request.go: rejecting a fleet's numbers one
 // by one until none is left flips the request itself to REJETE, with no
 // transition scheduled — the same outcome an explicit total rejection has.
-func TestAcceptFleetRequestEpuiseeNumeroParNumeroBascule(t *testing.T) {
+func TestAcceptFleetRequestExhaustedNumberByNumberFlips(t *testing.T) {
 	f := newFixture()
 	seedFleetRequest(f, "771000001", "771000002")
 	f.reasons.SeedRejectionReason(motifID, "Numéro Inactif")
@@ -84,10 +84,10 @@ func TestAcceptFleetRequestEpuiseeNumeroParNumeroBascule(t *testing.T) {
 	require.Nil(t, fault)
 	require.Equal(t, "flotte1", view.ID)
 	require.Equal(t, entity.RequestRejected, f.requests.Status("flotte1"))
-	require.Empty(t, f.engine.Scheduled, "une flotte épuisée ne planifie aucune transition")
+	require.Empty(t, f.engine.Scheduled, "an exhausted fleet schedules no transition")
 }
 
-func TestAcceptFleetRequestNumeroHorsFlotteRefuse(t *testing.T) {
+func TestAcceptFleetRequestNumberOutsideFleetRefused(t *testing.T) {
 	f := newFixture()
 	seedFleetRequest(f, "771000001", "771000002")
 
@@ -104,13 +104,13 @@ func TestAcceptFleetRequestNumeroHorsFlotteRefuse(t *testing.T) {
 	require.Equal(t, "EN_COURS", f.requests.NumberStatus("flotte1", "771000002"))
 }
 
-// TestAcceptFleetRequestEchecEcritureNArretePasAvantLaTransaction proves, at
+// TestAcceptFleetRequestWriteFailureStopsBeforeTransaction proves, at
 // the interactor level, that a failure inside the transaction stops everything
 // that follows — HasActiveNumber, Reject and the transition scheduling are
 // never reached. See accept_request_test.go for the same proof on the
 // individual side, and internal/framework/persistence for the proof of the
 // real rollback against Postgres.
-func TestAcceptFleetRequestEchecEcritureNArretePasAvantLaTransaction(t *testing.T) {
+func TestAcceptFleetRequestWriteFailureStopsBeforeTransaction(t *testing.T) {
 	f := newFixture()
 	seedFleetRequest(f, "771000001", "771000002")
 	f.requests.FailRejectNumber = errBoom

@@ -20,13 +20,13 @@ import (
 type Deps struct {
 	Cfg    *config.Config
 	DB     *persistence.DB
-	Moteur Moteur
+	Engine Engine
 }
 
-// Moteur — the part of the platform's behaviour that calls do not drive.
-type Moteur interface {
-	PlaceGelee(ctx context.Context) (bool, error)
-	PlanifierTransition(ctx context.Context, demandeID string) error
+// Engine — the part of the platform's behaviour that calls do not drive.
+type Engine interface {
+	MarketFrozen(ctx context.Context) (bool, error)
+	ScheduleTransition(ctx context.Context, demandeID string) error
 }
 
 // presenter picks Real or Contract according to the configured fidelity

@@ -68,7 +68,7 @@ func validIndividualInput(msisdn string) creation.CreateIndividualRequestInput {
 	return creation.CreateIndividualRequestInput{
 		MSISDN: msisdn, OTPCode: "123456",
 		SourceOperatorID: orangeID, RecipientOperatorID: yasID,
-		Processus: "PREPAID",
+		Process: "PREPAID",
 		Client: creation.ClientInput{
 			LastName: "Diallo", FirstName: "Mamadou", BirthDate: "1975-03-20",
 			BirthPlace: "Dakar", IDType: "CNI", IDNumber: "123",
@@ -89,37 +89,37 @@ func TestCreateIndividualRequestNominal(t *testing.T) {
 	require.Equal(t, "PORTAGE", view.RequestType)
 	require.NotNil(t, view.RoutingInfo)
 	require.Equal(t, "191", *view.RoutingInfo)
-	require.NotNil(t, view.Processus)
-	require.Equal(t, "PREPAID", *view.Processus)
+	require.NotNil(t, view.Process)
+	require.Equal(t, "PREPAID", *view.Process)
 	require.NotNil(t, view.Client)
 	require.Equal(t, "Diallo", view.Client.LastName)
 
-	// L'OTP est consommé — dernière preuve que la transaction est bien allée
-	// jusqu'au bout.
+	// The OTP is consumed — last proof that the transaction really went all
+	// the way through.
 	stored, found, err := f.otp.Find(context.Background(), "771000001")
 	require.NoError(t, err)
 	require.True(t, found)
 	require.True(t, stored.Consumed)
 }
 
-func TestCreateIndividualRequestRefuseSiPasDestinataire(t *testing.T) {
+func TestCreateIndividualRequestRefusedIfNotRecipient(t *testing.T) {
 	f := newFixture()
 	f.numbers.Seed(entity.NumberState{MSISDN: "771000001", CurrentOperatorID: orangeID, OriginOperatorID: orangeID})
 	seedOTP(t, f, "771000001", "123456")
 
-	// L'appelant est ORANGE, mais operateurDestinataireId vaut YAS.
+	// The caller is ORANGE, but operateurDestinataireId is YAS.
 	_, fault := individualInteractor(f).Execute(ctxCaller(orangeID), validIndividualInput("771000001"))
 	require.NotNil(t, fault)
 	require.Equal(t, "DEMANDE_ACCES_REFUSE", fault.Code)
 
-	// Aucune écriture : le refus intervient avant toute vérification OTP.
+	// No write: the refusal happens before any OTP check.
 	require.Equal(t, 0, f.requests.RequestCount())
 }
 
-func TestCreateIndividualRequestOTPInvalideNeConsommeRien(t *testing.T) {
+func TestCreateIndividualRequestInvalidOTPConsumesNothing(t *testing.T) {
 	f := newFixture()
 	f.numbers.Seed(entity.NumberState{MSISDN: "771000001", CurrentOperatorID: orangeID, OriginOperatorID: orangeID})
-	seedOTP(t, f, "771000001", "999999") // code stocké différent
+	seedOTP(t, f, "771000001", "999999") // different stored code
 
 	_, fault := individualInteractor(f).Execute(ctxCaller(yasID), validIndividualInput("771000001"))
 	require.NotNil(t, fault)
@@ -127,19 +127,19 @@ func TestCreateIndividualRequestOTPInvalideNeConsommeRien(t *testing.T) {
 	require.Equal(t, 0, f.requests.RequestCount())
 }
 
-func TestCreateIndividualRequestNumeroInconnu(t *testing.T) {
+func TestCreateIndividualRequestUnknownNumber(t *testing.T) {
 	f := newFixture()
 	seedOTP(t, f, "771000001", "123456")
-	// Aucun numero.Seed : le registre ne connaît pas ce numéro.
+	// No numero.Seed: the registry does not know this number.
 
 	_, fault := individualInteractor(f).Execute(ctxCaller(yasID), validIndividualInput("771000001"))
 	require.NotNil(t, fault)
 	require.Equal(t, "OPERATEUR_SOURCE_INCORRECT", fault.Code)
 }
 
-func TestCreateIndividualRequestDelaiPortageNonRespecte(t *testing.T) {
+func TestCreateIndividualRequestPortingDelayNotRespected(t *testing.T) {
 	f := newFixture()
-	recent := time.Now().Add(-24 * time.Hour) // portée hier : bien sous 3 mois
+	recent := time.Now().Add(-24 * time.Hour) // ported yesterday: well under 3 months
 	f.numbers.Seed(entity.NumberState{
 		MSISDN: "771000001", CurrentOperatorID: orangeID, OriginOperatorID: orangeID,
 		LastPortingDate: &recent,
@@ -152,15 +152,14 @@ func TestCreateIndividualRequestDelaiPortageNonRespecte(t *testing.T) {
 	require.Equal(t, 0, f.requests.RequestCount())
 }
 
-// TestCreateIndividualRequestEchecEcritureNeConsommePasLOTP est la preuve,
-// au niveau interactor, que l'OTP.Consume n'est jamais atteint quand l'un
-// des appels d'écriture précédents échoue à l'intérieur de la même
-// transaction — la garantie de commit 643415f. La preuve qu'un
-// UnitOfWork RÉEL défait vraiment ses écritures sur ce même chemin vit dans
-// internal/framework/persistence (Postgres, //go:build integration) : ce
-// test-ci prouve l'ORDRE des appels, pas le rollback lui-même, que
-// l'in-memory UnitOfWork ne peut pas simuler.
-func TestCreateIndividualRequestEchecEcritureNeConsommePasLOTP(t *testing.T) {
+// TestCreateIndividualRequestWriteFailureDoesNotConsumeOTP is the proof, at
+// the interactor level, that OTP.Consume is never reached when one of the
+// previous write calls fails inside the same transaction — the guarantee of
+// commit 643415f. The proof that a REAL UnitOfWork really undoes its writes
+// on that same path lives in internal/framework/persistence (Postgres,
+// //go:build integration): this test proves the ORDER of the calls, not the
+// rollback itself, which the in-memory UnitOfWork cannot simulate.
+func TestCreateIndividualRequestWriteFailureDoesNotConsumeOTP(t *testing.T) {
 	f := newFixture()
 	f.requests.SeedPrefix(orangeID, "191")
 	f.requests.FailCreate = errFake
@@ -174,5 +173,5 @@ func TestCreateIndividualRequestEchecEcritureNeConsommePasLOTP(t *testing.T) {
 	stored, found, err := f.otp.Find(context.Background(), "771000001")
 	require.NoError(t, err)
 	require.True(t, found)
-	require.False(t, stored.Consumed, "l'OTP ne doit pas être consommé quand la création échoue")
+	require.False(t, stored.Consumed, "the OTP must not be consumed when creation fails")
 }

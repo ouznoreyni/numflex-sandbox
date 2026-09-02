@@ -32,9 +32,9 @@ func MigrationsDir() (string, error) {
 		return "", err
 	}
 	for i := 0; i < 8; i++ {
-		candidat := filepath.Join(dir, "migrations")
-		if st, err := os.Stat(candidat); err == nil && st.IsDir() {
-			return candidat, nil
+		candidate := filepath.Join(dir, "migrations")
+		if st, err := os.Stat(candidate); err == nil && st.IsDir() {
+			return candidate, nil
 		}
 		parent := filepath.Dir(dir)
 		if parent == dir {

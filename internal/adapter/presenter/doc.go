@@ -6,7 +6,10 @@
 // promises. The mode is the only thing that separates the two.
 //
 // May import: the standard library, internal/entity and
-// internal/usecase/port.
+// internal/usecase/port. Its tests additionally import
+// internal/testsupport/inmemory for the port doubles they present from —
+// a test-only edge the dependency rule does not classify, since
+// testsupport belongs to no layer.
 //
 // Must never know: Gin, HTTP writers, SQL, or a business rule. It receives
 // the request path as an argument rather than reading it from a request.

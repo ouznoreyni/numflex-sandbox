@@ -245,7 +245,7 @@ En mode `contract`, la même machine à états est servie selon le contrat tel q
 corrects, enveloppe systématique, catalogue de codes d'erreur renseigné. Utile pour vérifier qu'un
 client ne s'est pas rendu dépendant d'une anomalie. **La machine à états est identique dans les
 deux modes ; seule la présentation change** — c'est ce que verrouille
-`TestMemeScenarioEnModeContrat`.
+`TestSameScenarioInContractMode`.
 
 ### Convergence : deux comportements mesurés, tous deux reproductibles
 

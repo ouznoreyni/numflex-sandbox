@@ -21,7 +21,7 @@ type Config struct {
 	JWTSecret             string
 	JWTTTL                time.Duration
 	Fidelity              Fidelity
-	EtapeTimeout          time.Duration
+	StepTimeout           time.Duration
 	EngineTick            time.Duration
 	ConvergenceMin        time.Duration
 	ConvergenceMax        time.Duration
@@ -60,17 +60,17 @@ func Load() (*Config, error) {
 	// The one variable where an empty string differs from being unset,
 	// because here the two carry opposite meanings: not set, CORS is open to
 	// every origin; set empty, it is switched off.
-	origines := "*"
+	origins := "*"
 	if v, ok := os.LookupEnv("CORS_ALLOWED_ORIGINS"); ok {
-		origines = v
+		origins = v
 	}
-	c.CORSAllowedOrigins = liste(origines)
+	c.CORSAllowedOrigins = splitList(origins)
 
 	var err error
 	if c.JWTTTL, err = dur("JWT_TTL_HOURS", 24, time.Hour); err != nil {
 		return nil, err
 	}
-	if c.EtapeTimeout, err = dur("ETAPE_TIMEOUT_SECONDS", 349, time.Second); err != nil {
+	if c.StepTimeout, err = dur("ETAPE_TIMEOUT_SECONDS", 349, time.Second); err != nil {
 		return nil, err
 	}
 	if c.EngineTick, err = dur("ENGINE_TICK_SECONDS", 10, time.Second); err != nil {
@@ -97,7 +97,7 @@ func Load() (*Config, error) {
 	if c.OTPMaxAttempts, err = num("OTP_MAX_ATTEMPTS", 3); err != nil {
 		return nil, err
 	}
-	if c.SandboxAdmin, err = booleen("SANDBOX_ADMIN", false); err != nil {
+	if c.SandboxAdmin, err = boolean("SANDBOX_ADMIN", false); err != nil {
 		return nil, err
 	}
 
@@ -117,16 +117,16 @@ func Load() (*Config, error) {
 	return c, nil
 }
 
-func str(clef, defaut string) string {
-	if v, ok := os.LookupEnv(clef); ok && v != "" {
+func str(key, def string) string {
+	if v, ok := os.LookupEnv(key); ok && v != "" {
 		return v
 	}
-	return defaut
+	return def
 }
 
-// liste splits a comma-separated value, ignoring empty entries — "a, ,b"
+// splitList splits a comma-separated value, ignoring empty entries — "a, ,b"
 // gives ["a" "b"], "" gives nil.
-func liste(v string) []string {
+func splitList(v string) []string {
 	var out []string
 	for _, part := range strings.Split(v, ",") {
 		if p := strings.TrimSpace(part); p != "" {
@@ -136,37 +136,37 @@ func liste(v string) []string {
 	return out
 }
 
-func num(clef string, defaut int) (int, error) {
-	v, ok := os.LookupEnv(clef)
+func num(key string, def int) (int, error) {
+	v, ok := os.LookupEnv(key)
 	if !ok || v == "" {
-		return defaut, nil
+		return def, nil
 	}
 	n, err := strconv.Atoi(v)
 	if err != nil {
-		return 0, fmt.Errorf("%s : entier attendu, reçu %q", clef, v)
+		return 0, fmt.Errorf("%s : entier attendu, reçu %q", key, v)
 	}
 	return n, nil
 }
 
-func booleen(clef string, defaut bool) (bool, error) {
-	v, ok := os.LookupEnv(clef)
+func boolean(key string, def bool) (bool, error) {
+	v, ok := os.LookupEnv(key)
 	if !ok || v == "" {
-		return defaut, nil
+		return def, nil
 	}
 	b, err := strconv.ParseBool(v)
 	if err != nil {
-		return false, fmt.Errorf("%s : booléen attendu, reçu %q", clef, v)
+		return false, fmt.Errorf("%s : booléen attendu, reçu %q", key, v)
 	}
 	return b, nil
 }
 
-func dur(clef string, defaut int, unite time.Duration) (time.Duration, error) {
-	n, err := num(clef, defaut)
+func dur(key string, def int, unit time.Duration) (time.Duration, error) {
+	n, err := num(key, def)
 	if err != nil {
 		return 0, err
 	}
 	if n < 0 {
-		return 0, fmt.Errorf("%s ne peut être négatif", clef)
+		return 0, fmt.Errorf("%s ne peut être négatif", key)
 	}
-	return time.Duration(n) * unite, nil
+	return time.Duration(n) * unit, nil
 }

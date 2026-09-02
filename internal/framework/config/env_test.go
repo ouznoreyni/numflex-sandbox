@@ -6,17 +6,17 @@ import (
 	"testing"
 )
 
-func ecrireEnv(t *testing.T, contenu string) string {
+func writeEnv(t *testing.T, content string) string {
 	t.Helper()
-	chemin := filepath.Join(t.TempDir(), ".env")
-	if err := os.WriteFile(chemin, []byte(contenu), 0o600); err != nil {
+	path := filepath.Join(t.TempDir(), ".env")
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	return chemin
+	return path
 }
 
-func TestLoadEnvFilePoseLesValeurs(t *testing.T) {
-	t.Setenv("ENV_FILE", ecrireEnv(t, `
+func TestLoadEnvFileSetsValues(t *testing.T) {
+	t.Setenv("ENV_FILE", writeEnv(t, `
 # un commentaire
 PORT=9090
 export FIDELITY=contract
@@ -31,23 +31,23 @@ OTP_STATIC_CODE='000000'
 	if err := LoadEnvFile(); err != nil {
 		t.Fatalf("chargement : %v", err)
 	}
-	for clef, attendu := range map[string]string{
+	for key, expected := range map[string]string{
 		"PORT":            "9090",
 		"FIDELITY":        "contract",
 		"JWT_SECRET":      "secret # avec dièse",
 		"OTP_STATIC_CODE": "000000",
 	} {
-		if got := os.Getenv(clef); got != attendu {
-			t.Errorf("%s = %q, attendu %q", clef, got, attendu)
+		if got := os.Getenv(key); got != expected {
+			t.Errorf("%s = %q, attendu %q", key, got, expected)
 		}
 	}
 }
 
-// L'environnement du conteneur l'emporte sur le fichier : c'est ce qui permet
-// à `docker run -e` et au bloc `environment:` de compose de surcharger un .env
-// monté.
-func TestLoadEnvFileNEcrasePas(t *testing.T) {
-	t.Setenv("ENV_FILE", ecrireEnv(t, "PORT=9090\n"))
+// The container's environment wins over the file: this is what lets
+// `docker run -e` and compose's `environment:` block override a mounted
+// .env.
+func TestLoadEnvFileDoesNotOverwrite(t *testing.T) {
+	t.Setenv("ENV_FILE", writeEnv(t, "PORT=9090\n"))
 	t.Setenv("PORT", "7000")
 
 	if err := LoadEnvFile(); err != nil {
@@ -58,7 +58,7 @@ func TestLoadEnvFileNEcrasePas(t *testing.T) {
 	}
 }
 
-func TestLoadEnvFileImpliciteAbsent(t *testing.T) {
+func TestLoadEnvFileImplicitAbsent(t *testing.T) {
 	t.Setenv("ENV_FILE", "")
 	t.Chdir(t.TempDir())
 
@@ -67,7 +67,7 @@ func TestLoadEnvFileImpliciteAbsent(t *testing.T) {
 	}
 }
 
-func TestLoadEnvFileExpliciteAbsent(t *testing.T) {
+func TestLoadEnvFileExplicitAbsent(t *testing.T) {
 	t.Setenv("ENV_FILE", filepath.Join(t.TempDir(), "introuvable.env"))
 
 	if err := LoadEnvFile(); err == nil {
@@ -75,8 +75,8 @@ func TestLoadEnvFileExpliciteAbsent(t *testing.T) {
 	}
 }
 
-func TestLoadEnvFileLigneInvalide(t *testing.T) {
-	t.Setenv("ENV_FILE", ecrireEnv(t, "PORT 9090\n"))
+func TestLoadEnvFileInvalidLine(t *testing.T) {
+	t.Setenv("ENV_FILE", writeEnv(t, "PORT 9090\n"))
 
 	if err := LoadEnvFile(); err == nil {
 		t.Fatal("une ligne sans = doit être une erreur")
@@ -98,7 +98,7 @@ func TestApplyArguments(t *testing.T) {
 	}
 }
 
-func TestApplyArgumentsRefuse(t *testing.T) {
+func TestApplyArgumentsRejects(t *testing.T) {
 	for _, args := range [][]string{
 		{"--env-file"},
 		{"-v"},

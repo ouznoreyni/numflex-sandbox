@@ -10,9 +10,9 @@ import (
 	"github.com/ouznoreyni/numflex-sandbox/internal/usecase/otp"
 )
 
-// motifMSISDN is the ARTP MSISDN shape, moved unchanged from the deleted
+// msisdnPattern is the ARTP MSISDN shape, moved unchanged from the deleted
 // internal/api/otp.go.
-var motifMSISDN = regexp.MustCompile(`^[0-9]{9}$`)
+var msisdnPattern = regexp.MustCompile(`^[0-9]{9}$`)
 
 // OTPController is the interface-adapter for the two OTP routes.
 type OTPController struct {
@@ -29,11 +29,11 @@ func NewOTPController(send otp.SendOTPBoundary, verify otp.VerifyOTPBoundary, p 
 }
 
 type otpSendRequest struct {
-	Numero string `json:"numero"`
+	MSISDN string `json:"numero"`
 }
 
 type otpVerifyRequest struct {
-	Numero  string `json:"numero"`
+	MSISDN  string `json:"numero"`
 	OtpCode string `json:"otpCode"`
 }
 
@@ -51,7 +51,7 @@ func (ctl *OTPController) Send(c *gin.Context) {
 		render(c, ctl.pres.Failure(entity.InvalidJSONFormat(), c.Request.URL.Path))
 		return
 	}
-	if !motifMSISDN.MatchString(req.Numero) {
+	if !msisdnPattern.MatchString(req.MSISDN) {
 		render(c, ctl.pres.Failure(entity.Validation(entity.FieldFault{
 			ObjectName: "otpSendDTO", Field: "numero",
 			Message: `doit correspondre à "^[0-9]{9}$"`,
@@ -59,13 +59,13 @@ func (ctl *OTPController) Send(c *gin.Context) {
 		return
 	}
 
-	if err := ctl.send.Execute(c.Request.Context(), otp.SendOTPInput{MSISDN: req.Numero}); err != nil {
+	if err := ctl.send.Execute(c.Request.Context(), otp.SendOTPInput{MSISDN: req.MSISDN}); err != nil {
 		render(c, ctl.pres.Failure(entity.FaultFrom(err), c.Request.URL.Path))
 		return
 	}
 
-	// Le sandbox n'envoie pas de SMS : le code est statique et journalisé.
-	// La réponse acquitte la soumission, pas la remise (ANO-021).
+	// The sandbox does not send an SMS: the code is static and logged. The
+	// response acknowledges the submission, not delivery (ANO-021).
 	render(c, ctl.pres.SuccessWithoutData(http.StatusOK, "OTP envoyé avec succès"))
 }
 
@@ -79,7 +79,7 @@ func (ctl *OTPController) Verify(c *gin.Context) {
 	}
 
 	if f := ctl.verify.Execute(c.Request.Context(), otp.VerifyOTPInput{
-		MSISDN: req.Numero, Code: req.OtpCode,
+		MSISDN: req.MSISDN, Code: req.OtpCode,
 	}); f != nil {
 		render(c, ctl.pres.Failure(f, c.Request.URL.Path))
 		return

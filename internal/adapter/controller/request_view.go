@@ -2,7 +2,7 @@ package controller
 
 import "github.com/ouznoreyni/numflex-sandbox/internal/usecase/port"
 
-// requestViewDTO sérialise une demande au format du guide §7.3 — the shape
+// requestViewDTO serializes a request into the guide §7.3 shape — the shape
 // every capability that renders a request shares: CreationController,
 // QueryController, AcceptanceController and now PortingController's three
 // routes (Task 15). It used to be duplicated once per controller (ruling
@@ -30,8 +30,8 @@ func requestViewDTO(clk port.Clock, v port.RequestView) map[string]any {
 		"processus":             nil,
 		"routageInfo":           nil,
 	}
-	if v.Processus != nil {
-		out["processus"] = *v.Processus
+	if v.Process != nil {
+		out["processus"] = *v.Process
 	}
 	if v.RoutingInfo != nil {
 		out["routageInfo"] = *v.RoutingInfo
@@ -56,10 +56,11 @@ func requestViewDTO(clk port.Clock, v port.RequestView) map[string]any {
 	return out
 }
 
-// sansClient retire le sous-objet client d'un DTO. Les endpoints de
-// confirmation — la file, son détail et le POST — sont les seuls à ne pas le
-// porter ; mesuré sur quatre captures du 2026-08-27, pas déduit. The single
-// remaining copy, after the same consolidation as requestViewDTO above.
+// sansClient removes the client sub-object from a DTO. The confirmation
+// endpoints — the queue, its detail and the POST — are the only ones that
+// do not carry it; measured against four 2026-08-27 captures, not deduced.
+// The single remaining copy, after the same consolidation as requestViewDTO
+// above.
 func sansClient(dto map[string]any) map[string]any {
 	delete(dto, "client")
 	return dto

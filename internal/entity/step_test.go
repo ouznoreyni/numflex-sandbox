@@ -12,7 +12,7 @@ const (
 	expresso = "6a217510e6c37b5b5b487ec7"
 )
 
-var place = []string{orange, yas, expresso}
+var operators = []string{orange, yas, expresso}
 
 func portingRequest() PortingRequest {
 	return PortingRequest{
@@ -30,12 +30,12 @@ func TestStepSequence(t *testing.T) {
 		StepConfirmation, StepCompletion,
 	}
 	for i := 0; i < len(suite)-1; i++ {
-		suivante, ok := NextStep(suite[i])
+		next, ok := NextStep(suite[i])
 		require.True(t, ok, string(suite[i]))
-		require.Equal(t, suite[i+1], suivante)
+		require.Equal(t, suite[i+1], next)
 	}
 	_, ok := NextStep(StepCompletion)
-	require.False(t, ok, "COMPLETION est terminale")
+	require.False(t, ok, "COMPLETION is terminal")
 }
 
 func TestStepOwner(t *testing.T) {
@@ -45,7 +45,7 @@ func TestStepOwner(t *testing.T) {
 	require.Equal(t, RoleAll, StepOwner(StepConfirmation, RequestTypePorting))
 	require.Equal(t, RoleRecipient, StepOwner(StepCompletion, RequestTypePorting))
 
-	// La COMPLETION d'un REVERSE est réservée à l'ARTP.
+	// A REVERSE's COMPLETION is reserved to the ARTP.
 	require.Equal(t, RoleARTP, StepOwner(StepCompletion, RequestTypeReverse))
 	require.Equal(t, RoleRecipient, StepOwner(StepCompletion, RequestTypeRestitution))
 }
@@ -54,10 +54,10 @@ func TestCanProcessRefusesStepNotOwed(t *testing.T) {
 	r := portingRequest()
 	r.CurrentStep = StepDeactivation
 
-	require.Nil(t, CanProcess(r, orange), "la source traite la DESACTIVATION")
+	require.Nil(t, CanProcess(r, orange), "the source handles DESACTIVATION")
 
 	e := CanProcess(r, yas)
-	require.NotNil(t, e, "le destinataire ne peut pas désactiver")
+	require.NotNil(t, e, "the recipient cannot deactivate")
 	require.Equal(t, "DEMANDE_ACCES_REFUSE", e.Code)
 }
 
@@ -104,7 +104,7 @@ func TestCanProcessRefusesRequestNotInProgress(t *testing.T) {
 }
 
 func TestCanProcessRefusesDuringConvergence(t *testing.T) {
-	// R-10 : l'étape a été traitée, la transition n'est pas encore appliquée.
+	// R-10: the step has been processed, the transition is not yet applied.
 	r := portingRequest()
 	r.CurrentStep = StepDeactivation
 	r.PendingTransition = true
@@ -115,11 +115,11 @@ func TestCanProcessRefusesDuringConvergence(t *testing.T) {
 }
 
 func TestExpectedConfirmersPortingExcludesRecipient(t *testing.T) {
-	// D-6, mesuré au SIT : sur un portage ORANGE → YAS, EXPRESSO doit confirmer.
+	// D-6, measured at the SIT: on an ORANGE → YAS porting, EXPRESSO must confirm.
 	r := portingRequest()
 	r.CurrentStep = StepConfirmation
 
-	require.ElementsMatch(t, []string{orange, expresso}, ExpectedConfirmers(r, place))
+	require.ElementsMatch(t, []string{orange, expresso}, ExpectedConfirmers(r, operators))
 }
 
 func TestExpectedConfirmersRestitutionAndReverseIncludeEveryone(t *testing.T) {
@@ -127,7 +127,7 @@ func TestExpectedConfirmersRestitutionAndReverseIncludeEveryone(t *testing.T) {
 		r := portingRequest()
 		r.RequestType = rt
 		r.CurrentStep = StepConfirmation
-		require.ElementsMatchf(t, place, ExpectedConfirmers(r, place), string(rt))
+		require.ElementsMatchf(t, operators, ExpectedConfirmers(r, operators), string(rt))
 	}
 }
 
@@ -136,15 +136,15 @@ func TestCanAccept(t *testing.T) {
 
 	require.Nil(t, CanAccept(r, orange))
 
-	// TC-034 : le destinataire ne peut pas accepter sa propre demande.
+	// TC-034: the recipient cannot accept its own request.
 	e := CanAccept(r, yas)
 	require.NotNil(t, e)
 	require.Equal(t, "DEMANDE_ACCES_REFUSE", e.Code)
 
-	// Un tiers non plus.
+	// A third party cannot either.
 	require.NotNil(t, CanAccept(r, expresso))
 
-	// Hors de l'étape ACCEPTATION.
+	// Outside the ACCEPTATION step.
 	r2 := portingRequest()
 	r2.CurrentStep = StepActivation
 	e = CanAccept(r2, orange)
@@ -155,7 +155,7 @@ func TestCanAccept(t *testing.T) {
 func TestCanCancel(t *testing.T) {
 	r := portingRequest()
 
-	require.Nil(t, CanCancel(r, yas), "le créateur annule")
+	require.Nil(t, CanCancel(r, yas), "the creator cancels")
 
 	e := CanCancel(r, orange)
 	require.NotNil(t, e)

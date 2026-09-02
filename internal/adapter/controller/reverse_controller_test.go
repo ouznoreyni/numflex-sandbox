@@ -17,8 +17,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// statutDemande lit le statut d'une demande directement en base.
-func statutDemande(h *routerharness.RouterHarness, id string) string {
+// requestStatus reads a request's status directly from the database.
+func requestStatus(h *routerharness.RouterHarness, id string) string {
 	h.T.Helper()
 	var s string
 	require.NoError(h.T, h.DB.Pool.QueryRow(context.Background(),
@@ -26,145 +26,145 @@ func statutDemande(h *routerharness.RouterHarness, id string) string {
 	return s
 }
 
-func TestSoumissionReverseParLOperateurDOrigine(t *testing.T) {
-	// Tranche 773 : YAS actuellement, ORANGE à l'origine.
+func TestSubmitReverseByOriginOperator(t *testing.T) {
+	// Slice 773: YAS currently, ORANGE at origin.
 	h := routerharness.NewRouterHarness(t)
-	rep, corps := h.Appel(http.MethodPost, "/api/gateway/v1/reverse-requests",
-		h.Jeton("orange", "orange2026"), map[string]any{"numero": "773000001"})
+	resp, body := h.Call(http.MethodPost, "/api/gateway/v1/reverse-requests",
+		h.Token("orange", "orange2026"), map[string]any{"numero": "773000001"})
 
-	require.Equal(t, http.StatusCreated, rep.StatusCode, corps)
-	require.Equal(t, "Demande de reverse soumise avec succès", corps["message"])
+	require.Equal(t, http.StatusCreated, resp.StatusCode, body)
+	require.Equal(t, "Demande de reverse soumise avec succès", body["message"])
 
-	data := corps["data"].(map[string]any)
+	data := body["data"].(map[string]any)
 	require.Equal(t, "773000001", data["numero"])
 	require.Equal(t, "EN_ATTENTE", data["statut"])
-	require.Equal(t, operateurOrange, data["operateur"].(map[string]any)["id"])
+	require.Equal(t, operatorOrange, data["operateur"].(map[string]any)["id"])
 }
 
-func TestSoumissionReverseParUnAutreOperateurRefusee(t *testing.T) {
+func TestSubmitReverseByAnotherOperatorRefused(t *testing.T) {
 	h := routerharness.NewRouterHarness(t)
-	rep, _ := h.Appel(http.MethodPost, "/api/gateway/v1/reverse-requests",
-		h.Jeton("yas", "yas2026"), map[string]any{"numero": "773000001"})
-	require.Equal(t, http.StatusInternalServerError, rep.StatusCode)
+	resp, _ := h.Call(http.MethodPost, "/api/gateway/v1/reverse-requests",
+		h.Token("yas", "yas2026"), map[string]any{"numero": "773000001"})
+	require.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 }
 
-func TestMesDemandesReverse(t *testing.T) {
+func TestOwnReverseRequests(t *testing.T) {
 	h := routerharness.NewRouterHarness(t)
-	h.Appel(http.MethodPost, "/api/gateway/v1/reverse-requests",
-		h.Jeton("orange", "orange2026"), map[string]any{"numero": "773000001"})
+	h.Call(http.MethodPost, "/api/gateway/v1/reverse-requests",
+		h.Token("orange", "orange2026"), map[string]any{"numero": "773000001"})
 
-	data := h.Liste("/api/gateway/v1/reverse-requests/mes-demandes",
-		h.Jeton("orange", "orange2026"))
+	data := h.List("/api/gateway/v1/reverse-requests/mes-demandes",
+		h.Token("orange", "orange2026"))
 	require.Len(t, data, 1)
 	require.Equal(t, "EN_ATTENTE", data[0].(map[string]any)["statut"])
 
-	require.Empty(t, h.Liste("/api/gateway/v1/reverse-requests/mes-demandes",
-		h.Jeton("yas", "yas2026")))
+	require.Empty(t, h.List("/api/gateway/v1/reverse-requests/mes-demandes",
+		h.Token("yas", "yas2026")))
 }
 
-func TestAucunEndpointDAnnulationDeReverse(t *testing.T) {
-	// §7.6 : « Il n'existe pas d'endpoint pour annuler une demande de reverse. »
+func TestNoCancelEndpointForReverse(t *testing.T) {
+	// §7.6: "There is no endpoint to cancel a reverse request."
 	h := routerharness.NewRouterHarness(t)
-	_, corps := h.Appel(http.MethodPost, "/api/gateway/v1/reverse-requests",
-		h.Jeton("orange", "orange2026"), map[string]any{"numero": "773000001"})
-	id := corps["data"].(map[string]any)["id"].(string)
+	_, body := h.Call(http.MethodPost, "/api/gateway/v1/reverse-requests",
+		h.Token("orange", "orange2026"), map[string]any{"numero": "773000001"})
+	id := body["data"].(map[string]any)["id"].(string)
 
-	rep := h.Brut(http.MethodPost, "/api/gateway/v1/reverse-requests/"+id+"/annuler",
-		h.Jeton("orange", "orange2026"), nil)
-	require.Equal(t, http.StatusNotFound, rep.StatusCode)
+	resp := h.Raw(http.MethodPost, "/api/gateway/v1/reverse-requests/"+id+"/annuler",
+		h.Token("orange", "orange2026"), nil)
+	require.Equal(t, http.StatusNotFound, resp.StatusCode)
 }
 
-// TestReverseAtteintTermineParLesVraisEndpoints prouve le flux complet en
-// passant par les vrais endpoints — /reverse-requests puis
-// /demandes/a-confirmer, comme un opérateur réel le ferait — plutôt qu'en
-// insérant les confirmations directement en SQL. postAConfirmer est
-// agnostique du type de demande : quand la dernière confirmation tombe, il
-// planifie une transition générique (PlanifierTransition). Au tick suivant,
-// appliquerConvergencesDues fait avancer la demande de CONFIRMATION à
-// COMPLETION par ce chemin commun, avant que completerReversesConfirmes ne
-// s'exécute — qui doit donc savoir rattraper une demande REVERSE déjà à
-// COMPLETION, faute de quoi elle y reste bloquée pour toujours, puisque
-// aucun opérateur ne peut traiter la COMPLETION d'un REVERSE.
-func TestReverseAtteintTermineParLesVraisEndpoints(t *testing.T) {
+// TestReverseReachesCompletedThroughRealEndpoints proves the complete flow
+// by going through the real endpoints — /reverse-requests then
+// /demandes/a-confirmer, as a real operator would — rather than inserting
+// confirmations directly in SQL. postAConfirmer is agnostic of the request
+// type: when the last confirmation lands, it schedules a generic
+// transition (ScheduleTransition). On the next tick,
+// appliquerConvergencesDues advances the request from CONFIRMATION to
+// COMPLETION through that common path, before completerReversesConfirmes
+// runs — which must therefore know how to catch up a REVERSE request
+// already at COMPLETION, or else it stays stuck there forever, since no
+// operator can process the COMPLETION of a REVERSE.
+func TestReverseReachesCompletedThroughRealEndpoints(t *testing.T) {
 	h := routerharness.NewRouterHarness(t)
 
-	// 1. Soumission par l'opérateur d'origine (tranche 773 : YAS actuellement,
-	// ORANGE à l'origine).
-	_, corps := h.Appel(http.MethodPost, "/api/gateway/v1/reverse-requests",
-		h.Jeton("orange", "orange2026"), map[string]any{"numero": "773000001"})
-	reverseID := corps["data"].(map[string]any)["id"].(string)
+	// 1. Submission by the origin operator (slice 773: YAS currently,
+	// ORANGE at origin).
+	_, body := h.Call(http.MethodPost, "/api/gateway/v1/reverse-requests",
+		h.Token("orange", "orange2026"), map[string]any{"numero": "773000001"})
+	reverseID := body["data"].(map[string]any)["id"].(string)
 
-	// 2. Acte de l'ARTP, hors API : validation — crée la Demande REVERSE à
-	// CONFIRMATION.
-	h.ValiderReverse(reverseID)
+	// 2. An ARTP act, outside the API: validation — creates the REVERSE
+	// request at CONFIRMATION.
+	h.ValidateReverse(reverseID)
 
 	var demandeID string
 	require.NoError(t, h.DB.Pool.QueryRow(context.Background(),
 		`SELECT demande_id FROM reverse_request WHERE id = $1`, reverseID).Scan(&demandeID))
 
-	// 3. Tous les opérateurs confirment via le vrai endpoint — destinataire
-	// (opérateur d'origine du numéro) compris, comme l'exige un REVERSE.
-	for _, compte := range [][2]string{
+	// 3. Every operator confirms via the real endpoint — recipient
+	// (the number's origin operator) included, as a REVERSE requires.
+	for _, account := range [][2]string{
 		{"orange", "orange2026"}, {"yas", "yas2026"}, {"expresso", "expresso2026"},
 	} {
-		rep, corpsConf := h.Appel(http.MethodPost, "/api/gateway/v1/demandes/a-confirmer",
-			h.Jeton(compte[0], compte[1]), map[string]any{"idDemande": demandeID})
-		require.Equal(t, http.StatusOK, rep.StatusCode, corpsConf)
+		resp, corpsConf := h.Call(http.MethodPost, "/api/gateway/v1/demandes/a-confirmer",
+			h.Token(account[0], account[1]), map[string]any{"idDemande": demandeID})
+		require.Equal(t, http.StatusOK, resp.StatusCode, corpsConf)
 	}
 
-	// 4. Convergence du moteur : la demande doit atteindre TERMINE, et le
-	// numéro doit être revenu à son opérateur d'origine dans le registre.
-	h.Converger()
-	h.Converger()
+	// 4. Engine convergence: the request must reach TERMINE, and the
+	// number must be back with its origin operator in the registry.
+	h.Converge()
+	h.Converge()
 
-	require.Equal(t, "TERMINE", statutDemande(h, demandeID))
+	require.Equal(t, "TERMINE", requestStatus(h, demandeID))
 
-	var operateurActuel string
+	var currentOperator string
 	require.NoError(t, h.DB.Pool.QueryRow(context.Background(),
 		`SELECT operateur_actuel_id FROM numero WHERE msisdn = '773000001'`).
-		Scan(&operateurActuel))
-	require.Equal(t, operateurOrange, operateurActuel)
+		Scan(&currentOperator))
+	require.Equal(t, operatorOrange, currentOperator)
 }
 
-// TestCompletionDUnReverseToujoursRefuseeAuxOperateurs — §7.9 du guide : une
-// tentative de COMPLETION sur un REVERSE renvoie DEMANDE_ACCES_REFUSE avec le
-// message documenté. Le moteur joue l'ARTP et complète la demande dès que
-// toutes les confirmations sont là ; si le refus n'était rendu que tant que la
-// demande est EN_COURS, la fenêtre serait d'un tick et le message documenté
-// deviendrait inatteignable en pratique — l'opérateur recevrait un
-// ETAPE_INVALIDE générique à la place.
-func TestCompletionDUnReverseToujoursRefuseeAuxOperateurs(t *testing.T) {
-	h := routerharness.NewRouterHarness(t, routerharness.FiabiliteContrat)
+// TestReverseCompletionAlwaysRefusedToOperators — guide §7.9: an attempt
+// at COMPLETION on a REVERSE returns DEMANDE_ACCES_REFUSE with the
+// documented message. The engine plays the ARTP's part and completes the
+// request as soon as every confirmation is in; if the refusal only held
+// while the request is EN_COURS, the window would be one tick and the
+// documented message would become unreachable in practice — the operator
+// would receive a generic ETAPE_INVALIDE instead.
+func TestReverseCompletionAlwaysRefusedToOperators(t *testing.T) {
+	h := routerharness.NewRouterHarness(t, routerharness.ContractFidelity)
 
-	_, corps := h.Appel(http.MethodPost, "/api/gateway/v1/reverse-requests",
-		h.Jeton("orange", "orange2026"), map[string]any{"numero": "773000001"})
-	reverseID := corps["data"].(map[string]any)["id"].(string)
-	h.ValiderReverse(reverseID)
+	_, body := h.Call(http.MethodPost, "/api/gateway/v1/reverse-requests",
+		h.Token("orange", "orange2026"), map[string]any{"numero": "773000001"})
+	reverseID := body["data"].(map[string]any)["id"].(string)
+	h.ValidateReverse(reverseID)
 
 	var demandeID string
 	require.NoError(t, h.DB.Pool.QueryRow(context.Background(),
 		`SELECT demande_id FROM reverse_request WHERE id = $1`, reverseID).Scan(&demandeID))
 
-	for _, compte := range [][2]string{
+	for _, account := range [][2]string{
 		{"orange", "orange2026"}, {"yas", "yas2026"}, {"expresso", "expresso2026"},
 	} {
-		h.Appel(http.MethodPost, "/api/gateway/v1/demandes/a-confirmer",
-			h.Jeton(compte[0], compte[1]), map[string]any{"idDemande": demandeID})
+		h.Call(http.MethodPost, "/api/gateway/v1/demandes/a-confirmer",
+			h.Token(account[0], account[1]), map[string]any{"idDemande": demandeID})
 	}
-	h.Converger()
-	h.Converger()
-	require.Equal(t, "COMPLETION", etape(h, demandeID))
+	h.Converge()
+	h.Converge()
+	require.Equal(t, "COMPLETION", step(h, demandeID))
 
-	// Destinataire comme source : le refus est le même, et il est celui du guide.
-	for _, compte := range [][2]string{{"orange", "orange2026"}, {"yas", "yas2026"}} {
-		rep, corpsRefus := h.Appel(http.MethodPost, "/api/gateway/v1/demandes/traitement",
-			h.Jeton(compte[0], compte[1]), map[string]any{"idDemande": demandeID})
+	// Recipient like source: the refusal is the same, and it is the guide's.
+	for _, account := range [][2]string{{"orange", "orange2026"}, {"yas", "yas2026"}} {
+		resp, corpsRefus := h.Call(http.MethodPost, "/api/gateway/v1/demandes/traitement",
+			h.Token(account[0], account[1]), map[string]any{"idDemande": demandeID})
 
-		require.Equal(t, http.StatusForbidden, rep.StatusCode, compte[0])
-		require.Equal(t, "DEMANDE_ACCES_REFUSE", corpsRefus["code"], compte[0])
+		require.Equal(t, http.StatusForbidden, resp.StatusCode, account[0])
+		require.Equal(t, "DEMANDE_ACCES_REFUSE", corpsRefus["code"], account[0])
 		require.Equal(t,
 			"La complétion (COMPLETION) d'une demande REVERSE est réservée à l'ARTP, "+
 				"une fois que tous les opérateurs ont confirmé.",
-			corpsRefus["message"], compte[0])
+			corpsRefus["message"], account[0])
 	}
 }

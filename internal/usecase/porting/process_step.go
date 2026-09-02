@@ -93,11 +93,11 @@ func (i *ProcessStepInteractor) Execute(
 		return port.RequestView{}, entity.InternalError("planification de la transition")
 	}
 
-	// La demande est relue APRÈS avoir demandé la transition, jamais après
-	// sa convergence : R-10 — la réponse porte l'étape précédente quand la
-	// convergence est différée, et la suivante quand elle est synchrone,
-	// exactement ce que décide l'implémentation de
-	// port.Engine.ScheduleTransition elle-même.
+	// The request is read back AFTER requesting the transition, never after
+	// its convergence: R-10 — the response carries the previous step when
+	// convergence is deferred, and the next one when it is synchronous,
+	// exactly what port.Engine.ScheduleTransition's own implementation
+	// decides.
 	view, found, err := i.requests.Get(ctx, dm.ID)
 	if err != nil || !found {
 		return port.RequestView{}, entity.InternalError("relecture de la demande")

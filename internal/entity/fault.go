@@ -68,16 +68,16 @@ func Validation(fields ...FieldFault) *Fault {
 //     business message of the resulting 500.
 func FaultFrom(err error) *Fault {
 	var f *Fault
-	trouve := errors.As(err, &f)
+	found := errors.As(err, &f)
 	switch {
-	case trouve && f != nil:
+	case found && f != nil:
 		return f
 	case err == nil:
 		return InternalError("erreur interne")
-	case trouve:
-		// errors.As a réussi sur un *Fault typé nil emballé dans err :
-		// err.Error() appellerait la méthode sur ce récepteur nil et
-		// paniquerait.
+	case found:
+		// errors.As succeeded on a *Fault typed nil wrapped in err:
+		// err.Error() would call the method on this nil receiver and
+		// would panic.
 		return InternalError("erreur interne")
 	default:
 		return InternalError(err.Error())

@@ -1,12 +1,12 @@
-// Package main est le CLI régulateur : il porte les actes que le contrat
-// ARTP place hors de l'API gateway — la validation et le rejet d'une demande
-// de reverse (§6 du guide), tous deux réservés à l'ARTP. Ce binaire n'ouvre
-// aucun serveur HTTP : il ouvre le pool, effectue un acte, et quitte.
+// Package main is the regulator CLI: it carries the acts that the ARTP
+// contract places outside the API gateway — validating and rejecting a
+// reverse request (§6 of the guide), both reserved to the ARTP. This binary
+// opens no HTTP server: it opens the pool, performs one act, and exits.
 //
-//	artp reverse lister              liste les demandes de reverse et leur statut
-//	artp reverse valider <id>        valide — crée la Demande REVERSE à CONFIRMATION
-//	artp reverse rejeter <id>        rejette
-//	artp seed                        rejoue le seed (idempotent)
+//	artp reverse lister              lists reverse requests and their status
+//	artp reverse valider <id>        validates — creates the REVERSE Request at CONFIRMATION
+//	artp reverse rejeter <id>        rejects
+//	artp seed                        replays the seed (idempotent)
 package main
 
 import (
@@ -22,19 +22,19 @@ import (
 )
 
 func main() {
-	if err := executer(os.Args[1:]); err != nil {
+	if err := execute(os.Args[1:]); err != nil {
 		fmt.Fprintln(os.Stderr, "artp : "+err.Error())
 		os.Exit(1)
 	}
 }
 
-func executer(args []string) error {
+func execute(args []string) error {
 	if len(args) == 0 {
 		return usage()
 	}
 
-	// Pas d'arguments CLEF=valeur ici : ils entreraient en collision avec les
-	// sous-commandes. Le fichier .env — ou ENV_FILE — reste lu.
+	// No KEY=value arguments here: they would collide with the
+	// subcommands. The .env file — or ENV_FILE — is still read.
 	if err := config.LoadEnvFile(); err != nil {
 		return err
 	}
@@ -52,7 +52,7 @@ func executer(args []string) error {
 
 	switch args[0] {
 	case "reverse":
-		return executerReverse(ctx, db, args[1:])
+		return executeReverse(ctx, db, args[1:])
 	case "seed":
 		if err := seed.Run(ctx, db); err != nil {
 			return fmt.Errorf("seed : %w", err)
@@ -64,20 +64,20 @@ func executer(args []string) error {
 	}
 }
 
-func executerReverse(ctx context.Context, db *persistence.DB, args []string) error {
+func executeReverse(ctx context.Context, db *persistence.DB, args []string) error {
 	if len(args) == 0 {
 		return usage()
 	}
 
 	switch args[0] {
 	case "lister":
-		return listerReverses(ctx, db)
+		return listReverses(ctx, db)
 	case "valider":
 		id, err := argID(args)
 		if err != nil {
 			return err
 		}
-		if err := engine.ValiderReverse(ctx, db, id); err != nil {
+		if err := engine.ValidateReverse(ctx, db, id); err != nil {
 			return fmt.Errorf("validation de la demande de reverse %s : %w", id, err)
 		}
 		fmt.Printf("demande de reverse %s validée : Demande REVERSE créée à CONFIRMATION\n", id)
@@ -87,7 +87,7 @@ func executerReverse(ctx context.Context, db *persistence.DB, args []string) err
 		if err != nil {
 			return err
 		}
-		if err := engine.RejeterReverse(ctx, db, id); err != nil {
+		if err := engine.RejectReverse(ctx, db, id); err != nil {
 			return fmt.Errorf("rejet de la demande de reverse %s : %w", id, err)
 		}
 		fmt.Printf("demande de reverse %s rejetée\n", id)
@@ -104,7 +104,7 @@ func argID(args []string) (string, error) {
 	return args[1], nil
 }
 
-func listerReverses(ctx context.Context, db *persistence.DB) error {
+func listReverses(ctx context.Context, db *persistence.DB) error {
 	rows, err := db.Pool.Query(ctx,
 		`SELECT id, numero, operateur_id, statut, date_demande
 		   FROM reverse_request ORDER BY date_demande`)
@@ -115,13 +115,13 @@ func listerReverses(ctx context.Context, db *persistence.DB) error {
 
 	n := 0
 	for rows.Next() {
-		var id, numero, operateurID, statut string
-		var dateDemande time.Time
-		if err := rows.Scan(&id, &numero, &operateurID, &statut, &dateDemande); err != nil {
+		var id, number, operatorID, status string
+		var requestDate time.Time
+		if err := rows.Scan(&id, &number, &operatorID, &status, &requestDate); err != nil {
 			return fmt.Errorf("lecture des demandes de reverse : %w", err)
 		}
-		fmt.Printf("%s\t%s\t%s\t%s\t%s\n", id, numero, operateurID, statut,
-			dateDemande.Format(time.RFC3339))
+		fmt.Printf("%s\t%s\t%s\t%s\t%s\n", id, number, operatorID, status,
+			requestDate.Format(time.RFC3339))
 		n++
 	}
 	if err := rows.Err(); err != nil {

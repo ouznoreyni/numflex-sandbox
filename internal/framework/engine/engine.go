@@ -1,11 +1,11 @@
 // Package engine is the platform engine's framework home: the ticker and its
-// loop, and the two operations (PlaceGelee, PlanifierTransition) the rest of
+// loop, and the two operations (MarketFrozen, ScheduleTransition) the rest of
 // the sandbox calls synchronously between ticks — port.Engine's real
 // implementation. The three behaviours a tick actually performs — expiring
 // overdue steps (ANO-006), applying due convergences (R-10) and the reverse
 // lifecycle reserved to the ARTP (§6) — are internal/usecase/platform
 // interactors; this package only owns their construction and their fixed
-// order inside Tick. ValiderReverse and RejeterReverse stay here as
+// order inside Tick. ValidateReverse and RejectReverse stay here as
 // package-level functions, unchanged in shape, because cmd/artp calls them
 // directly against a *persistence.DB rather than through an *Engine.
 package engine
@@ -37,8 +37,8 @@ type Engine struct {
 }
 
 // New wires an Engine against a real Postgres database — the shape
-// cmd/server/main.go and cmd/artp/main.go (through ValiderReverse and
-// RejeterReverse) have always used.
+// cmd/server/main.go and cmd/artp/main.go (through ValidateReverse and
+// RejectReverse) have always used.
 func New(cfg *config.Config, db *persistence.DB) *Engine {
 	uow := persistence.NewUnitOfWork(db)
 	clk := clock.New(0)
@@ -54,7 +54,7 @@ func New(cfg *config.Config, db *persistence.DB) *Engine {
 		clock:     clk,
 
 		converge: platform.NewConvergePendingTransitions(requests, uow, clk),
-		expire:   platform.NewExpireOverdueSteps(requests, uow, clk, cfg.EtapeTimeout),
+		expire:   platform.NewExpireOverdueSteps(requests, uow, clk, cfg.StepTimeout),
 		reverses: platform.NewAutoValidateReverses(reverse, requests, uow, ids, clk, cfg.ReverseAutoValidation),
 	}
 }
@@ -74,79 +74,76 @@ func (e *Engine) Run(ctx context.Context) {
 	}
 }
 
-// Tick effectue un passage : convergences dues, expirations, actes de l'ARTP.
+// Tick runs one pass: due convergences, expirations, ARTP acts.
 func (e *Engine) Tick(ctx context.Context) error {
-	// Un instant unique pour tout le tick : la convergence remet
-	// date_debut_etape à now(), et si l'expiration recalculait son propre
-	// now() ensuite, une demande qui vient de converger avec un EtapeTimeout
-	// court pourrait à nouveau correspondre au prédicat d'expiration dans le
-	// même passage.
-	debutTick := time.Now()
+	// One single instant for the whole tick: convergence resets
+	// date_debut_etape to now(), and if expiration recomputed its own now()
+	// afterwards, a request that just converged with a short StepTimeout
+	// could match the expiration predicate again within the same pass.
+	tickStart := time.Now()
 
-	gelee, err := e.PlaceGelee(ctx)
+	frozen, err := e.MarketFrozen(ctx)
 	if err != nil {
 		return err
 	}
-	if gelee {
+	if frozen {
 		return nil
 	}
 	if err := e.converge.Execute(ctx); err != nil {
 		return err
 	}
-	if err := e.expire.Execute(ctx, debutTick); err != nil {
+	if err := e.expire.Execute(ctx, tickStart); err != nil {
 		return err
 	}
 	return e.reverses.Execute(ctx)
 }
 
-// PlaceGelee : un incident de type figeSysteme ouvert, chez n'importe quel
-// opérateur, bloque le traitement pour tout le monde (BR-012) — port.Engine's
-// own MarketFrozen, delegated to port.IncidentGateway.MarketFrozen: see that
-// method's own doc comment for why the read lives there rather than on a
-// dedicated port.
-func (e *Engine) PlaceGelee(ctx context.Context) (bool, error) {
+// MarketFrozen: an open figeSysteme incident, at any operator, blocks
+// processing for everyone (BR-012) — port.Engine's own MarketFrozen,
+// delegated to port.IncidentGateway.MarketFrozen: see that method's own doc
+// comment for why the read lives there rather than on a dedicated port.
+func (e *Engine) MarketFrozen(ctx context.Context) (bool, error) {
 	return e.incidents.MarketFrozen(ctx)
 }
 
-// PlanifierTransition marque l'étape courante comme traitée et fixe la date à
-// laquelle la transition sera réellement appliquée. Entre les deux, la demande
-// continue de présenter l'étape précédente — c'est le comportement mesuré (R-10).
-// port.Engine's own ScheduleTransition.
-func (e *Engine) PlanifierTransition(ctx context.Context, demandeID string) error {
-	// Fenêtre nulle : la transition s'applique dans la requête, de sorte que le
-	// DTO relu par le handler porte l'étape SUIVANTE. C'est ce que rendent les
-	// captures du 2026-08-27 — /acceptation répond DESACTIVATION, /traitement
-	// sur DESACTIVATION répond ACTIVATION, la dernière confirmation répond
-	// COMPLETION — et c'est le défaut.
+// ScheduleTransition marks the current step as processed and fixes the date
+// at which the transition will actually apply. Between the two, the request
+// keeps presenting the previous step — this is the measured behaviour
+// (R-10). port.Engine's own ScheduleTransition.
+func (e *Engine) ScheduleTransition(ctx context.Context, requestID string) error {
+	// Zero window: the transition applies within the request, so the DTO the
+	// handler reads back carries the NEXT step. This is what the 2026-08-27
+	// captures show — /acceptation answers DESACTIVATION, /traitement on
+	// DESACTIVATION answers ACTIVATION, the last confirmation answers
+	// COMPLETION — and it is the default.
 	//
-	// Fenêtre non nulle : la transition est planifiée et le moteur l'applique
-	// plus tard ; la réponse porte alors l'étape précédente. C'est le
-	// comportement mesuré au SIT v0.3 (R-10), conservé pour qui doit éprouver
-	// son intégration contre cette version-là de la plateforme.
+	// Non-zero window: the transition is scheduled and the engine applies it
+	// later; the response then carries the previous step. This is the
+	// behaviour measured at SIT v0.3 (R-10), kept for whoever must test
+	// their integration against that version of the platform.
 	if e.cfg.ConvergenceMax <= 0 {
-		return platform.ApplyTransition(ctx, e.uow, e.clock, demandeID, "ACTION")
+		return platform.ApplyTransition(ctx, e.uow, e.clock, requestID, "ACTION")
 	}
 
-	delai := e.cfg.ConvergenceMin
-	if ecart := e.cfg.ConvergenceMax - e.cfg.ConvergenceMin; ecart > 0 {
-		delai += time.Duration(rand.Int63n(int64(ecart)))
+	delay := e.cfg.ConvergenceMin
+	if spread := e.cfg.ConvergenceMax - e.cfg.ConvergenceMin; spread > 0 {
+		delay += time.Duration(rand.Int63n(int64(spread)))
 	}
 	return e.uow.Do(ctx, func(repos port.Repositories) error {
-		return repos.Requests.ScheduleTransitionAt(ctx, demandeID, delai.Seconds())
+		return repos.Requests.ScheduleTransitionAt(ctx, requestID, delay.Seconds())
 	})
 }
 
-// ValiderReverse est un acte de l'ARTP, hors périmètre de l'API gateway
-// (§6) : cmd/artp l'appelle directement contre un *persistence.DB, sans
-// passer par un *Engine.
-func ValiderReverse(ctx context.Context, db *persistence.DB, reverseID string) error {
+// ValidateReverse is an ARTP act, outside the API gateway's scope (§6):
+// cmd/artp calls it directly against a *persistence.DB, without going
+// through an *Engine.
+func ValidateReverse(ctx context.Context, db *persistence.DB, reverseID string) error {
 	uow := persistence.NewUnitOfWork(db)
 	return platform.ValidateReverse(ctx, uow, identifier.NewGenerator(), clock.New(0), reverseID)
 }
 
-// RejeterReverse est également un acte de l'ARTP, appelé directement par
-// cmd/artp.
-func RejeterReverse(ctx context.Context, db *persistence.DB, reverseID string) error {
+// RejectReverse is likewise an ARTP act, called directly by cmd/artp.
+func RejectReverse(ctx context.Context, db *persistence.DB, reverseID string) error {
 	uow := persistence.NewUnitOfWork(db)
 	return platform.RejectReverse(ctx, uow, reverseID)
 }

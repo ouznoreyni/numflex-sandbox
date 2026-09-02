@@ -16,28 +16,28 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// typeIncidentGateway and typeIncidentTechnique are
-// internal/framework/seed.TypeIncidentGateway and .TypeIncidentTechnique,
-// recopiés en littéral : un test de contrôleur ne peut pas importer
-// internal/framework (règle de dépendance) — même précédent
-// qu'operateurOrange (creation_particulier_test.go) et operateurExpresso
+// incidentTypeGateway and incidentTypeTechnical are
+// internal/framework/seed.IncidentTypeGatewayID and .IncidentTypeTechnicalID,
+// copied as literals: a controller test cannot import
+// internal/framework (dependency rule) — the same precedent as
+// operatorOrange (creation_particulier_test.go) and operatorExpresso
 // (confirmation_boundary_test.go).
 const (
-	typeIncidentGateway   = "65abc456def001"
-	typeIncidentTechnique = "65abc456def002"
+	incidentTypeGateway   = "65abc456def001"
+	incidentTypeTechnical = "65abc456def002"
 )
 
-func TestDeclarationIncidentGateway(t *testing.T) {
+func TestDeclareIncidentGateway(t *testing.T) {
 	h := routerharness.NewRouterHarness(t)
-	rep, corps := h.Appel(http.MethodPost, "/api/gateway/v1/incidents/gateway",
-		h.Jeton("orange", "orange2026"),
+	resp, body := h.Call(http.MethodPost, "/api/gateway/v1/incidents/gateway",
+		h.Token("orange", "orange2026"),
 		map[string]any{"commentaire": "Timeout de connexion à l'API gateway numFlex"})
 
-	require.Equal(t, http.StatusCreated, rep.StatusCode)
-	require.Equal(t, "Incident déclaré avec succès", corps["message"])
+	require.Equal(t, http.StatusCreated, resp.StatusCode)
+	require.Equal(t, "Incident déclaré avec succès", body["message"])
 
-	data := corps["data"].(map[string]any)
-	require.Equal(t, typeIncidentGateway, data["typeIncidentId"])
+	data := body["data"].(map[string]any)
+	require.Equal(t, incidentTypeGateway, data["typeIncidentId"])
 	require.Equal(t, "Gateway", data["type"])
 	require.Equal(t, false, data["figeSysteme"])
 	require.Equal(t, "Timeout de connexion à l'API gateway numFlex", data["description"])
@@ -45,143 +45,143 @@ func TestDeclarationIncidentGateway(t *testing.T) {
 	require.Equal(t, "ORANGE", data["operateur"].(map[string]any)["nom"])
 }
 
-func TestDeclarationIncidentInterneGelLaPlace(t *testing.T) {
-	// BR-012 : un incident interne bloque le traitement pour tous les opérateurs.
+func TestDeclareInternalIncidentFreezesTheMarket(t *testing.T) {
+	// BR-012: an internal incident blocks processing for every operator.
 	h := routerharness.NewRouterHarness(t)
-	id := creerPortage(h, "771000001")
-	avancerA(h, id, "DESACTIVATION")
+	id := createPorting(h, "771000001")
+	advanceTo(h, id, "DESACTIVATION")
 
-	rep, corps := h.Appel(http.MethodPost, "/api/gateway/v1/incidents/interne",
-		h.Jeton("expresso", "expresso2026"),
+	resp, body := h.Call(http.MethodPost, "/api/gateway/v1/incidents/interne",
+		h.Token("expresso", "expresso2026"),
 		map[string]any{"commentaire": "Panne du système de routage interne, portages bloqués"})
-	require.Equal(t, http.StatusCreated, rep.StatusCode)
-	require.Equal(t, true, corps["data"].(map[string]any)["figeSysteme"])
-	incidentID := corps["data"].(map[string]any)["id"].(string)
+	require.Equal(t, http.StatusCreated, resp.StatusCode)
+	require.Equal(t, true, body["data"].(map[string]any)["figeSysteme"])
+	incidentID := body["data"].(map[string]any)["id"].(string)
 
-	// ORANGE, étranger à l'incident, ne peut plus traiter.
-	rep, _ = h.Appel(http.MethodPost, "/api/gateway/v1/demandes/traitement",
-		h.Jeton("orange", "orange2026"), map[string]any{"idDemande": id})
-	require.Equal(t, http.StatusInternalServerError, rep.StatusCode)
+	// ORANGE, a stranger to the incident, can no longer process.
+	resp, _ = h.Call(http.MethodPost, "/api/gateway/v1/demandes/traitement",
+		h.Token("orange", "orange2026"), map[string]any{"idDemande": id})
+	require.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 
-	// Résolution par le déclarant : la place repart.
-	rep, _ = h.Appel(http.MethodPost,
+	// Resolution by the declarer: the market unfreezes.
+	resp, _ = h.Call(http.MethodPost,
 		"/api/gateway/v1/incidents/interne/"+incidentID+"/resoudre",
-		h.Jeton("expresso", "expresso2026"), map[string]any{"commentaire": "Service rétabli"})
-	require.Equal(t, http.StatusOK, rep.StatusCode)
+		h.Token("expresso", "expresso2026"), map[string]any{"commentaire": "Service rétabli"})
+	require.Equal(t, http.StatusOK, resp.StatusCode)
 
-	rep, _ = h.Appel(http.MethodPost, "/api/gateway/v1/demandes/traitement",
-		h.Jeton("orange", "orange2026"), map[string]any{"idDemande": id})
-	require.Equal(t, http.StatusOK, rep.StatusCode)
+	resp, _ = h.Call(http.MethodPost, "/api/gateway/v1/demandes/traitement",
+		h.Token("orange", "orange2026"), map[string]any{"idDemande": id})
+	require.Equal(t, http.StatusOK, resp.StatusCode)
 }
 
-func TestSeulLeDeclarantResout(t *testing.T) {
+func TestOnlyTheDeclarerResolves(t *testing.T) {
 	h := routerharness.NewRouterHarness(t)
-	_, corps := h.Appel(http.MethodPost, "/api/gateway/v1/incidents/gateway",
-		h.Jeton("orange", "orange2026"), map[string]any{"commentaire": "timeout"})
-	id := corps["data"].(map[string]any)["id"].(string)
+	_, body := h.Call(http.MethodPost, "/api/gateway/v1/incidents/gateway",
+		h.Token("orange", "orange2026"), map[string]any{"commentaire": "timeout"})
+	id := body["data"].(map[string]any)["id"].(string)
 
-	rep, _ := h.Appel(http.MethodPost, "/api/gateway/v1/incidents/gateway/"+id+"/resoudre",
-		h.Jeton("yas", "yas2026"), map[string]any{"commentaire": "rétabli"})
-	require.Equal(t, http.StatusInternalServerError, rep.StatusCode)
+	resp, _ := h.Call(http.MethodPost, "/api/gateway/v1/incidents/gateway/"+id+"/resoudre",
+		h.Token("yas", "yas2026"), map[string]any{"commentaire": "rétabli"})
+	require.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 }
 
-func TestResolutionParLeMauvaisSegment(t *testing.T) {
+func TestResolveByTheWrongSegment(t *testing.T) {
 	h := routerharness.NewRouterHarness(t)
-	_, corps := h.Appel(http.MethodPost, "/api/gateway/v1/incidents/interne",
-		h.Jeton("orange", "orange2026"), map[string]any{"commentaire": "panne"})
-	id := corps["data"].(map[string]any)["id"].(string)
+	_, body := h.Call(http.MethodPost, "/api/gateway/v1/incidents/interne",
+		h.Token("orange", "orange2026"), map[string]any{"commentaire": "panne"})
+	id := body["data"].(map[string]any)["id"].(string)
 
-	rep, corps2 := h.Appel(http.MethodPost, "/api/gateway/v1/incidents/gateway/"+id+"/resoudre",
-		h.Jeton("orange", "orange2026"), map[string]any{"commentaire": "rétabli"})
+	resp, corps2 := h.Call(http.MethodPost, "/api/gateway/v1/incidents/gateway/"+id+"/resoudre",
+		h.Token("orange", "orange2026"), map[string]any{"commentaire": "rétabli"})
 
-	// Le bon endpoint est porté par le detail du problem+json, pas par un
-	// fieldErrors : `id` est une variable de chemin, pas un champ de DTO, et une
-	// pile Spring ne rend une constraint-violation que pour la bean validation.
-	// L'exigence du guide (§7.12) porte sur l'indication, pas sur son support.
-	require.Equal(t, http.StatusBadRequest, rep.StatusCode)
+	// The right endpoint is carried by the problem+json's detail, not by a
+	// fieldErrors: `id` is a path variable, not a DTO field, and a Spring
+	// stack only renders a constraint-violation for bean validation. The
+	// guide's requirement (§7.12) is about the indication, not its carrier.
+	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
 	require.Contains(t, corps2["detail"], "/api/gateway/v1/incidents/interne")
 }
 
-func TestUnSeulIncidentInterneOuvertParOperateur(t *testing.T) {
+func TestOnlyOneOpenInternalIncidentPerOperator(t *testing.T) {
 	h := routerharness.NewRouterHarness(t)
-	jeton := h.Jeton("orange", "orange2026")
+	token := h.Token("orange", "orange2026")
 
-	rep, _ := h.Appel(http.MethodPost, "/api/gateway/v1/incidents/interne", jeton,
+	resp, _ := h.Call(http.MethodPost, "/api/gateway/v1/incidents/interne", token,
 		map[string]any{"commentaire": "panne 1"})
-	require.Equal(t, http.StatusCreated, rep.StatusCode)
+	require.Equal(t, http.StatusCreated, resp.StatusCode)
 
-	rep, _ = h.Appel(http.MethodPost, "/api/gateway/v1/incidents/interne", jeton,
+	resp, _ = h.Call(http.MethodPost, "/api/gateway/v1/incidents/interne", token,
 		map[string]any{"commentaire": "panne 2"})
-	require.Equal(t, http.StatusInternalServerError, rep.StatusCode)
+	require.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 }
 
-// TestPlusieursIncidentsGatewayOuvertsAutorises est le miroir de
-// TestUnSeulIncidentInterneOuvertParOperateur : la règle « un seul incident
-// ouvert par opérateur » (§7.12) ne vaut que pour les incidents internes. Sans
-// ce test, une refonte qui étendrait par erreur la garde `if figeSysteme` aux
-// incidents gateway ne ferait échouer aucun test existant.
-func TestPlusieursIncidentsGatewayOuvertsAutorises(t *testing.T) {
+// TestMultipleOpenGatewayIncidentsAllowed mirrors
+// TestOnlyOneOpenInternalIncidentPerOperator: the rule "one open incident
+// per operator" (§7.12) only holds for internal incidents. Without this
+// test, a refactor that mistakenly extended the `if figeSysteme` guard to
+// gateway incidents would fail no existing test.
+func TestMultipleOpenGatewayIncidentsAllowed(t *testing.T) {
 	h := routerharness.NewRouterHarness(t)
-	jeton := h.Jeton("orange", "orange2026")
+	token := h.Token("orange", "orange2026")
 
-	rep, _ := h.Appel(http.MethodPost, "/api/gateway/v1/incidents/gateway", jeton,
+	resp, _ := h.Call(http.MethodPost, "/api/gateway/v1/incidents/gateway", token,
 		map[string]any{"commentaire": "timeout 1"})
-	require.Equal(t, http.StatusCreated, rep.StatusCode)
+	require.Equal(t, http.StatusCreated, resp.StatusCode)
 
-	rep, _ = h.Appel(http.MethodPost, "/api/gateway/v1/incidents/gateway", jeton,
+	resp, _ = h.Call(http.MethodPost, "/api/gateway/v1/incidents/gateway", token,
 		map[string]any{"commentaire": "timeout 2"})
-	require.Equal(t, http.StatusCreated, rep.StatusCode)
+	require.Equal(t, http.StatusCreated, resp.StatusCode)
 }
 
-func TestMesIncidentsSontCloisonnesParSegmentEtParOperateur(t *testing.T) {
+func TestOwnIncidentsAreSegmentedBySegmentAndOperator(t *testing.T) {
 	h := routerharness.NewRouterHarness(t)
-	h.Appel(http.MethodPost, "/api/gateway/v1/incidents/gateway",
-		h.Jeton("orange", "orange2026"), map[string]any{"commentaire": "timeout"})
-	h.Appel(http.MethodPost, "/api/gateway/v1/incidents/interne",
-		h.Jeton("orange", "orange2026"), map[string]any{"commentaire": "panne"})
+	h.Call(http.MethodPost, "/api/gateway/v1/incidents/gateway",
+		h.Token("orange", "orange2026"), map[string]any{"commentaire": "timeout"})
+	h.Call(http.MethodPost, "/api/gateway/v1/incidents/interne",
+		h.Token("orange", "orange2026"), map[string]any{"commentaire": "panne"})
 
-	jetonOrange := h.Jeton("orange", "orange2026")
-	require.Len(t, h.Liste("/api/gateway/v1/incidents/gateway/mes-incidents", jetonOrange), 1)
-	require.Len(t, h.Liste("/api/gateway/v1/incidents/interne/mes-incidents", jetonOrange), 1)
+	jetonOrange := h.Token("orange", "orange2026")
+	require.Len(t, h.List("/api/gateway/v1/incidents/gateway/mes-incidents", jetonOrange), 1)
+	require.Len(t, h.List("/api/gateway/v1/incidents/interne/mes-incidents", jetonOrange), 1)
 
-	require.Empty(t, h.Liste("/api/gateway/v1/incidents/gateway/mes-incidents",
-		h.Jeton("yas", "yas2026")))
+	require.Empty(t, h.List("/api/gateway/v1/incidents/gateway/mes-incidents",
+		h.Token("yas", "yas2026")))
 }
 
-func TestDeclarationSansTypeIncidentId(t *testing.T) {
-	// §7.12 : le corps ne prend qu'un commentaire ; le type est résolu côté serveur.
+func TestDeclareWithoutTypeIncidentId(t *testing.T) {
+	// §7.12: the body only takes a comment; the type is resolved server-side.
 	h := routerharness.NewRouterHarness(t)
-	rep, corps := h.Appel(http.MethodPost, "/api/gateway/v1/incidents/gateway",
-		h.Jeton("yas", "yas2026"),
-		map[string]any{"commentaire": "test", "typeIncidentId": typeIncidentTechnique})
+	resp, body := h.Call(http.MethodPost, "/api/gateway/v1/incidents/gateway",
+		h.Token("yas", "yas2026"),
+		map[string]any{"commentaire": "test", "typeIncidentId": incidentTypeTechnical})
 
-	require.Equal(t, http.StatusCreated, rep.StatusCode)
-	// Le typeIncidentId fourni est ignoré : c'est l'endpoint qui décide.
-	require.Equal(t, typeIncidentGateway, corps["data"].(map[string]any)["typeIncidentId"])
+	require.Equal(t, http.StatusCreated, resp.StatusCode)
+	// The supplied typeIncidentId is ignored: it is the endpoint that decides.
+	require.Equal(t, incidentTypeGateway, body["data"].(map[string]any)["typeIncidentId"])
 }
 
-// TestResolutionParLeMauvaisSegmentIndiqueLeBonEndpoint — §7.12 du guide :
-// « Résoudre un incident via le mauvais segment renvoie une erreur
-// VALIDATION_ECHOUEE indiquant le bon endpoint. » Le code seul ne suffit pas :
-// c'est l'indication de l'endpoint que le guide promet, et elle doit atteindre
-// le client, pas rester dans un fieldError que l'enveloppe de contrat jette.
-func TestResolutionParLeMauvaisSegmentIndiqueLeBonEndpoint(t *testing.T) {
-	h := routerharness.NewRouterHarness(t, routerharness.FiabiliteContrat)
-	jeton := h.Jeton("orange", "orange2026")
+// TestResolveByTheWrongSegmentPointsToTheRightEndpoint — guide §7.12:
+// "Resolving an incident via the wrong segment returns a VALIDATION_ECHOUEE
+// error naming the right endpoint." The code alone is not enough: it is the
+// endpoint indication the guide promises, and it must reach the client, not
+// stay in a fieldError the contract envelope discards.
+func TestResolveByTheWrongSegmentPointsToTheRightEndpoint(t *testing.T) {
+	h := routerharness.NewRouterHarness(t, routerharness.ContractFidelity)
+	token := h.Token("orange", "orange2026")
 
-	_, corps := h.Appel(http.MethodPost, "/api/gateway/v1/incidents/gateway", jeton,
+	_, body := h.Call(http.MethodPost, "/api/gateway/v1/incidents/gateway", token,
 		map[string]any{"commentaire": "Timeout de connexion à l'API gateway numFlex"})
-	incidentID := corps["data"].(map[string]any)["id"].(string)
+	incidentID := body["data"].(map[string]any)["id"].(string)
 
-	// L'incident est de catégorie Gateway : le résoudre via /interne est un
-	// mauvais segment.
-	rep, corps := h.Appel(http.MethodPost,
-		"/api/gateway/v1/incidents/interne/"+incidentID+"/resoudre", jeton,
+	// The incident is of category Gateway: resolving it via /interne is the
+	// wrong segment.
+	resp, body := h.Call(http.MethodPost,
+		"/api/gateway/v1/incidents/interne/"+incidentID+"/resoudre", token,
 		map[string]any{"commentaire": "Service rétabli"})
 
-	require.Equal(t, http.StatusBadRequest, rep.StatusCode)
-	require.Equal(t, "VALIDATION_ECHOUEE", corps["code"])
+	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	require.Equal(t, "VALIDATION_ECHOUEE", body["code"])
 	require.Equal(t,
 		"Cet incident se résout via POST /api/gateway/v1/incidents/gateway/{id}/resoudre.",
-		corps["message"])
+		body["message"])
 }

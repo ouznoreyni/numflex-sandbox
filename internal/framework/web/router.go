@@ -96,8 +96,8 @@ func NewRouter(d *Deps) *gin.Engine {
 	// three interactors, the first use-case consumer of port.UnitOfWork. Built
 	// once here, like the four controllers before it.
 	creationCtrl := d.creationController()
-	g.POST("/demandes/particulier", creationCtrl.Particulier)
-	g.POST("/demandes/entreprise", creationCtrl.Entreprise)
+	g.POST("/demandes/particulier", creationCtrl.Individual)
+	g.POST("/demandes/entreprise", creationCtrl.Enterprise)
 	g.POST("/demandes/restitution", creationCtrl.Restitution)
 
 	// Task 12: the seven read queues — a controller delegating to seven
@@ -105,14 +105,14 @@ func NewRouter(d *Deps) *gin.Engine {
 	// through RequestGateway.Get (already built for creation). Built once
 	// here, like the five controllers before it.
 	queryCtrl := d.queryController()
-	g.GET("/demandes/mes-demandes", queryCtrl.MesDemandes)
-	g.GET("/demandes/a-accepter", queryCtrl.AAccepter)
-	g.GET("/demandes/a-accepter/:id", queryCtrl.AAccepterDetail)
-	g.GET("/demandes/a-traiter", queryCtrl.ATraiter)
-	g.GET("/demandes/a-traiter/:id", queryCtrl.ATraiterDetail)
-	g.GET("/demandes/a-confirmer", queryCtrl.AConfirmer)
-	g.GET("/demandes/a-confirmer/:id", queryCtrl.AConfirmerDetail)
-	g.GET("/demandes/deja-confirmees", queryCtrl.DejaConfirmees)
+	g.GET("/demandes/mes-demandes", queryCtrl.Own)
+	g.GET("/demandes/a-accepter", queryCtrl.ToAccept)
+	g.GET("/demandes/a-accepter/:id", queryCtrl.ToAcceptDetail)
+	g.GET("/demandes/a-traiter", queryCtrl.ToProcess)
+	g.GET("/demandes/a-traiter/:id", queryCtrl.ToProcessDetail)
+	g.GET("/demandes/a-confirmer", queryCtrl.ToConfirm)
+	g.GET("/demandes/a-confirmer/:id", queryCtrl.ToConfirmDetail)
+	g.GET("/demandes/deja-confirmees", queryCtrl.AlreadyConfirmed)
 	g.GET("/demandes/in", queryCtrl.In)
 	g.GET("/demandes/out", queryCtrl.Out)
 
@@ -121,8 +121,8 @@ func NewRouter(d *Deps) *gin.Engine {
 	// same RequestGateway creation and reading use. Built once here, like the
 	// six controllers before it.
 	acceptCtrl := d.acceptanceController()
-	g.POST("/demandes/acceptation", acceptCtrl.Acceptation)
-	g.POST("/demandes/:id/acceptation", acceptCtrl.AcceptationFlotte)
+	g.POST("/demandes/acceptation", acceptCtrl.Accept)
+	g.POST("/demandes/:id/acceptation", acceptCtrl.AcceptFleet)
 
 	// Task 15: confirmation, processing and cancellation — a controller
 	// delegating to three interactors (internal/usecase/porting), above the
@@ -131,20 +131,20 @@ func NewRouter(d *Deps) *gin.Engine {
 	// once here, like those seven.
 	portingCtrl := d.portingController()
 	g.POST("/demandes/a-confirmer", portingCtrl.Confirmation)
-	g.POST("/demandes/traitement", portingCtrl.Traitement)
-	g.POST("/demandes/:id/annuler", portingCtrl.Annulation)
+	g.POST("/demandes/traitement", portingCtrl.Process)
+	g.POST("/demandes/:id/annuler", portingCtrl.Cancel)
 
 	// Task 16: the six incident routes (§7.12) — a controller delegating to
 	// three interactors (internal/usecase/incident), shared by the gateway and
 	// internal families, above an IncidentGateway. Built once here, like the
 	// eight controllers before it.
 	incidentCtrl := d.incidentController()
-	g.POST("/incidents/gateway", incidentCtrl.DeclarerGateway)
-	g.POST("/incidents/interne", incidentCtrl.DeclarerInterne)
-	g.POST("/incidents/gateway/:id/resoudre", incidentCtrl.ResoudreGateway)
-	g.POST("/incidents/interne/:id/resoudre", incidentCtrl.ResoudreInterne)
-	g.GET("/incidents/gateway/mes-incidents", incidentCtrl.MesIncidentsGateway)
-	g.GET("/incidents/interne/mes-incidents", incidentCtrl.MesIncidentsInterne)
+	g.POST("/incidents/gateway", incidentCtrl.DeclareGateway)
+	g.POST("/incidents/interne", incidentCtrl.DeclareInternal)
+	g.POST("/incidents/gateway/:id/resoudre", incidentCtrl.ResolveGateway)
+	g.POST("/incidents/interne/:id/resoudre", incidentCtrl.ResolveInternal)
+	g.GET("/incidents/gateway/mes-incidents", incidentCtrl.OwnGateway)
+	g.GET("/incidents/interne/mes-incidents", incidentCtrl.OwnInternal)
 
 	// Task 16: both reverse routes (§6) — a controller delegating to two
 	// interactors (internal/usecase/reverse), above a NumberGateway (the same
@@ -152,8 +152,8 @@ func NewRouter(d *Deps) *gin.Engine {
 	// like the nine controllers before it. No cancellation route: the guide
 	// excludes it explicitly for a reverse.
 	reverseCtrl := d.reverseController()
-	g.POST("/reverse-requests", reverseCtrl.Soumission)
-	g.GET("/reverse-requests/mes-demandes", reverseCtrl.MesDemandes)
+	g.POST("/reverse-requests", reverseCtrl.Submit)
+	g.GET("/reverse-requests/mes-demandes", reverseCtrl.Own)
 
 	// Outside the gateway, and outside the ARTP contract: purging the test
 	// data. The group is mounted only when SANDBOX_ADMIN asks for it —

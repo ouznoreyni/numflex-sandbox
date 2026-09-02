@@ -33,14 +33,14 @@ func (g *ReverseGateway) Create(ctx context.Context, in port.ReverseCreateInput)
 // Get reads a reverse request back — moved verbatim from the deleted
 // internal/api/reverse.go's reverseRequestDTO.
 func (g *ReverseGateway) Get(ctx context.Context, id string) (port.ReverseView, bool, error) {
-	var numero, statut, operateurID, operateurNom string
-	var dateDemande time.Time
+	var msisdn, status, operatorID, operatorName string
+	var requestDate time.Time
 	err := g.db.QueryRow(ctx, `
 		SELECT rr.numero, rr.statut, rr.date_demande, op.id, op.nom
 		  FROM reverse_request rr
 		  JOIN operateur op ON op.id = rr.operateur_id
 		 WHERE rr.id = $1`, id).
-		Scan(&numero, &statut, &dateDemande, &operateurID, &operateurNom)
+		Scan(&msisdn, &status, &requestDate, &operatorID, &operatorName)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return port.ReverseView{}, false, nil
 	}
@@ -48,8 +48,8 @@ func (g *ReverseGateway) Get(ctx context.Context, id string) (port.ReverseView, 
 		return port.ReverseView{}, false, err
 	}
 	return port.ReverseView{
-		ID: id, MSISDN: numero, Status: statut, RequestDate: dateDemande,
-		OperatorID: operateurID, OperatorName: operateurNom,
+		ID: id, MSISDN: msisdn, Status: status, RequestDate: requestDate,
+		OperatorID: operatorID, OperatorName: operatorName,
 	}, true, nil
 }
 
@@ -83,7 +83,7 @@ func (g *ReverseGateway) Own(ctx context.Context, operatorID string, page, size 
 
 // LockPending reads a reverse request's number, operator and status with a
 // row lock — moved verbatim from the deleted internal/engine/reverse.go's
-// ValiderReverse, whose own SELECT ... FOR UPDATE opened every validation
+// ValidateReverse, whose own SELECT ... FOR UPDATE opened every validation
 // directly against a *pgx.Tx.
 func (g *ReverseGateway) LockPending(ctx context.Context, id string) (msisdn, operatorID, status string, err error) {
 	err = g.db.QueryRow(ctx,
@@ -93,7 +93,7 @@ func (g *ReverseGateway) LockPending(ctx context.Context, id string) (msisdn, op
 }
 
 // MarkValidated records that id was validated into demandeID — moved
-// verbatim from ValiderReverse's own final tx.Exec.
+// verbatim from ValidateReverse's own final tx.Exec.
 func (g *ReverseGateway) MarkValidated(ctx context.Context, id, demandeID string, now time.Time) error {
 	_, err := g.db.Exec(ctx,
 		`UPDATE reverse_request SET statut='VALIDE', date_decision=$2, demande_id=$3
@@ -102,7 +102,7 @@ func (g *ReverseGateway) MarkValidated(ctx context.Context, id, demandeID string
 }
 
 // Reject marks id REJETE without creating any Demande — moved verbatim from
-// the deleted internal/engine/reverse.go's RejeterReverse.
+// the deleted internal/engine/reverse.go's RejectReverse.
 func (g *ReverseGateway) Reject(ctx context.Context, id string) error {
 	_, err := g.db.Exec(ctx,
 		`UPDATE reverse_request SET statut='REJETE', date_decision=now()
@@ -111,14 +111,14 @@ func (g *ReverseGateway) Reject(ctx context.Context, id string) error {
 }
 
 // CurrentOperatorFor reads a number's current holder — the one field
-// ValiderReverse needs from the registry, kept here (rather than on
+// ValidateReverse needs from the registry, kept here (rather than on
 // NumberGateway) so it stays inside the same transaction as LockPending's
 // own lock.
 func (g *ReverseGateway) CurrentOperatorFor(ctx context.Context, msisdn string) (string, error) {
-	var operateurActuel string
+	var currentOperator string
 	err := g.db.QueryRow(ctx,
-		`SELECT operateur_actuel_id FROM numero WHERE msisdn = $1`, msisdn).Scan(&operateurActuel)
-	return operateurActuel, err
+		`SELECT operateur_actuel_id FROM numero WHERE msisdn = $1`, msisdn).Scan(&currentOperator)
+	return currentOperator, err
 }
 
 // OverdueForAutoValidation lists the ids EN_ATTENTE for more than

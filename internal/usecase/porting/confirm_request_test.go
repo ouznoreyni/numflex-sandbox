@@ -20,12 +20,12 @@ func seedConfirmationRequest(f *fixture, mutate ...func(*entity.PortingRequest))
 	return seedRequest(f, all...)
 }
 
-// TestConfirmRequestPortageLeDestinataireEstAutoConfirme is
+// TestConfirmRequestPortingRecipientIsAutoConfirmed is
 // entity.ExpectedConfirmers' PORTAGE rule, exercised end to end: ORANGE
 // (source) confirms, the step stays open (only one of two expected
 // confirmers so far — YAS the recipient is not itself expected); EXPRESSO,
 // the third market operator, settles it.
-func TestConfirmRequestPortageLeDestinataireEstAutoConfirme(t *testing.T) {
+func TestConfirmRequestPortingRecipientIsAutoConfirmed(t *testing.T) {
 	f := newFixture()
 	seedConfirmationRequest(f)
 	f.operators.SeedOperator(orangeID, "ORANGE")
@@ -34,19 +34,19 @@ func TestConfirmRequestPortageLeDestinataireEstAutoConfirme(t *testing.T) {
 
 	_, fault := confirmInteractor(f).Execute(ctxCaller(orangeID), porting.ConfirmRequestInput{RequestID: "d1"})
 	require.Nil(t, fault)
-	require.Empty(t, f.engine.Scheduled, "il manque encore la confirmation d'EXPRESSO")
+	require.Empty(t, f.engine.Scheduled, "EXPRESSO's confirmation is still missing")
 
 	view, fault := confirmInteractor(f).Execute(ctxCaller(expressoID), porting.ConfirmRequestInput{RequestID: "d1"})
 	require.Nil(t, fault)
 	require.Equal(t, "d1", view.ID)
 	require.Equal(t, []string{"d1"}, f.engine.Scheduled,
-		"la dernière confirmation attendue planifie la transition")
+		"the last expected confirmation schedules the transition")
 }
 
-// TestConfirmRequestPortageParLeDestinataireRefuse: YAS, recipient of a
+// TestConfirmRequestPortingByRecipientRefused: YAS, recipient of a
 // PORTAGE, is not an expected confirmer — entity.ExpectedConfirmers excludes
 // it.
-func TestConfirmRequestPortageParLeDestinataireRefuse(t *testing.T) {
+func TestConfirmRequestPortingByRecipientRefused(t *testing.T) {
 	f := newFixture()
 	seedConfirmationRequest(f)
 	f.operators.SeedOperator(orangeID, "ORANGE")
@@ -58,10 +58,10 @@ func TestConfirmRequestPortageParLeDestinataireRefuse(t *testing.T) {
 	require.Empty(t, f.engine.Scheduled)
 }
 
-// TestConfirmRequestRestitutionExigeLeDestinataire is
+// TestConfirmRequestRestitutionRequiresRecipient is
 // entity.ExpectedConfirmers' RESTITUTION/REVERSE rule: everyone confirms,
 // recipient included.
-func TestConfirmRequestRestitutionExigeLeDestinataire(t *testing.T) {
+func TestConfirmRequestRestitutionRequiresRecipient(t *testing.T) {
 	f := newFixture()
 	seedConfirmationRequest(f, func(pr *entity.PortingRequest) {
 		pr.RequestType = entity.RequestTypeRestitution
@@ -71,15 +71,15 @@ func TestConfirmRequestRestitutionExigeLeDestinataire(t *testing.T) {
 
 	_, fault := confirmInteractor(f).Execute(ctxCaller(orangeID), porting.ConfirmRequestInput{RequestID: "d1"})
 	require.Nil(t, fault)
-	require.Empty(t, f.engine.Scheduled, "YAS, destinataire, doit encore confirmer")
+	require.Empty(t, f.engine.Scheduled, "YAS, the recipient, still needs to confirm")
 
 	_, fault = confirmInteractor(f).Execute(ctxCaller(yasID), porting.ConfirmRequestInput{RequestID: "d1"})
 	require.Nil(t, fault)
 	require.Equal(t, []string{"d1"}, f.engine.Scheduled)
 }
 
-func TestConfirmRequestDoubleConfirmationRefusee(t *testing.T) {
-	// TC-041 : anti-rejeu.
+func TestConfirmRequestDoubleConfirmationRefused(t *testing.T) {
+	// TC-041: anti-replay.
 	f := newFixture()
 	seedConfirmationRequest(f)
 	f.operators.SeedOperator(orangeID, "ORANGE")
@@ -94,9 +94,9 @@ func TestConfirmRequestDoubleConfirmationRefusee(t *testing.T) {
 	require.Contains(t, fault.Message, "déjà confirmé")
 }
 
-func TestConfirmRequestHorsEtapeConfirmationRefuse(t *testing.T) {
+func TestConfirmRequestOutsideConfirmationStepRefused(t *testing.T) {
 	f := newFixture()
-	seedRequest(f) // DESACTIVATION, pas CONFIRMATION
+	seedRequest(f) // DESACTIVATION, not CONFIRMATION
 
 	_, fault := confirmInteractor(f).Execute(ctxCaller(orangeID), porting.ConfirmRequestInput{RequestID: "d1"})
 	require.NotNil(t, fault)
@@ -104,7 +104,7 @@ func TestConfirmRequestHorsEtapeConfirmationRefuse(t *testing.T) {
 	require.Contains(t, fault.Message, "DESACTIVATION")
 }
 
-func TestConfirmRequestTransitionDejaPlanifieeRefuse(t *testing.T) {
+func TestConfirmRequestTransitionAlreadyScheduledRefused(t *testing.T) {
 	f := newFixture()
 	seedConfirmationRequest(f, func(pr *entity.PortingRequest) { pr.PendingTransition = true })
 
@@ -114,20 +114,20 @@ func TestConfirmRequestTransitionDejaPlanifieeRefuse(t *testing.T) {
 	require.Contains(t, fault.Message, "déjà été soldée")
 }
 
-func TestConfirmRequestIdInconnu(t *testing.T) {
+func TestConfirmRequestUnknownID(t *testing.T) {
 	f := newFixture()
 	_, fault := confirmInteractor(f).Execute(ctxCaller(orangeID), porting.ConfirmRequestInput{RequestID: "inconnu"})
 	require.NotNil(t, fault)
 	require.Equal(t, "DEMANDE_NON_TROUVEE", fault.Code)
 }
 
-// TestConfirmRequestEchecEcritureNArretePasAvantLaTransaction est la preuve,
-// au niveau interactor, qu'un échec d'écriture de la confirmation ne va
-// jamais jusqu'à compter les confirmations ni planifier de transition. La
-// preuve qu'un UnitOfWork RÉEL défait vraiment cette écriture vit dans
-// internal/framework/persistence (Postgres, //go:build integration) : un
-// double en mémoire n'annule rien.
-func TestConfirmRequestEchecEcritureNArretePasAvantLaTransaction(t *testing.T) {
+// TestConfirmRequestWriteFailureStopsBeforeTransaction is the proof, at
+// the interactor level, that a confirmation write failure never goes as far
+// as counting confirmations or scheduling a transition. The proof that a
+// REAL UnitOfWork really undoes this write lives in
+// internal/framework/persistence (Postgres, //go:build integration): an
+// in-memory double cancels nothing.
+func TestConfirmRequestWriteFailureStopsBeforeTransaction(t *testing.T) {
 	f := newFixture()
 	seedConfirmationRequest(f)
 	f.operators.SeedOperator(orangeID, "ORANGE")

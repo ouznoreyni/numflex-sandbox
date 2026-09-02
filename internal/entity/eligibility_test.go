@@ -45,7 +45,7 @@ func TestPortingDelayNotRespected(t *testing.T) {
 	e := CheckPortingEligibility(n, orange, yas, DelayBetweenPortings)
 	require.NotNil(t, e)
 	require.Equal(t, "DELAI_PORTAGE_NON_RESPECTE", e.Code)
-	// ANO-002 : ce refus se présente comme une panne serveur.
+	// ANO-002: this rejection presents itself as a server failure.
 	require.Equal(t, "Unexpected runtime exception", e.RealDetail)
 }
 
@@ -76,7 +76,7 @@ func TestRestitutionTooEarly(t *testing.T) {
 	e := CheckRestitutionEligibility(n, DelayBeforeRestitution)
 	require.NotNil(t, e)
 	require.Equal(t, "DELAI_RESTITUTION_NON_RESPECTE", e.Code)
-	// ANO-020 : le code exploitable est enterré dans une chaîne.
+	// ANO-020: the usable code is buried in a string.
 	require.Contains(t, e.RealDetail, "error.numeroRestitutionTooEarly")
 }
 

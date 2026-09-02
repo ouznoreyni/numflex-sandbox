@@ -46,8 +46,8 @@ func NewReferenceController(
 }
 
 type operatorDTO struct {
-	ID  string `json:"id"`
-	Nom string `json:"nom"`
+	ID   string `json:"id"`
+	Name string `json:"nom"`
 }
 
 // Operators handles GET /operateurs.
@@ -59,16 +59,16 @@ func (ctl *ReferenceController) Operators(c *gin.Context) {
 	}
 	dto := make([]operatorDTO, 0, len(out))
 	for _, o := range out {
-		dto = append(dto, operatorDTO{ID: o.ID, Nom: o.Name})
+		dto = append(dto, operatorDTO{ID: o.ID, Name: o.Name})
 	}
 	render(c, ctl.pres.Success(http.StatusOK, "Opérateurs récupérés avec succès", dto))
 }
 
-// motifRejetDTO's field is "motif", not "libelle" — ANO-009, the v2 guide
+// rejectionReasonDTO's field is "motif", not "libelle" — ANO-009, the v2 guide
 // documents it this way.
-type motifRejetDTO struct {
-	ID    string `json:"id"`
-	Motif string `json:"motif"`
+type rejectionReasonDTO struct {
+	ID     string `json:"id"`
+	Reason string `json:"motif"`
 }
 
 // RejectionReasons handles GET /motifs-rejet.
@@ -78,14 +78,14 @@ func (ctl *ReferenceController) RejectionReasons(c *gin.Context) {
 		render(c, ctl.pres.Failure(fault, c.Request.URL.Path))
 		return
 	}
-	dto := make([]motifRejetDTO, 0, len(out))
+	dto := make([]rejectionReasonDTO, 0, len(out))
 	for _, m := range out {
-		dto = append(dto, motifRejetDTO{ID: m.ID, Motif: m.Reason})
+		dto = append(dto, rejectionReasonDTO{ID: m.ID, Reason: m.Reason})
 	}
 	render(c, ctl.pres.Success(http.StatusOK, "Motifs de rejet récupérés avec succès", dto))
 }
 
-type typeDemandeDTO struct {
+type requestTypeDTO struct {
 	ID   string `json:"id"`
 	Type string `json:"type"`
 }
@@ -97,9 +97,9 @@ func (ctl *ReferenceController) RequestTypes(c *gin.Context) {
 		render(c, ctl.pres.Failure(fault, c.Request.URL.Path))
 		return
 	}
-	dto := make([]typeDemandeDTO, 0, len(out))
+	dto := make([]requestTypeDTO, 0, len(out))
 	for _, t := range out {
-		dto = append(dto, typeDemandeDTO{ID: t.ID, Type: t.Type})
+		dto = append(dto, requestTypeDTO{ID: t.ID, Type: t.Type})
 	}
 	render(c, ctl.pres.Success(http.StatusOK, "Types de demande récupérés avec succès", dto))
 }
@@ -125,7 +125,7 @@ func (ctl *ReferenceController) Processes(c *gin.Context) {
 
 type typeIncidentDTO struct {
 	ID          string `json:"id"`
-	Libelle     string `json:"libelle"`
+	Label       string `json:"libelle"`
 	FigeSysteme bool   `json:"figeSysteme"`
 }
 
@@ -138,7 +138,7 @@ func (ctl *ReferenceController) IncidentTypes(c *gin.Context) {
 	}
 	dto := make([]typeIncidentDTO, 0, len(out))
 	for _, ti := range out {
-		dto = append(dto, typeIncidentDTO{ID: ti.ID, Libelle: ti.Label, FigeSysteme: ti.SystemLocked})
+		dto = append(dto, typeIncidentDTO{ID: ti.ID, Label: ti.Label, FigeSysteme: ti.SystemLocked})
 	}
 	render(c, ctl.pres.Success(http.StatusOK, "Types d'incident récupérés avec succès", dto))
 }

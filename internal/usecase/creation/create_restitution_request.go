@@ -57,10 +57,9 @@ func (i *CreateRestitutionRequestInteractor) Execute(
 		return port.RequestView{}, entity.IncorrectSourceOperator()
 	}
 
-	// [HYP] Le guide ne tranche pas la répartition des rôles sur une
-	// restitution ; le projet a choisi que l'appelant doit être l'opérateur
-	// d'origine du numéro et devient destinataire (il récupère le numéro).
-	// Voir §9.4 de la spec.
+	// [HYP] The guide does not settle role assignment on a restitution; the
+	// project chose that the caller must be the number's origin operator and
+	// becomes the recipient (it gets the number back). See §9.4 of the spec.
 	caller := port.CallerFromContext(ctx)
 	if state.OriginOperatorID != caller.OperatorID {
 		return port.RequestView{}, entity.RequestAccessDenied(
@@ -75,11 +74,11 @@ func (i *CreateRestitutionRequestInteractor) Execute(
 	now := i.clock.Now()
 
 	err = i.uow.Do(ctx, func(repos port.Repositories) error {
-		// operateur_source_id = détenteur actuel (il rend le numéro) ;
-		// operateur_destinataire_id = createur_operateur_id = opérateur
-		// d'origine (appelant, il récupère le numéro). Processus et
-		// RoutingInfo restent nil : une restitution n'a ni prefixe de
-		// routage ni dimension PREPAID/POSTPAID avant sa COMPLETION.
+		// operateur_source_id = current holder (it gives back the number);
+		// operateur_destinataire_id = createur_operateur_id = origin
+		// operator (the caller, it gets the number back). Process and
+		// RoutingInfo stay nil: a restitution has neither a routing prefix
+		// nor a PREPAID/POSTPAID dimension before its COMPLETION.
 		if err := repos.Requests.Create(ctx, port.CreateRequestInput{
 			ID: id, MSISDN: in.MSISDN,
 			SubscriberType:   string(entity.SubscriberIndividual),

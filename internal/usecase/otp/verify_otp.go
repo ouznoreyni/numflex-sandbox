@@ -57,8 +57,8 @@ func (i *VerifyOTPInteractor) Execute(ctx context.Context, in VerifyOTPInput) *e
 		return entity.OTPExpired()
 	}
 	if in.Code != stored.Code {
-		// L'échec de cet incrément ne peut pas être avalé : sans lui, la limite
-		// de trois tentatives cesse silencieusement de s'appliquer.
+		// A failure of this increment cannot be swallowed: without it, the
+		// three-attempt limit silently stops applying.
 		if err := i.gateway.IncrementAttempts(ctx, in.MSISDN); err != nil {
 			return entity.InternalError("incrément des tentatives OTP")
 		}

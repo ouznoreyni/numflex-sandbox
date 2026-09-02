@@ -23,94 +23,95 @@ import (
 	"github.com/ouznoreyni/numflex-sandbox/internal/testsupport/routerharness"
 )
 
-func TestAuthentificationNominale(t *testing.T) {
+func TestAuthenticationNominal(t *testing.T) {
 	h := routerharness.NewRouterHarness(t)
 	for _, c := range []struct{ user, pass string }{
 		{"orange", "orange2026"},
 		{"yas", "yas2026"},
 		{"expresso", "expresso2026"},
 	} {
-		require.NotEmpty(t, h.Jeton(c.user, c.pass), c.user)
+		require.NotEmpty(t, h.Token(c.user, c.pass), c.user)
 	}
 }
 
-func TestAuthentificationMauvaisMotDePasse(t *testing.T) {
+func TestAuthenticationWrongPassword(t *testing.T) {
 	h := routerharness.NewRouterHarness(t)
-	rep, corps := h.Appel(http.MethodPost, "/api/authenticate", "", map[string]any{
+	resp, body := h.Call(http.MethodPost, "/api/authenticate", "", map[string]any{
 		"username": "yas", "password": "faux", "rememberMe": false,
 	})
-	// ANO-016 : l'échec d'authentification sort hors enveloppe.
-	require.Equal(t, http.StatusUnauthorized, rep.StatusCode)
-	require.NotContains(t, corps, "success")
-	require.NotContains(t, corps, "code")
+	// ANO-016: an authentication failure comes out outside the envelope.
+	require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+	require.NotContains(t, body, "success")
+	require.NotContains(t, body, "code")
 }
 
-func TestGetAuthenticateAvecJetonValide(t *testing.T) {
+func TestGetAuthenticateWithValidToken(t *testing.T) {
 	h := routerharness.NewRouterHarness(t)
-	rep := h.Brut(http.MethodGet, "/api/authenticate", h.Jeton("yas", "yas2026"), nil)
-	require.Equal(t, http.StatusNoContent, rep.StatusCode)
+	resp := h.Raw(http.MethodGet, "/api/authenticate", h.Token("yas", "yas2026"), nil)
+	require.Equal(t, http.StatusNoContent, resp.StatusCode)
 }
 
-func TestJetonAbsentRendEnveloppeAccesInterdit(t *testing.T) {
+func TestMissingTokenReturnsAccessForbiddenEnvelope(t *testing.T) {
 	h := routerharness.NewRouterHarness(t)
-	rep, corps := h.Appel(http.MethodGet, "/api/gateway/v1/operateurs", "", nil)
+	resp, body := h.Call(http.MethodGet, "/api/gateway/v1/operateurs", "", nil)
 
-	require.Equal(t, http.StatusUnauthorized, rep.StatusCode)
-	require.Equal(t, false, corps["success"])
-	require.Equal(t, "ACCES_INTERDIT", corps["code"])
+	require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+	require.Equal(t, false, body["success"])
+	require.Equal(t, "ACCES_INTERDIT", body["code"])
 	require.Equal(t,
 		"Token JWT absent, invalide ou expiré. Veuillez vous authentifier à nouveau.",
-		corps["message"])
+		body["message"])
 }
 
-func TestJetonInvalideRendCorpsVideSansContentType(t *testing.T) {
-	// ANO-008 : jeton invalide → 401, corps vide, aucun Content-Type.
+func TestInvalidTokenReturnsEmptyBodyWithoutContentType(t *testing.T) {
+	// ANO-008: invalid token → 401, empty body, no Content-Type.
 	h := routerharness.NewRouterHarness(t)
-	rep := h.Brut(http.MethodGet, "/api/gateway/v1/operateurs", "jeton.bidon.xxx", nil)
+	resp := h.Raw(http.MethodGet, "/api/gateway/v1/operateurs", "token.bogus.xxx", nil)
 
-	require.Equal(t, http.StatusUnauthorized, rep.StatusCode)
-	require.Equal(t, "", rep.Header.Get("Content-Type"))
-	require.Equal(t, int64(0), rep.ContentLength)
+	require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+	require.Equal(t, "", resp.Header.Get("Content-Type"))
+	require.Equal(t, int64(0), resp.ContentLength)
 }
 
-func TestJetonPorteurVideRendEnveloppeAccesInterdit(t *testing.T) {
-	// Le brief énonce : « aucun en-tête Authorization, ou un porteur vide ».
-	// "Bearer " (rien après) doit produire le 401 enveloppé ACCES_INTERDIT,
-	// pas le 401 à corps vide réservé au jeton invalide.
+func TestEmptyBearerTokenReturnsAccessForbiddenEnvelope(t *testing.T) {
+	// The brief states: "no Authorization header, or an empty bearer".
+	// "Bearer " (nothing after) must produce the enveloped 401 ACCES_INTERDIT,
+	// not the empty-body 401 reserved for an invalid token.
 	h := routerharness.NewRouterHarness(t)
 	req, err := http.NewRequest(http.MethodGet, h.Srv.URL+"/api/gateway/v1/operateurs", nil)
 	require.NoError(t, err)
 	req.Header.Set("Authorization", "Bearer ")
-	rep, err := http.DefaultClient.Do(req)
+	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
-	t.Cleanup(func() { rep.Body.Close() })
+	t.Cleanup(func() { resp.Body.Close() })
 
-	var corps map[string]any
-	require.NoError(t, json.NewDecoder(rep.Body).Decode(&corps))
+	var body map[string]any
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
 
-	require.Equal(t, http.StatusUnauthorized, rep.StatusCode)
-	require.Equal(t, false, corps["success"])
-	require.Equal(t, "ACCES_INTERDIT", corps["code"])
+	require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+	require.Equal(t, false, body["success"])
+	require.Equal(t, "ACCES_INTERDIT", body["code"])
 	require.Equal(t,
 		"Token JWT absent, invalide ou expiré. Veuillez vous authentifier à nouveau.",
-		corps["message"])
+		body["message"])
 }
 
-func TestGardePrefixeNeCaptureNiPasUnCheminFrontalier(t *testing.T) {
-	// La garde de préfixe compare le segment entier : /api/gateway/v1extra
-	// n'est pas sous l'arbre protégé et doit ressortir en 404, pas en 401,
-	// même sans jeton — sinon un chemin hors contrat futur (/api/gateway/v10)
-	// serait à tort absorbé par le middleware d'authentification.
+func TestPrefixGuardDoesNotCaptureABorderingPath(t *testing.T) {
+	// The prefix guard compares the whole segment: /api/gateway/v1extra is
+	// not under the protected tree and must come out as 404, not 401, even
+	// without a token — otherwise a future out-of-contract path
+	// (/api/gateway/v10) would be wrongly absorbed by the authentication
+	// middleware.
 	h := routerharness.NewRouterHarness(t)
-	rep := h.Brut(http.MethodGet, "/api/gateway/v1extra", "", nil)
-	require.Equal(t, http.StatusNotFound, rep.StatusCode)
+	resp := h.Raw(http.MethodGet, "/api/gateway/v1extra", "", nil)
+	require.Equal(t, http.StatusNotFound, resp.StatusCode)
 }
 
-func TestCheminGatewayInexistantAvecJetonValideRendQuandMeme404(t *testing.T) {
-	// Garantie de périmètre du routeur : une requête authentifiée vers un
-	// chemin non déclaré sous le préfixe gateway doit recevoir le 404 normal,
-	// pas être absorbée par le middleware d'authentification.
+func TestUnknownGatewayPathWithValidTokenStillReturns404(t *testing.T) {
+	// Router scope guarantee: an authenticated request to a path not
+	// declared under the gateway prefix must receive the ordinary 404, not
+	// be absorbed by the authentication middleware.
 	h := routerharness.NewRouterHarness(t)
-	rep := h.Brut(http.MethodGet, "/api/gateway/v1/route-inexistante", h.Jeton("yas", "yas2026"), nil)
-	require.Equal(t, http.StatusNotFound, rep.StatusCode)
+	resp := h.Raw(http.MethodGet, "/api/gateway/v1/route-inexistante", h.Token("yas", "yas2026"), nil)
+	require.Equal(t, http.StatusNotFound, resp.StatusCode)
 }

@@ -48,8 +48,8 @@ func (g *SandboxGateway) RequestIDsToPurge(ctx context.Context, operatorID strin
 
 // NumbersToRestore — moved verbatim from deletePurgeDemandes' second query.
 // A particulier request's number lives on demande.numero; a fleet's on
-// demande_numero. Both sources count, exclus compris: they too may have
-// moved before being excluded.
+// demande_numero. Both sources count, excluded numbers included: they too
+// may have moved before being excluded.
 func (g *SandboxGateway) NumbersToRestore(ctx context.Context, requestIDs []string) ([]string, error) {
 	rows, err := g.db.Query(ctx, `
 		SELECT numero FROM demande WHERE id = ANY($1)
@@ -60,18 +60,18 @@ func (g *SandboxGateway) NumbersToRestore(ctx context.Context, requestIDs []stri
 	}
 	defer rows.Close()
 
-	numeros := []string{}
+	numbers := []string{}
 	for rows.Next() {
 		var n string
 		if err := rows.Scan(&n); err != nil {
 			return nil, err
 		}
-		numeros = append(numeros, n)
+		numbers = append(numbers, n)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	return numeros, nil
+	return numbers, nil
 }
 
 // DeleteReverseRequests — moved verbatim from deletePurgeDemandes: ahead of
@@ -108,8 +108,8 @@ func (g *SandboxGateway) DeleteRequests(ctx context.Context, requestIDs []string
 }
 
 // RestoreNumbers — moved verbatim from deletePurgeDemandes. The rule is
-// "le numéro rentre chez lui" (operateur_origine_id), not "le numéro
-// retrouve son état de seed": a seeded number already ported before the
+// "the number goes back home" (operateur_origine_id), not "the number
+// returns to its seeded state": a seeded number already ported before the
 // purge returns to its origin operator, not to its seeded holder.
 func (g *SandboxGateway) RestoreNumbers(ctx context.Context, numbers []string) (int64, error) {
 	tag, err := g.db.Exec(ctx, `

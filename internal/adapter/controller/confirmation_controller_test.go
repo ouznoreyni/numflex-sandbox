@@ -17,9 +17,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// etape lit l'étape actuelle d'une demande directement en base — les
-// endpoints de traitement sont testés ailleurs.
-func etape(h *routerharness.RouterHarness, id string) string {
+// step reads a request's current step directly from the database — the
+// processing endpoints are tested elsewhere.
+func step(h *routerharness.RouterHarness, id string) string {
 	h.T.Helper()
 	var e string
 	require.NoError(h.T, h.DB.Pool.QueryRow(context.Background(),
@@ -27,18 +27,18 @@ func etape(h *routerharness.RouterHarness, id string) string {
 	return e
 }
 
-func TestConfirmationParTousSaufLeDestinataire(t *testing.T) {
-	// Mesuré au SIT : ORANGE confirme, l'étape reste EN_COURS ; EXPRESSO la solde.
+func TestConfirmationByAllExceptRecipient(t *testing.T) {
+	// Measured at the SIT: ORANGE confirms, the step stays EN_COURS; EXPRESSO settles it.
 	h := routerharness.NewRouterHarness(t)
-	id := creerPortage(h, "771000001")
-	avancerA(h, id, "CONFIRMATION")
+	id := createPorting(h, "771000001")
+	advanceTo(h, id, "CONFIRMATION")
 
-	rep, corps := h.Appel(http.MethodPost, "/api/gateway/v1/demandes/a-confirmer",
-		h.Jeton("orange", "orange2026"),
+	resp, body := h.Call(http.MethodPost, "/api/gateway/v1/demandes/a-confirmer",
+		h.Token("orange", "orange2026"),
 		map[string]any{"idDemande": id, "commentaire": "Portage confirmé"})
 
-	require.Equal(t, http.StatusOK, rep.StatusCode)
-	data := corps["data"].(map[string]any)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	data := body["data"].(map[string]any)
 	require.Equal(t, "CONFIRMATION", data["etapeActuelle"])
 	require.Equal(t, "EN_COURS", data["statutEtapeActuel"])
 
@@ -46,102 +46,102 @@ func TestConfirmationParTousSaufLeDestinataire(t *testing.T) {
 	require.NoError(t, h.DB.Pool.QueryRow(context.Background(),
 		"SELECT transition_prevue_a::text FROM demande WHERE id = $1", id).Scan(&prevue))
 	require.Nil(t, prevue)
-	require.Equal(t, "CONFIRMATION", etape(h, id), "il manque la confirmation d'EXPRESSO")
+	require.Equal(t, "CONFIRMATION", step(h, id), "il manque la confirmation d'EXPRESSO")
 
-	rep, _ = h.Appel(http.MethodPost, "/api/gateway/v1/demandes/a-confirmer",
-		h.Jeton("expresso", "expresso2026"), map[string]any{"idDemande": id})
-	require.Equal(t, http.StatusOK, rep.StatusCode)
+	resp, _ = h.Call(http.MethodPost, "/api/gateway/v1/demandes/a-confirmer",
+		h.Token("expresso", "expresso2026"), map[string]any{"idDemande": id})
+	require.Equal(t, http.StatusOK, resp.StatusCode)
 
-	require.Equal(t, "COMPLETION", etape(h, id),
-		"la dernière confirmation solde l'étape dans la requête")
+	require.Equal(t, "COMPLETION", step(h, id),
+		"the last confirmation settles the step within the request")
 }
 
-func TestConfirmationParLeDestinataireRefusee(t *testing.T) {
+func TestConfirmationByRecipientRefused(t *testing.T) {
 	h := routerharness.NewRouterHarness(t)
-	id := creerPortage(h, "771000001")
-	avancerA(h, id, "CONFIRMATION")
+	id := createPorting(h, "771000001")
+	advanceTo(h, id, "CONFIRMATION")
 
-	rep, _ := h.Appel(http.MethodPost, "/api/gateway/v1/demandes/a-confirmer",
-		h.Jeton("yas", "yas2026"), map[string]any{"idDemande": id})
+	resp, _ := h.Call(http.MethodPost, "/api/gateway/v1/demandes/a-confirmer",
+		h.Token("yas", "yas2026"), map[string]any{"idDemande": id})
 
-	require.Equal(t, http.StatusInternalServerError, rep.StatusCode)
+	require.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 }
 
-func TestDoubleConfirmationRefusee(t *testing.T) {
-	// TC-041 : anti-rejeu — refusé, en HTTP 500.
+func TestDoubleConfirmationRefused(t *testing.T) {
+	// TC-041: anti-replay — refused, as HTTP 500.
 	h := routerharness.NewRouterHarness(t)
-	id := creerPortage(h, "771000001")
-	avancerA(h, id, "CONFIRMATION")
+	id := createPorting(h, "771000001")
+	advanceTo(h, id, "CONFIRMATION")
 
-	rep, _ := h.Appel(http.MethodPost, "/api/gateway/v1/demandes/a-confirmer",
-		h.Jeton("orange", "orange2026"), map[string]any{"idDemande": id})
-	require.Equal(t, http.StatusOK, rep.StatusCode)
+	resp, _ := h.Call(http.MethodPost, "/api/gateway/v1/demandes/a-confirmer",
+		h.Token("orange", "orange2026"), map[string]any{"idDemande": id})
+	require.Equal(t, http.StatusOK, resp.StatusCode)
 
-	rep, corps := h.Appel(http.MethodPost, "/api/gateway/v1/demandes/a-confirmer",
-		h.Jeton("orange", "orange2026"), map[string]any{"idDemande": id})
-	require.Equal(t, http.StatusInternalServerError, rep.StatusCode)
-	require.Contains(t, corps["detail"], "déjà confirmé")
+	resp, body := h.Call(http.MethodPost, "/api/gateway/v1/demandes/a-confirmer",
+		h.Token("orange", "orange2026"), map[string]any{"idDemande": id})
+	require.Equal(t, http.StatusInternalServerError, resp.StatusCode)
+	require.Contains(t, body["detail"], "déjà confirmé")
 }
 
-func TestConfirmationHorsEtapeConfirmation(t *testing.T) {
+func TestConfirmationOutsideConfirmationStep(t *testing.T) {
 	h := routerharness.NewRouterHarness(t)
-	id := creerPortage(h, "771000001")
+	id := createPorting(h, "771000001")
 
-	rep, corps := h.Appel(http.MethodPost, "/api/gateway/v1/demandes/a-confirmer",
-		h.Jeton("orange", "orange2026"), map[string]any{"idDemande": id})
+	resp, body := h.Call(http.MethodPost, "/api/gateway/v1/demandes/a-confirmer",
+		h.Token("orange", "orange2026"), map[string]any{"idDemande": id})
 
-	require.Equal(t, http.StatusInternalServerError, rep.StatusCode)
-	require.Contains(t, corps["detail"], "ACCEPTATION")
+	require.Equal(t, http.StatusInternalServerError, resp.StatusCode)
+	require.Contains(t, body["detail"], "ACCEPTATION")
 }
 
-func TestRestitutionExigeLaConfirmationDuDestinataire(t *testing.T) {
+func TestRestitutionRequiresRecipientConfirmation(t *testing.T) {
 	h := routerharness.NewRouterHarness(t)
-	_, corps := h.Appel(http.MethodPost, "/api/gateway/v1/demandes/restitution",
-		h.Jeton("orange", "orange2026"), map[string]any{"numero": "773000001"})
-	id := corps["data"].(map[string]any)["id"].(string)
-	avancerA(h, id, "CONFIRMATION")
+	_, body := h.Call(http.MethodPost, "/api/gateway/v1/demandes/restitution",
+		h.Token("orange", "orange2026"), map[string]any{"numero": "773000001"})
+	id := body["data"].(map[string]any)["id"].(string)
+	advanceTo(h, id, "CONFIRMATION")
 
-	// ORANGE est destinataire de la restitution et doit néanmoins confirmer.
-	data := h.Liste("/api/gateway/v1/demandes/a-confirmer", h.Jeton("orange", "orange2026"))
+	// ORANGE is the restitution's recipient and must nonetheless confirm.
+	data := h.List("/api/gateway/v1/demandes/a-confirmer", h.Token("orange", "orange2026"))
 	require.Len(t, data, 1)
 
 	for _, compte := range [][2]string{
 		{"orange", "orange2026"}, {"yas", "yas2026"}, {"expresso", "expresso2026"},
 	} {
-		rep, _ := h.Appel(http.MethodPost, "/api/gateway/v1/demandes/a-confirmer",
-			h.Jeton(compte[0], compte[1]), map[string]any{"idDemande": id})
-		require.Equalf(t, http.StatusOK, rep.StatusCode, compte[0])
+		resp, _ := h.Call(http.MethodPost, "/api/gateway/v1/demandes/a-confirmer",
+			h.Token(compte[0], compte[1]), map[string]any{"idDemande": id})
+		require.Equalf(t, http.StatusOK, resp.StatusCode, compte[0])
 	}
 
-	require.Equal(t, "COMPLETION", etape(h, id),
-		"tous ont confirmé, destinataire compris : l'étape est soldée")
+	require.Equal(t, "COMPLETION", step(h, id),
+		"everyone confirmed, recipient included: the step is settled")
 }
 
-func TestDejaConfirmeesNeTracePasLaSourceEnModeReel(t *testing.T) {
-	// ANO-019 : ORANGE confirme avec succès, sa liste renvoie 0.
+func TestAlreadyConfirmedDoesNotTraceSourceInRealMode(t *testing.T) {
+	// ANO-019: ORANGE confirms successfully, its list returns 0.
 	h := routerharness.NewRouterHarness(t)
-	id := creerPortage(h, "771000001")
-	avancerA(h, id, "CONFIRMATION")
+	id := createPorting(h, "771000001")
+	advanceTo(h, id, "CONFIRMATION")
 
-	h.Appel(http.MethodPost, "/api/gateway/v1/demandes/a-confirmer",
-		h.Jeton("orange", "orange2026"), map[string]any{"idDemande": id})
-	h.Appel(http.MethodPost, "/api/gateway/v1/demandes/a-confirmer",
-		h.Jeton("expresso", "expresso2026"), map[string]any{"idDemande": id})
+	h.Call(http.MethodPost, "/api/gateway/v1/demandes/a-confirmer",
+		h.Token("orange", "orange2026"), map[string]any{"idDemande": id})
+	h.Call(http.MethodPost, "/api/gateway/v1/demandes/a-confirmer",
+		h.Token("expresso", "expresso2026"), map[string]any{"idDemande": id})
 
-	require.Empty(t, h.Liste("/api/gateway/v1/demandes/deja-confirmees",
-		h.Jeton("orange", "orange2026")), "la source n'est pas tracée (ANO-019)")
-	require.Len(t, h.Liste("/api/gateway/v1/demandes/deja-confirmees",
-		h.Jeton("expresso", "expresso2026")), 1, "le tiers l'est")
+	require.Empty(t, h.List("/api/gateway/v1/demandes/deja-confirmees",
+		h.Token("orange", "orange2026")), "the source is not traced (ANO-019)")
+	require.Len(t, h.List("/api/gateway/v1/demandes/deja-confirmees",
+		h.Token("expresso", "expresso2026")), 1, "le tiers l'est")
 }
 
-func TestDejaConfirmeesTraceLaSourceEnModeContrat(t *testing.T) {
-	h := routerharness.NewRouterHarness(t, routerharness.FiabiliteContrat)
-	id := creerPortage(h, "771000001")
-	avancerA(h, id, "CONFIRMATION")
+func TestAlreadyConfirmedTracesSourceInContractMode(t *testing.T) {
+	h := routerharness.NewRouterHarness(t, routerharness.ContractFidelity)
+	id := createPorting(h, "771000001")
+	advanceTo(h, id, "CONFIRMATION")
 
-	h.Appel(http.MethodPost, "/api/gateway/v1/demandes/a-confirmer",
-		h.Jeton("orange", "orange2026"), map[string]any{"idDemande": id})
+	h.Call(http.MethodPost, "/api/gateway/v1/demandes/a-confirmer",
+		h.Token("orange", "orange2026"), map[string]any{"idDemande": id})
 
-	require.Len(t, h.Liste("/api/gateway/v1/demandes/deja-confirmees",
-		h.Jeton("orange", "orange2026")), 1)
+	require.Len(t, h.List("/api/gateway/v1/demandes/deja-confirmees",
+		h.Token("orange", "orange2026")), 1)
 }

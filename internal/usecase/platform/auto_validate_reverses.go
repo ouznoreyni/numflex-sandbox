@@ -8,25 +8,25 @@ import (
 	"github.com/ouznoreyni/numflex-sandbox/internal/usecase/port"
 )
 
-// ValidateReverse est un acte de l'ARTP, hors périmètre de l'API gateway
-// (§6). Il crée une Demande de type REVERSE directement à l'étape
-// CONFIRMATION : ni ACCEPTATION, ni DESACTIVATION/ACTIVATION. Moved in
+// ValidateReverse is an act of the ARTP, outside the API gateway's scope
+// (§6). It creates a REVERSE-type Request directly at the CONFIRMATION
+// step: neither ACCEPTATION, nor DESACTIVATION/ACTIVATION. Moved in
 // substance from the deleted internal/engine/reverse.go's own
-// ValiderReverse: internal/framework/engine.ValiderReverse (cmd/artp's own
+// ValidateReverse: internal/framework/engine.ValidateReverse (cmd/artp's own
 // caller) and AutoValidateReversesInteractor's own auto-validation loop
 // both call this same function, so the ARTP's manual act and the sandbox's
 // automatic stand-in for it never drift apart.
 func ValidateReverse(ctx context.Context, uow port.UnitOfWork, ids port.IDGenerator, clock port.Clock, reverseID string) error {
 	return uow.Do(ctx, func(repos port.Repositories) error {
-		msisdn, operatorID, statut, err := repos.Reverse.LockPending(ctx, reverseID)
+		msisdn, operatorID, status, err := repos.Reverse.LockPending(ctx, reverseID)
 		if err != nil {
 			return err
 		}
-		if statut != "EN_ATTENTE" {
+		if status != "EN_ATTENTE" {
 			return nil
 		}
 
-		detenteurActuel, err := repos.Reverse.CurrentOperatorFor(ctx, msisdn)
+		currentHolder, err := repos.Reverse.CurrentOperatorFor(ctx, msisdn)
 		if err != nil {
 			return err
 		}
@@ -38,7 +38,7 @@ func ValidateReverse(ctx context.Context, uow port.UnitOfWork, ids port.IDGenera
 			MSISDN:              msisdn,
 			SubscriberType:      string(entity.SubscriberIndividual),
 			RequestType:         string(entity.RequestTypeReverse),
-			SourceOperatorID:    detenteurActuel,
+			SourceOperatorID:    currentHolder,
 			RecipientOperatorID: operatorID,
 			CreatorOperatorID:   operatorID,
 			RequestDate:         now,
@@ -54,9 +54,9 @@ func ValidateReverse(ctx context.Context, uow port.UnitOfWork, ids port.IDGenera
 	})
 }
 
-// RejectReverse est également un acte de l'ARTP : rejeter la demande sans
-// jamais créer de Demande. Moved verbatim in substance from the deleted
-// internal/engine/reverse.go's own RejeterReverse.
+// RejectReverse is also an act of the ARTP: reject the request without ever
+// creating a Request. Moved verbatim in substance from the deleted
+// internal/engine/reverse.go's own RejectReverse.
 func RejectReverse(ctx context.Context, uow port.UnitOfWork, reverseID string) error {
 	return uow.Do(ctx, func(repos port.Repositories) error {
 		return repos.Reverse.Reject(ctx, reverseID)
@@ -101,11 +101,11 @@ func (i *AutoValidateReversesInteractor) Execute(ctx context.Context) error {
 	return i.autoComplete(ctx)
 }
 
-// autoValidate rejoue ValidateReverse pour toute demande EN_ATTENTE depuis
-// plus de REVERSE_AUTO_VALIDATION_SECONDS. Désactivé par défaut (0 =
-// jamais) : dans le monde réel, la validation est un acte humain de
-// l'ARTP, hors API ; ce délai n'existe que pour permettre au sandbox de
-// simuler l'aval du régulateur sans intervention du CLI.
+// autoValidate replays ValidateReverse for every request EN_ATTENTE for
+// longer than REVERSE_AUTO_VALIDATION_SECONDS. Disabled by default (0 =
+// never): in the real world, validation is a human act of the ARTP,
+// outside the API; this delay exists only to let the sandbox simulate the
+// regulator's approval without CLI intervention.
 func (i *AutoValidateReversesInteractor) autoValidate(ctx context.Context) error {
 	if i.autoValidationDelay <= 0 {
 		return nil
@@ -122,33 +122,32 @@ func (i *AutoValidateReversesInteractor) autoValidate(ctx context.Context) error
 	return nil
 }
 
-// autoComplete : la COMPLETION d'un REVERSE est réservée à l'ARTP. Aucun
-// endpoint ne l'expose ; c'est le moteur qui la prononce une fois que tous
-// les opérateurs ont confirmé.
+// autoComplete: a REVERSE's COMPLETION is reserved to the ARTP. No endpoint
+// exposes it; it is the engine that pronounces it once every operator has
+// confirmed.
 //
-// Cette fonction doit aussi rattraper une demande REVERSE déjà à COMPLETION :
-// postAConfirmer est agnostique du type de demande, et quand la dernière
-// confirmation tombe, il planifie une transition générique via
-// port.Engine.ScheduleTransition. Au tick suivant, la convergence générique
-// s'exécute avant cette fonction et fait passer la demande de CONFIRMATION à
-// COMPLETION par le chemin commun, en remettant transition_prevue_a à NULL —
-// puisque la COMPLETION d'un REVERSE n'appartient à aucun opérateur, plus
-// aucun endpoint ne peut la faire avancer ensuite. Sans ce rattrapage, la
-// demande reste figée à COMPLETION/EN_COURS pour toujours. La branche
-// CONFIRMATION reste nécessaire : elle sert quand autoValidate amène une
-// demande jusqu'ici sans jamais passer par postAConfirmer (toutes les
-// confirmations peuvent avoir été enregistrées avant que la dernière ne
-// déclenche la planification, ou la demande peut n'avoir encore aucune
-// transition planifiée).
+// This function must also catch up a REVERSE request already at COMPLETION:
+// postAConfirmer is agnostic of the request type, and when the last
+// confirmation lands, it schedules a generic transition via
+// port.Engine.ScheduleTransition. On the next tick, the generic convergence
+// runs before this function and moves the request from CONFIRMATION to
+// COMPLETION through the common path, resetting transition_prevue_a to
+// NULL — and since a REVERSE's COMPLETION belongs to no operator, no
+// endpoint can then advance it further. Without this catch-up, the request
+// would stay stuck at COMPLETION/EN_COURS forever. The CONFIRMATION branch
+// stays necessary: it applies when autoValidate brings a request this far
+// without ever going through postAConfirmer (every confirmation may have
+// been recorded before the last one triggers the scheduling, or the
+// request may not yet have any transition scheduled).
 func (i *AutoValidateReversesInteractor) autoComplete(ctx context.Context) error {
-	candidats, err := i.requests.PendingReverseCompletions(ctx)
+	candidates, err := i.requests.PendingReverseCompletions(ctx)
 	if err != nil {
 		return err
 	}
-	for _, c := range candidats {
-		// Depuis CONFIRMATION : CONFIRMATION → COMPLETION, puis COMPLETION →
-		// TERMINE. Depuis COMPLETION (déjà atteinte par la convergence
-		// générique) : une seule transition suffit, COMPLETION → TERMINE.
+	for _, c := range candidates {
+		// From CONFIRMATION: CONFIRMATION → COMPLETION, then COMPLETION →
+		// TERMINE. From COMPLETION (already reached by the generic
+		// convergence): a single transition suffices, COMPLETION → TERMINE.
 		if c.CurrentStep == entity.StepConfirmation {
 			if err := ApplyTransition(ctx, i.uow, i.clock, c.RequestID, "ACTION"); err != nil {
 				return err

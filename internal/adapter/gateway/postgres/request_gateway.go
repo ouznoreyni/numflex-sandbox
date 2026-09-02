@@ -51,7 +51,7 @@ func (g *RequestGateway) Create(ctx context.Context, in port.CreateRequestInput)
 		 VALUES ($1,$2,$3,$4,'EN_COURS','ACCEPTATION','EN_COURS',$5,$6,$7,$8,$9,$10,$10)`,
 		in.ID, in.MSISDN, in.SubscriberType, in.RequestType,
 		in.SourceOperatorID, in.RecipientOperatorID, in.CreatorOperatorID,
-		in.Processus, in.RoutingInfo, in.RequestDate)
+		in.Process, in.RoutingInfo, in.RequestDate)
 	return err
 }
 
@@ -90,14 +90,14 @@ func (g *RequestGateway) AddClient(ctx context.Context, in port.ClientInput) err
 // this gateway's.
 func (g *RequestGateway) Get(ctx context.Context, id string) (port.RequestView, bool, error) {
 	var (
-		numero, typeAbonne, typeDemande, statutDemande string
-		etapeActuelle, statutEtapeActuel               string
-		srcID, srcNom, dstID, dstNom                   string
-		dateDemande                                    time.Time
-		processus, routageInfo                         sql.NullString
-		dateFinalisation                               sql.NullTime
-		cliNom, cliPrenom, cliLieu, cliPiece, cliNum   sql.NullString
-		cliNaissance                                   sql.NullTime
+		msisdn, subscriberType, requestType, status                      string
+		currentStep, currentStepStatus                                   string
+		srcID, srcName, dstID, dstName                                   string
+		requestDate                                                      time.Time
+		process, routingInfo                                             sql.NullString
+		completionDate                                                   sql.NullTime
+		cliLastName, cliFirstName, cliBirthPlace, cliIDType, cliIDNumber sql.NullString
+		cliBirthDate                                                     sql.NullTime
 	)
 
 	err := g.db.QueryRow(ctx, `
@@ -112,11 +112,11 @@ func (g *RequestGateway) Get(ctx context.Context, id string) (port.RequestView, 
 		  JOIN operateur dst ON dst.id = dem.operateur_destinataire_id
 		  LEFT JOIN demande_client cli ON cli.demande_id = dem.id
 		 WHERE dem.id = $1`, id).Scan(
-		&numero, &typeAbonne, &typeDemande, &statutDemande,
-		&etapeActuelle, &statutEtapeActuel,
-		&srcID, &srcNom, &dstID, &dstNom,
-		&dateDemande, &processus, &routageInfo, &dateFinalisation,
-		&cliNom, &cliPrenom, &cliNaissance, &cliLieu, &cliPiece, &cliNum)
+		&msisdn, &subscriberType, &requestType, &status,
+		&currentStep, &currentStepStatus,
+		&srcID, &srcName, &dstID, &dstName,
+		&requestDate, &process, &routingInfo, &completionDate,
+		&cliLastName, &cliFirstName, &cliBirthDate, &cliBirthPlace, &cliIDType, &cliIDNumber)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return port.RequestView{}, false, nil
 	}
@@ -125,35 +125,35 @@ func (g *RequestGateway) Get(ctx context.Context, id string) (port.RequestView, 
 	}
 
 	view := port.RequestView{
-		ID: id, MSISDN: numero,
-		SubscriberType: typeAbonne, RequestType: typeDemande, Status: statutDemande,
-		CurrentStep: etapeActuelle, CurrentStepStatus: statutEtapeActuel,
-		SourceOperatorID: srcID, SourceOperatorName: srcNom,
-		RecipientOperatorID: dstID, RecipientOperatorName: dstNom,
-		RequestDate: dateDemande,
+		ID: id, MSISDN: msisdn,
+		SubscriberType: subscriberType, RequestType: requestType, Status: status,
+		CurrentStep: currentStep, CurrentStepStatus: currentStepStatus,
+		SourceOperatorID: srcID, SourceOperatorName: srcName,
+		RecipientOperatorID: dstID, RecipientOperatorName: dstName,
+		RequestDate: requestDate,
 	}
-	if processus.Valid {
-		v := processus.String
-		view.Processus = &v
+	if process.Valid {
+		v := process.String
+		view.Process = &v
 	}
-	if routageInfo.Valid {
-		v := routageInfo.String
+	if routingInfo.Valid {
+		v := routingInfo.String
 		view.RoutingInfo = &v
 	}
-	if dateFinalisation.Valid {
-		v := dateFinalisation.Time
+	if completionDate.Valid {
+		v := completionDate.Time
 		view.CompletionDate = &v
 	}
-	// Le client est rendu dans toutes les captures — création, acceptation,
-	// traitement, a-traiter, in — avec exactement ces six champs. Sa présence
-	// se décide sur ces trois colonnes, comme demandeDTO le faisait.
-	if cliNom.Valid || cliPrenom.Valid || cliNum.Valid {
+	// The client renders in every capture — creation, acceptance,
+	// processing, a-traiter, in — with exactly these six fields. Its
+	// presence is decided on these three columns, as demandeDTO used to.
+	if cliLastName.Valid || cliFirstName.Valid || cliIDNumber.Valid {
 		client := &port.ClientView{
-			LastName: cliNom.String, FirstName: cliPrenom.String,
-			BirthPlace: cliLieu.String, IDType: cliPiece.String, IDNumber: cliNum.String,
+			LastName: cliLastName.String, FirstName: cliFirstName.String,
+			BirthPlace: cliBirthPlace.String, IDType: cliIDType.String, IDNumber: cliIDNumber.String,
 		}
-		if cliNaissance.Valid {
-			t := cliNaissance.Time
+		if cliBirthDate.Valid {
+			t := cliBirthDate.Time
 			client.BirthDate = &t
 		}
 		view.Client = client
@@ -165,7 +165,7 @@ func (g *RequestGateway) Get(ctx context.Context, id string) (port.RequestView, 
 // internal/api/dto.go's chargerDemande (Task 14: acceptance).
 func (g *RequestGateway) ByID(ctx context.Context, id string) (entity.PortingRequest, bool, error) {
 	var dm entity.PortingRequest
-	var typeDemande, typeAbonne, statutDemande, etape, statutEtape string
+	var requestType, subscriberType, status, step, stepStatus string
 	var transition *string
 
 	err := g.db.QueryRow(ctx,
@@ -173,7 +173,7 @@ func (g *RequestGateway) ByID(ctx context.Context, id string) (entity.PortingReq
 		        statut_etape_actuel, operateur_source_id, operateur_destinataire_id,
 		        createur_operateur_id, transition_prevue_a::text
 		   FROM demande WHERE id = $1`, id).
-		Scan(&dm.ID, &dm.MSISDN, &typeDemande, &typeAbonne, &statutDemande, &etape, &statutEtape,
+		Scan(&dm.ID, &dm.MSISDN, &requestType, &subscriberType, &status, &step, &stepStatus,
 			&dm.SourceOperatorID, &dm.RecipientOperatorID, &dm.CreatorOperatorID, &transition)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return entity.PortingRequest{}, false, nil
@@ -182,11 +182,11 @@ func (g *RequestGateway) ByID(ctx context.Context, id string) (entity.PortingReq
 		return entity.PortingRequest{}, false, err
 	}
 
-	dm.RequestType = entity.RequestType(typeDemande)
-	dm.SubscriberType = entity.SubscriberType(typeAbonne)
-	dm.Status = entity.RequestStatus(statutDemande)
-	dm.CurrentStep = entity.Step(etape)
-	dm.CurrentStepStatus = entity.StepStatus(statutEtape)
+	dm.RequestType = entity.RequestType(requestType)
+	dm.SubscriberType = entity.SubscriberType(subscriberType)
+	dm.Status = entity.RequestStatus(status)
+	dm.CurrentStep = entity.Step(step)
+	dm.CurrentStepStatus = entity.StepStatus(stepStatus)
 	dm.PendingTransition = transition != nil
 	return dm, true, nil
 }
@@ -202,11 +202,11 @@ func (g *RequestGateway) SetComment(ctx context.Context, id, comment string) err
 // NumberBelongs answers whether msisdn is one of requestID's demande_numero
 // rows.
 func (g *RequestGateway) NumberBelongs(ctx context.Context, requestID, msisdn string) (bool, error) {
-	var appartient bool
+	var belongs bool
 	err := g.db.QueryRow(ctx,
 		`SELECT EXISTS (SELECT 1 FROM demande_numero WHERE demande_id = $1 AND numero = $2)`,
-		requestID, msisdn).Scan(&appartient)
-	return appartient, err
+		requestID, msisdn).Scan(&belongs)
+	return belongs, err
 }
 
 // RejectNumber marks one fleet member REJETE.
@@ -221,11 +221,11 @@ func (g *RequestGateway) RejectNumber(ctx context.Context, requestID, msisdn, re
 // HasActiveNumber answers whether requestID still has at least one
 // demande_numero row that is not REJETE.
 func (g *RequestGateway) HasActiveNumber(ctx context.Context, requestID string) (bool, error) {
-	var resteEligible bool
+	var remainsEligible bool
 	err := g.db.QueryRow(ctx,
 		`SELECT EXISTS (SELECT 1 FROM demande_numero WHERE demande_id = $1 AND statut <> 'REJETE')`,
-		requestID).Scan(&resteEligible)
-	return resteEligible, err
+		requestID).Scan(&remainsEligible)
+	return remainsEligible, err
 }
 
 // Reject closes a request definitively — moved verbatim from
@@ -302,12 +302,12 @@ func (g *RequestGateway) Cancel(ctx context.Context, requestID, operatorID strin
 // transition directly against a *pgx.Tx.
 func (g *RequestGateway) LockForTransition(ctx context.Context, id string) (entity.PortingRequest, bool, error) {
 	var dm entity.PortingRequest
-	var etape, statutDem, typeDem string
+	var step, status, requestType string
 	err := g.db.QueryRow(ctx,
 		`SELECT etape_actuelle, statut_demande, type_demande,
 		        operateur_source_id, operateur_destinataire_id, numero
 		   FROM demande WHERE id = $1 FOR UPDATE`, id).
-		Scan(&etape, &statutDem, &typeDem, &dm.SourceOperatorID, &dm.RecipientOperatorID, &dm.MSISDN)
+		Scan(&step, &status, &requestType, &dm.SourceOperatorID, &dm.RecipientOperatorID, &dm.MSISDN)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return entity.PortingRequest{}, false, nil
 	}
@@ -315,9 +315,9 @@ func (g *RequestGateway) LockForTransition(ctx context.Context, id string) (enti
 		return entity.PortingRequest{}, false, err
 	}
 	dm.ID = id
-	dm.CurrentStep = entity.Step(etape)
-	dm.Status = entity.RequestStatus(statutDem)
-	dm.RequestType = entity.RequestType(typeDem)
+	dm.CurrentStep = entity.Step(step)
+	dm.Status = entity.RequestStatus(status)
+	dm.RequestType = entity.RequestType(requestType)
 	return dm, true, nil
 }
 
@@ -353,12 +353,13 @@ func (g *RequestGateway) AdvanceStep(ctx context.Context, id string, next entity
 	return err
 }
 
-// TransferToRegistry inscrit le changement d'opérateur au registre national
-// — transfererAuRegistre, moved verbatim. C'est le constat central du SIT :
-// quand une étape expire, ce transfert a lieu alors qu'aucun HLR n'a été
-// touché. Le filtre NOT exclu AND statut <> 'REJETE' est la garantie
-// centrale : sans lui, un numéro exclu ou rejeté serait transféré vers un
-// opérateur que l'abonné n'a jamais accepté (TestTransfertRegistreExclutNumerosExclusEtRejetes).
+// TransferToRegistry records the operator change in the national registry
+// — transfererAuRegistre, moved verbatim. This is the SIT's central
+// finding: when a step times out, this transfer happens even though no HLR
+// was ever touched. The NOT exclu AND statut <> 'REJETE' filter is the
+// central guarantee: without it, an excluded or rejected number would be
+// transferred to an operator the subscriber never agreed to
+// (TestRegistryTransferExcludesExcludedAndRejectedNumbers).
 func (g *RequestGateway) TransferToRegistry(ctx context.Context, id, recipientOperatorID string) error {
 	_, err := g.db.Exec(ctx,
 		`UPDATE numero SET operateur_actuel_id = $2, date_dernier_portage = now()
@@ -368,7 +369,7 @@ func (g *RequestGateway) TransferToRegistry(ctx context.Context, id, recipientOp
 	return err
 }
 
-// ApplyRouting finalise le routage numéro par numéro (§7.10) — recalculerRoutage,
+// ApplyRouting finalizes routing number by number (§7.10) — recalculerRoutage,
 // minus its two RoutingPrefix reads, already made by the caller.
 func (g *RequestGateway) ApplyRouting(ctx context.Context, id, sourcePrefix, recipientPrefix string) error {
 	if _, err := g.db.Exec(ctx,
@@ -381,10 +382,10 @@ func (g *RequestGateway) ApplyRouting(ctx context.Context, id, sourcePrefix, rec
 	return err
 }
 
-// ApplyEndOfRequestRestitution : pour une RESTITUTION ou un REVERSE, le
-// numéro rejoint son opérateur d'origine et routageInfo n'apparaît qu'ici
-// (§7.10) — effetsFinDeDemande, minus its own RoutingPrefix read, already
-// made by the caller.
+// ApplyEndOfRequestRestitution: for a RESTITUTION or a REVERSE, the number
+// rejoins its origin operator and routingInfo appears only here (§7.10) —
+// effetsFinDeDemande, minus its own RoutingPrefix read, already made by the
+// caller.
 func (g *RequestGateway) ApplyEndOfRequestRestitution(ctx context.Context, id, msisdn, recipientOperatorID, recipientPrefix string) error {
 	if _, err := g.db.Exec(ctx,
 		`UPDATE numero
@@ -397,11 +398,11 @@ func (g *RequestGateway) ApplyEndOfRequestRestitution(ctx context.Context, id, m
 }
 
 // ScheduleTransitionAt marks id's current step processed and fixes the
-// instant its transition will actually apply. L'échéance est calculée par
-// la base, pas par Go : c'est le now() de Postgres que DueConvergences
-// relira, et deux horloges pour une même comparaison produisent une
-// intermittence (le conteneur Postgres et le process Go ne s'accordent pas
-// à la milliseconde près) — commit 94af3f2.
+// instant its transition will actually apply. The deadline is computed by
+// the database, not by Go: it is Postgres's own now() that DueConvergences
+// will read back, and two clocks for the same comparison produce
+// flakiness (the Postgres container and the Go process do not agree to the
+// millisecond) — commit 94af3f2.
 func (g *RequestGateway) ScheduleTransitionAt(ctx context.Context, id string, delaySeconds float64) error {
 	_, err := g.db.Exec(ctx,
 		`UPDATE demande SET transition_prevue_a = now() + make_interval(secs => $2)
@@ -439,7 +440,7 @@ func (g *RequestGateway) OverdueSteps(ctx context.Context, timeoutSeconds float6
 }
 
 // CreateAtConfirmation inserts a new request directly at CONFIRMATION —
-// ValiderReverse's own INSERT (§6), moved verbatim: a REVERSE never goes
+// ValidateReverse's own INSERT (§6), moved verbatim: a REVERSE never goes
 // through ACCEPTATION or DESACTIVATION/ACTIVATION.
 func (g *RequestGateway) CreateAtConfirmation(ctx context.Context, in port.CreateRequestInput) error {
 	_, err := g.db.Exec(ctx,
@@ -477,11 +478,11 @@ func (g *RequestGateway) PendingReverseCompletions(ctx context.Context) ([]port.
 	out := []port.PendingReverseCompletion{}
 	for rows.Next() {
 		var c port.PendingReverseCompletion
-		var etape string
-		if err := rows.Scan(&c.RequestID, &etape); err != nil {
+		var step string
+		if err := rows.Scan(&c.RequestID, &step); err != nil {
 			return nil, err
 		}
-		c.CurrentStep = entity.Step(etape)
+		c.CurrentStep = entity.Step(step)
 		out = append(out, c)
 	}
 	if err := rows.Err(); err != nil {

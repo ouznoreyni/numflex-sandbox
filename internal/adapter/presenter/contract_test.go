@@ -15,23 +15,23 @@ import (
 // ViewModel instead of a httptest.ResponseRecorder. See real_test.go's
 // header comment and bodyMap helper — both files share this package.
 
-func TestContractErreurEtatSortEnveloppee(t *testing.T) {
+func TestContractStateErrorRendersEnveloped(t *testing.T) {
 	c := NewContract(inmemory.FixedClock{})
 
 	vm := c.Failure(entity.RequestNotFound(), "/x")
 
 	require.Equal(t, http.StatusNotFound, vm.Status)
-	corps := bodyMap(t, vm)
-	require.Equal(t, false, corps["success"])
-	require.Equal(t, "DEMANDE_NON_TROUVEE", corps["code"])
-	require.Equal(t, "Demande introuvable", corps["message"])
-	require.NotContains(t, corps, "type")
+	body := bodyMap(t, vm)
+	require.Equal(t, false, body["success"])
+	require.Equal(t, "DEMANDE_NON_TROUVEE", body["code"])
+	require.Equal(t, "Demande introuvable", body["message"])
+	require.NotContains(t, body, "type")
 }
 
-func TestContractCorrespondanceKindStatut(t *testing.T) {
-	cas := []struct {
+func TestContractKindStatusMapping(t *testing.T) {
+	cases := []struct {
 		err    *entity.Fault
-		statut int
+		status int
 		code   string
 	}{
 		{entity.Validation(entity.FieldFault{Field: "numero", Message: "obligatoire"}), 400, "VALIDATION_ECHOUEE"},
@@ -40,49 +40,49 @@ func TestContractCorrespondanceKindStatut(t *testing.T) {
 		{entity.InvalidStep("mauvaise étape"), 409, "ETAPE_INVALIDE"},
 		{entity.InternalError("boum"), 500, "ERREUR_INTERNE"},
 	}
-	for _, x := range cas {
+	for _, x := range cases {
 		c := NewContract(inmemory.FixedClock{})
 		vm := c.Failure(x.err, "/x")
-		require.Equalf(t, x.statut, vm.Status, "code %s", x.code)
-		corps := bodyMap(t, vm)
-		require.Equal(t, x.code, corps["code"])
+		require.Equalf(t, x.status, vm.Status, "code %s", x.code)
+		body := bodyMap(t, vm)
+		require.Equal(t, x.code, body["code"])
 	}
 }
 
-func TestSuccesContrat(t *testing.T) {
+func TestSuccessContract(t *testing.T) {
 	c := NewContract(inmemory.FixedClock{})
 	vm := c.Success(http.StatusCreated, "Demande créée avec succès", map[string]string{"id": "abc"})
 
 	require.Equal(t, http.StatusCreated, vm.Status)
-	corps := bodyMap(t, vm)
-	require.Equal(t, true, corps["success"])
-	require.Equal(t, "SUCCESS", corps["code"])
-	require.Equal(t, "Demande créée avec succès", corps["message"])
-	require.Equal(t, map[string]any{"id": "abc"}, corps["data"])
+	body := bodyMap(t, vm)
+	require.Equal(t, true, body["success"])
+	require.Equal(t, "SUCCESS", body["code"])
+	require.Equal(t, "Demande créée avec succès", body["message"])
+	require.Equal(t, map[string]any{"id": "abc"}, body["data"])
 }
 
-func TestOKSansDataRendDataNullEnContrat(t *testing.T) {
+func TestOKWithoutDataRendersDataNullInContract(t *testing.T) {
 	c := NewContract(inmemory.FixedClock{})
 	vm := c.SuccessWithoutData(http.StatusOK, "OTP envoyé avec succès")
 
-	corps := bodyMap(t, vm)
-	require.Contains(t, corps, "data")
-	require.Nil(t, corps["data"])
+	body := bodyMap(t, vm)
+	require.Contains(t, body, "data")
+	require.Nil(t, body["data"])
 }
 
-func TestFailErreurEmballeeConserveKindEtMessage(t *testing.T) {
-	// Correction revue #3, déplacée dans la couche pure : errors.As doit
-	// déballer une erreur enveloppée par fmt.Errorf("...: %w", ...). Fix
-	// round 1 (finding 2) : exerce entity.FaultFrom sur l'erreur emballée
-	// plutôt que sur le fault qu'elle produirait.
-	f := entity.FaultFrom(fmt.Errorf("contexte : %w", entity.RequestNotFound()))
+func TestFailWrappedErrorKeepsKindAndMessage(t *testing.T) {
+	// Review correction #3, moved into the pure layer: errors.As must
+	// unwrap an error wrapped by fmt.Errorf("...: %w", ...). Fix round 1
+	// (finding 2): exercises entity.FaultFrom on the wrapped error rather
+	// than on the fault it would produce.
+	f := entity.FaultFrom(fmt.Errorf("context: %w", entity.RequestNotFound()))
 	require.Equal(t, entity.RequestNotFound(), f)
 
 	c := NewContract(inmemory.FixedClock{})
 	vm := c.Failure(f, "/x")
 
 	require.Equal(t, http.StatusNotFound, vm.Status)
-	corps := bodyMap(t, vm)
-	require.Equal(t, "DEMANDE_NON_TROUVEE", corps["code"])
-	require.Equal(t, "Demande introuvable", corps["message"])
+	body := bodyMap(t, vm)
+	require.Equal(t, "DEMANDE_NON_TROUVEE", body["code"])
+	require.Equal(t, "Demande introuvable", body["message"])
 }

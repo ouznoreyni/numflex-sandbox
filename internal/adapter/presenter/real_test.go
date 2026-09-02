@@ -22,9 +22,9 @@ func bodyMap(t *testing.T, vm ViewModel) map[string]any {
 	t.Helper()
 	b, err := json.Marshal(vm.Body)
 	require.NoError(t, err)
-	var corps map[string]any
-	require.NoError(t, json.Unmarshal(b, &corps))
-	return corps
+	var body map[string]any
+	require.NoError(t, json.Unmarshal(b, &body))
+	return body
 }
 
 // R11: these tests duplicate (not move) internal/httpx/renderer_test.go's
@@ -33,26 +33,26 @@ func bodyMap(t *testing.T, vm ViewModel) map[string]any {
 // stays untouched — httpx.Renderer remains the live production path until
 // Task 18.
 
-func TestRealErreurEtatSortEn500SansCode(t *testing.T) {
+func TestRealStateErrorRendersAs500WithoutCode(t *testing.T) {
 	r := NewReal(inmemory.FixedClock{})
 
 	vm := r.Failure(entity.RequestNotFound(), "/api/gateway/v1/demandes/traitement")
 
 	require.Equal(t, http.StatusInternalServerError, vm.Status)
-	corps := bodyMap(t, vm)
-	require.NotContains(t, corps, "code", "ANO-001 : aucune erreur ne porte de champ code en mode réel")
-	require.NotContains(t, corps, "success")
-	require.Equal(t, "https://www.jhipster.tech/problem/problem-with-message", corps["type"])
-	require.Equal(t, "Internal Server Error", corps["title"])
-	require.Equal(t, float64(500), corps["status"])
-	require.Equal(t, "error.http.500", corps["message"])
-	require.Equal(t, "RuntimeException: Demande introuvable", corps["detail"])
-	// Finding 1 (fix round 1) : le chemin de la requête, passé en argument,
-	// atteint bien le corps rendu — branche problem-with-message 500.
-	require.Equal(t, "/api/gateway/v1/demandes/traitement", corps["path"])
+	body := bodyMap(t, vm)
+	require.NotContains(t, body, "code", "ANO-001: no error carries a code field in real mode")
+	require.NotContains(t, body, "success")
+	require.Equal(t, "https://www.jhipster.tech/problem/problem-with-message", body["type"])
+	require.Equal(t, "Internal Server Error", body["title"])
+	require.Equal(t, float64(500), body["status"])
+	require.Equal(t, "error.http.500", body["message"])
+	require.Equal(t, "RuntimeException: Demande introuvable", body["detail"])
+	// Finding 1 (fix round 1): the request path, passed as an argument, does
+	// reach the rendered body — problem-with-message 500 branch.
+	require.Equal(t, "/api/gateway/v1/demandes/traitement", body["path"])
 }
 
-func TestRealErreurValidationSortEn400AvecFieldErrors(t *testing.T) {
+func TestRealValidationErrorRendersAs400WithFieldErrors(t *testing.T) {
 	r := NewReal(inmemory.FixedClock{})
 
 	vm := r.Failure(entity.Validation(entity.FieldFault{
@@ -62,66 +62,66 @@ func TestRealErreurValidationSortEn400AvecFieldErrors(t *testing.T) {
 	}), "/api/gateway/v1/demandes/particulier")
 
 	require.Equal(t, http.StatusBadRequest, vm.Status)
-	corps := bodyMap(t, vm)
-	require.NotContains(t, corps, "code")
-	require.Equal(t, "https://www.jhipster.tech/problem/constraint-violation", corps["type"])
-	require.Equal(t, "Method argument not valid", corps["title"])
-	require.Equal(t, "error.validation", corps["message"])
-	// Finding 1 (fix round 1) : branche constraint-violation.
-	require.Equal(t, "/api/gateway/v1/demandes/particulier", corps["path"])
+	body := bodyMap(t, vm)
+	require.NotContains(t, body, "code")
+	require.Equal(t, "https://www.jhipster.tech/problem/constraint-violation", body["type"])
+	require.Equal(t, "Method argument not valid", body["title"])
+	require.Equal(t, "error.validation", body["message"])
+	// Finding 1 (fix round 1): constraint-violation branch.
+	require.Equal(t, "/api/gateway/v1/demandes/particulier", body["path"])
 
-	champs := corps["fieldErrors"].([]any)
-	require.Len(t, champs, 1)
-	premier := champs[0].(map[string]any)
-	require.Equal(t, "demandeParticulierDTO", premier["objectName"])
-	require.Equal(t, "client.lieuNaissance", premier["field"])
-	require.Equal(t, "ne doit pas être vide", premier["message"])
+	fields := body["fieldErrors"].([]any)
+	require.Len(t, fields, 1)
+	first := fields[0].(map[string]any)
+	require.Equal(t, "demandeParticulierDTO", first["objectName"])
+	require.Equal(t, "client.lieuNaissance", first["field"])
+	require.Equal(t, "ne doit pas être vide", first["message"])
 }
 
-func TestRealDetailPersonnalise(t *testing.T) {
-	// ANO-002 : le refus de re-portage à moins de 3 mois se présente comme
-	// une panne.
+func TestRealCustomDetail(t *testing.T) {
+	// ANO-002: refusing a re-porting less than 3 months later presents as a
+	// failure.
 	r := NewReal(inmemory.FixedClock{})
 
 	vm := r.Failure(entity.PortingDelayNotRespected(), "/api/gateway/v1/demandes/particulier")
 
 	require.Equal(t, http.StatusInternalServerError, vm.Status)
-	corps := bodyMap(t, vm)
-	require.Equal(t, "Unexpected runtime exception", corps["detail"])
+	body := bodyMap(t, vm)
+	require.Equal(t, "Unexpected runtime exception", body["detail"])
 }
 
-func TestSuccesReel(t *testing.T) {
+func TestSuccessReal(t *testing.T) {
 	r := NewReal(inmemory.FixedClock{})
 	vm := r.Success(http.StatusCreated, "Demande créée avec succès", map[string]string{"id": "abc"})
 
 	require.Equal(t, http.StatusCreated, vm.Status)
-	corps := bodyMap(t, vm)
-	require.Equal(t, true, corps["success"])
-	require.Equal(t, "SUCCESS", corps["code"])
-	require.Equal(t, "Demande créée avec succès", corps["message"])
-	require.Equal(t, map[string]any{"id": "abc"}, corps["data"])
+	body := bodyMap(t, vm)
+	require.Equal(t, true, body["success"])
+	require.Equal(t, "SUCCESS", body["code"])
+	require.Equal(t, "Demande créée avec succès", body["message"])
+	require.Equal(t, map[string]any{"id": "abc"}, body["data"])
 }
 
-func TestOKSansDataOmetLeChampEnReel(t *testing.T) {
-	// ANO-011 : la réponse de otp/send ne porte pas de champ data du tout.
+func TestOKWithoutDataOmitsTheFieldInReal(t *testing.T) {
+	// ANO-011: otp/send's response carries no data field at all.
 	r := NewReal(inmemory.FixedClock{})
 	vm := r.SuccessWithoutData(http.StatusOK, "OTP envoyé avec succès")
 
-	corps := bodyMap(t, vm)
-	require.NotContains(t, corps, "data")
+	body := bodyMap(t, vm)
+	require.NotContains(t, body, "data")
 }
 
-func TestRenduAppliqueLaDerive(t *testing.T) {
+func TestRenderedAppliesTheSkew(t *testing.T) {
 	base := time.Date(2026, 8, 21, 11, 0, 0, 0, time.UTC)
 
 	r := NewReal(inmemory.FixedClock{Skew: 9 * time.Minute})
 	require.Equal(t, base.Add(9*time.Minute), r.Rendered(base))
 
-	sans := NewReal(inmemory.FixedClock{})
-	require.Equal(t, base, sans.Rendered(base))
+	withoutSkew := NewReal(inmemory.FixedClock{})
+	require.Equal(t, base, withoutSkew.Rendered(base))
 }
 
-func TestRealValidationAvecChampsGardeConstraintViolation(t *testing.T) {
+func TestRealValidationWithFieldsKeepsConstraintViolation(t *testing.T) {
 	r := NewReal(inmemory.FixedClock{})
 
 	vm := r.Failure(entity.Validation(entity.FieldFault{
@@ -131,44 +131,43 @@ func TestRealValidationAvecChampsGardeConstraintViolation(t *testing.T) {
 	}), "/api/gateway/v1/demandes/particulier")
 
 	require.Equal(t, http.StatusBadRequest, vm.Status)
-	corps := bodyMap(t, vm)
-	require.Equal(t, "https://www.jhipster.tech/problem/constraint-violation", corps["type"])
-	require.Equal(t, "Method argument not valid", corps["title"])
-	require.Equal(t, "error.validation", corps["message"])
-	require.NotContains(t, corps, "code")
-	require.NotEmpty(t, corps["fieldErrors"])
+	body := bodyMap(t, vm)
+	require.Equal(t, "https://www.jhipster.tech/problem/constraint-violation", body["type"])
+	require.Equal(t, "Method argument not valid", body["title"])
+	require.Equal(t, "error.validation", body["message"])
+	require.NotContains(t, body, "code")
+	require.NotEmpty(t, body["fieldErrors"])
 }
 
-func TestRealValidationSansChampsRendMessagePrecis(t *testing.T) {
-	// Correction revue #1 : sans Fields, la forme constraint-violation ne
-	// serait jamais produite par une pile Spring/JHipster (elle porte
-	// toujours au moins un fieldError). FormatJSONInvalide, FlotteVide,
-	// ValidationEchouee(msg) doivent donc rendre un problem-with-message en
-	// 400 qui porte le message métier.
+func TestRealValidationWithoutFieldsRendersAPreciseMessage(t *testing.T) {
+	// Review correction #1: without Fields, the constraint-violation shape
+	// would never be produced by a real Spring/JHipster stack (it always
+	// carries at least one fieldError). FormatJSONInvalide, FlotteVide,
+	// ValidationEchouee(msg) must therefore render a problem-with-message in
+	// 400 carrying the business message.
 	r := NewReal(inmemory.FixedClock{})
 
 	vm := r.Failure(entity.ValidationFailed("un message précis"), "/api/gateway/v1/demandes/flotte")
 
 	require.Equal(t, http.StatusBadRequest, vm.Status)
-	corps := bodyMap(t, vm)
-	require.Equal(t, "https://www.jhipster.tech/problem/problem-with-message", corps["type"])
-	require.Equal(t, "Bad Request", corps["title"])
-	require.Equal(t, float64(400), corps["status"])
-	require.Equal(t, "un message précis", corps["detail"])
-	require.Equal(t, "error.http.400", corps["message"])
-	require.NotContains(t, corps, "code")
-	require.NotContains(t, corps, "fieldErrors")
-	// Finding 1 (fix round 1) : branche problem-with-message 400.
-	require.Equal(t, "/api/gateway/v1/demandes/flotte", corps["path"])
+	body := bodyMap(t, vm)
+	require.Equal(t, "https://www.jhipster.tech/problem/problem-with-message", body["type"])
+	require.Equal(t, "Bad Request", body["title"])
+	require.Equal(t, float64(400), body["status"])
+	require.Equal(t, "un message précis", body["detail"])
+	require.Equal(t, "error.http.400", body["message"])
+	require.NotContains(t, body, "code")
+	require.NotContains(t, body, "fieldErrors")
+	// Finding 1 (fix round 1): problem-with-message 400 branch.
+	require.Equal(t, "/api/gateway/v1/demandes/flotte", body["path"])
 }
 
-func TestFailAvecErreurNilNePaniquePas(t *testing.T) {
-	// Correction revue #2, déplacée dans la couche pure : un appelant qui
-	// fait `return httpx.Renderer.Fail(c, err)` avec err nil ne doit pas
-	// transformer la requête en panique. Fix round 1 (finding 2) :
-	// entity.FaultFrom porte désormais cette normalisation ; ce test
-	// l'exerce directement, plutôt que de reconstruire son résultat à la
-	// main.
+func TestFailWithNilErrorDoesNotPanic(t *testing.T) {
+	// Review correction #2, moved into the pure layer: a caller that does
+	// `return httpx.Renderer.Fail(c, err)` with a nil err must not turn the
+	// request into a panic. Fix round 1 (finding 2): entity.FaultFrom now
+	// carries this normalization; this test exercises it directly, rather
+	// than reconstructing its result by hand.
 	var f *entity.Fault
 	require.NotPanics(t, func() {
 		f = entity.FaultFrom(nil)
@@ -179,16 +178,16 @@ func TestFailAvecErreurNilNePaniquePas(t *testing.T) {
 	vm := r.Failure(f, "/x")
 
 	require.Equal(t, http.StatusInternalServerError, vm.Status)
-	corps := bodyMap(t, vm)
-	require.Equal(t, "RuntimeException: erreur interne", corps["detail"])
+	body := bodyMap(t, vm)
+	require.Equal(t, "RuntimeException: erreur interne", body["detail"])
 }
 
-func TestFailAvecApperrErrorTypeNilNePaniquePas(t *testing.T) {
-	// Correction revue #2, déplacée dans la couche pure : un *entity.Fault
-	// typé nil, emballé dans un error, fait réussir errors.As avec e == nil ;
-	// e.Kind paniquerait sans la garde. Fix round 1 (finding 2) : exerce
-	// entity.FaultFrom sur ce cas précis plutôt que sur son résultat déjà
-	// construit.
+func TestFailWithNilApperrErrorTypeDoesNotPanic(t *testing.T) {
+	// Review correction #2, moved into the pure layer: a *entity.Fault typed
+	// nil, wrapped in an error, makes errors.As succeed with e == nil;
+	// e.Kind would panic without the guard. Fix round 1 (finding 2):
+	// exercises entity.FaultFrom on this exact case rather than on its
+	// already-built result.
 	var e *entity.Fault
 	var err error = e
 
@@ -202,15 +201,15 @@ func TestFailAvecApperrErrorTypeNilNePaniquePas(t *testing.T) {
 	vm := r.Failure(f, "/x")
 
 	require.Equal(t, http.StatusInternalServerError, vm.Status)
-	corps := bodyMap(t, vm)
-	require.Equal(t, "RuntimeException: erreur interne", corps["detail"])
+	body := bodyMap(t, vm)
+	require.Equal(t, "RuntimeException: erreur interne", body["detail"])
 }
 
-func TestFailErreurNueDevient500AvecSonTexte(t *testing.T) {
-	// Correction revue #3, déplacée dans la couche pure : chemin de repli
-	// pour une erreur qui n'est pas un *entity.Fault. Fix round 1
-	// (finding 2) : exerce entity.FaultFrom sur une erreur nue plutôt que
-	// sur le fault qu'elle produirait.
+func TestFailBareErrorBecomes500WithItsText(t *testing.T) {
+	// Review correction #3, moved into the pure layer: the fallback path for
+	// an error that is not a *entity.Fault. Fix round 1 (finding 2):
+	// exercises entity.FaultFrom on a bare error rather than on the fault it
+	// would produce.
 	f := entity.FaultFrom(errors.New("panne imprévue"))
 	require.Equal(t, entity.InternalError("panne imprévue"), f)
 
@@ -218,6 +217,6 @@ func TestFailErreurNueDevient500AvecSonTexte(t *testing.T) {
 	vm := r.Failure(f, "/x")
 
 	require.Equal(t, http.StatusInternalServerError, vm.Status)
-	corps := bodyMap(t, vm)
-	require.Equal(t, "RuntimeException: panne imprévue", corps["detail"])
+	body := bodyMap(t, vm)
+	require.Equal(t, "RuntimeException: panne imprévue", body["detail"])
 }

@@ -15,7 +15,7 @@ type CreateIndividualRequestInput struct {
 	OTPCode             string
 	SourceOperatorID    string
 	RecipientOperatorID string
-	Processus           string // PREPAID or POSTPAID
+	Process             string // PREPAID or POSTPAID
 	Client              ClientInput
 }
 
@@ -83,7 +83,7 @@ func (i *CreateIndividualRequestInteractor) Execute(
 
 	id := i.ids.NewID()
 	now := i.clock.Now()
-	processus := in.Processus
+	process := in.Process
 
 	err = i.uow.Do(ctx, func(repos port.Repositories) error {
 		prefix, err := repos.Requests.RoutingPrefix(ctx, in.SourceOperatorID)
@@ -96,7 +96,7 @@ func (i *CreateIndividualRequestInteractor) Execute(
 			RequestType:      string(entity.RequestTypePorting),
 			SourceOperatorID: in.SourceOperatorID, RecipientOperatorID: in.RecipientOperatorID,
 			CreatorOperatorID: in.RecipientOperatorID,
-			Processus:         &processus,
+			Process:           &process,
 			RoutingInfo:       &prefix,
 			RequestDate:       now,
 		}); err != nil {
@@ -114,8 +114,8 @@ func (i *CreateIndividualRequestInteractor) Execute(
 		}); err != nil {
 			return entity.InternalError("enregistrement du client")
 		}
-		// Dernier appel de la transaction : si l'un des trois précédents a
-		// échoué, celui-ci n'est jamais atteint et l'OTP reste consommable.
+		// Last call of the transaction: if any of the previous three failed,
+		// this one is never reached and the OTP stays consumable.
 		if err := repos.OTP.Consume(ctx, in.MSISDN); err != nil {
 			return entity.InternalError("consommation de l'OTP")
 		}

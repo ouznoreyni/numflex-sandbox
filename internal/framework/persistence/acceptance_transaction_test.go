@@ -14,12 +14,12 @@ import (
 	"github.com/ouznoreyni/numflex-sandbox/internal/usecase/port"
 )
 
-// seedFleetDemande inserts a bare ENTREPRISE request at ACCEPTATION, with
+// seedFleetRequest inserts a bare ENTREPRISE request at ACCEPTATION, with
 // two demande_numero rows, directly by SQL — internal/usecase/acceptance
 // has no Create of its own to reuse (it starts from a request request
 // creation already produced), so this is the same level of directness
 // TestUnitOfWorkRollsBack (in unit_of_work_test.go) uses for OTP.
-func seedFleetDemande(t *testing.T, db *persistence.DB, id string, numbers ...string) {
+func seedFleetRequest(t *testing.T, db *persistence.DB, id string, numbers ...string) {
 	t.Helper()
 	ctx := context.Background()
 	now := time.Now()
@@ -31,7 +31,7 @@ func seedFleetDemande(t *testing.T, db *persistence.DB, id string, numbers ...st
 		   createur_operateur_id, date_demande, date_debut_etape)
 		VALUES ($1, $2, 'ENTREPRISE', 'PORTAGE', 'EN_COURS', 'ACCEPTATION', 'EN_COURS',
 		        $3, $4, $4, $5, $5)`,
-		id, numbers[0], seed.OperateurOrange, seed.OperateurYAS, now)
+		id, numbers[0], seed.OperatorOrangeID, seed.OperatorYASID, now)
 	if err != nil {
 		t.Fatalf("seed demande : %v", err)
 	}
@@ -46,20 +46,20 @@ func seedFleetDemande(t *testing.T, db *persistence.DB, id string, numbers ...st
 }
 
 // TestAcceptanceRejectionRollsBack proves the guarantee Task 14 exists to
-// preserve: a fleet's numéro-by-numéro rejection writes RejectNumber calls
+// preserve: a fleet's number-by-number rejection writes RejectNumber calls
 // and, once the fleet is exhausted, a Reject call — all inside one
 // port.UnitOfWork.Do — and a failure anywhere in that closure leaves every
 // one of those writes undone, RejectNumber's included even though it ran
 // and returned successfully before the failure. Without this, "one
 // transaction" is a claim rather than a guarantee — the same point
 // TestUnitOfWorkRollsBack (unit_of_work_test.go) and
-// TestCreationEchoueLaissantLOTPReutilisable
+// TestCreationFailsLeavingOTPReusable
 // (creation_transaction_test.go) already make for their own capabilities.
 func TestAcceptanceRejectionRollsBack(t *testing.T) {
 	db := testsupport.NewTestDB(t)
 	ctx := context.Background()
 	const id = "6a2100000000000000000001"
-	seedFleetDemande(t, db, id, "771000001", "771000002")
+	seedFleetRequest(t, db, id, "771000001", "771000002")
 
 	uow := persistence.NewUnitOfWork(db)
 	boom := errors.New("boom")
@@ -76,14 +76,14 @@ func TestAcceptanceRejectionRollsBack(t *testing.T) {
 		t.Fatalf("expected boom, got %v", err)
 	}
 
-	var statut string
+	var status string
 	if err := db.Pool.QueryRow(ctx,
 		"SELECT statut FROM demande_numero WHERE demande_id = $1 AND numero = $2",
-		id, "771000001").Scan(&statut); err != nil {
+		id, "771000001").Scan(&status); err != nil {
 		t.Fatal(err)
 	}
-	if statut != "EN_COURS" {
-		t.Fatalf("le numéro 771000001 a survécu REJETE malgré le rollback (statut = %s)", statut)
+	if status != "EN_COURS" {
+		t.Fatalf("le numéro 771000001 a survécu REJETE malgré le rollback (statut = %s)", status)
 	}
 }
 
@@ -94,14 +94,14 @@ func TestAcceptanceRejectRollsBack(t *testing.T) {
 	db := testsupport.NewTestDB(t)
 	ctx := context.Background()
 	const id = "6a2100000000000000000002"
-	seedFleetDemande(t, db, id, "771000003")
+	seedFleetRequest(t, db, id, "771000003")
 
 	uow := persistence.NewUnitOfWork(db)
 	boom := errors.New("boom")
 
 	err := uow.Do(ctx, func(repos port.Repositories) error {
-		if err := repos.Requests.Reject(ctx, id, seed.OperateurOrange,
-			seed.MotifDonneesManquantes, "test", time.Now()); err != nil {
+		if err := repos.Requests.Reject(ctx, id, seed.OperatorOrangeID,
+			seed.RejectionReasonMissingDataID, "test", time.Now()); err != nil {
 			return err
 		}
 		return boom
@@ -110,13 +110,13 @@ func TestAcceptanceRejectRollsBack(t *testing.T) {
 		t.Fatalf("expected boom, got %v", err)
 	}
 
-	var statut string
+	var status string
 	if err := db.Pool.QueryRow(ctx,
-		"SELECT statut_demande FROM demande WHERE id = $1", id).Scan(&statut); err != nil {
+		"SELECT statut_demande FROM demande WHERE id = $1", id).Scan(&status); err != nil {
 		t.Fatal(err)
 	}
-	if statut != "EN_COURS" {
-		t.Fatalf("la demande a survécu REJETE malgré le rollback (statut = %s)", statut)
+	if status != "EN_COURS" {
+		t.Fatalf("la demande a survécu REJETE malgré le rollback (statut = %s)", status)
 	}
 
 	var n int

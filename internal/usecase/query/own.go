@@ -31,11 +31,11 @@ func resolveViews(ctx context.Context, requests port.RequestGateway, ids []strin
 // handlers' detailFiltre/detailParmi never told the two apart either.
 func detailView(ctx context.Context, queries port.QueryGateway, requests port.RequestGateway,
 	queue port.Queue, id, operatorID, errMsg string) (port.RequestView, *entity.Fault) {
-	_, trouve, err := queries.ByID(ctx, queue, id, operatorID)
+	_, found, err := queries.ByID(ctx, queue, id, operatorID)
 	if err != nil {
 		return port.RequestView{}, entity.InternalError(errMsg)
 	}
-	if !trouve {
+	if !found {
 		return port.RequestView{}, entity.RequestNotFound()
 	}
 	view, found, err := requests.Get(ctx, id)

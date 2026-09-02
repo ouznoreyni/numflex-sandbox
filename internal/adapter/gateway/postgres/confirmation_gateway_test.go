@@ -13,15 +13,15 @@ import (
 	"github.com/ouznoreyni/numflex-sandbox/internal/usecase/port"
 )
 
-// operateurOrangeConfirmation and operateurYASConfirmation are
-// internal/framework/seed.OperateurOrange and .OperateurYAS, recopiés en
-// littéral : un test de gateway (couche adapter) ne peut pas importer
-// internal/framework (règle de dépendance, voir test/architecture_test.go),
-// même dans un fichier //go:build integration — précédent déjà posé par
-// user_gateway_test.go (operateurYAS).
+// operatorOrangeConfirmation and operatorYASConfirmation are
+// internal/framework/seed.OperatorOrangeID and .OperatorYASID, copied as
+// literals: a gateway test (adapter layer) cannot import
+// internal/framework (dependency rule, see test/architecture_test.go), even
+// in a //go:build integration file — a precedent already set by
+// user_gateway_test.go (operatorYAS).
 const (
-	operateurOrangeConfirmation = "6a21745ce6c37b5b5b487ec1"
-	operateurYASConfirmation    = "6a2174c3e6c37b5b5b487ec4"
+	operatorOrangeConfirmation = "6a21745ce6c37b5b5b487ec1"
+	operatorYASConfirmation    = "6a2174c3e6c37b5b5b487ec4"
 )
 
 // TestConfirmationGatewayConfirmTranslatesUniqueViolation pins the one
@@ -45,23 +45,23 @@ func TestConfirmationGatewayConfirmTranslatesUniqueViolation(t *testing.T) {
 		   createur_operateur_id, date_demande, date_debut_etape)
 		VALUES ($1, '771000101', 'PARTICULIER', 'PORTAGE', 'EN_COURS', 'CONFIRMATION',
 		        'EN_COURS', $2, $3, $3, $4, $4)`,
-		id, operateurOrangeConfirmation, operateurYASConfirmation, now)
+		id, operatorOrangeConfirmation, operatorYASConfirmation, now)
 	if err != nil {
-		t.Fatalf("seed demande : %v", err)
+		t.Fatalf("seed demande: %v", err)
 	}
 
 	g := postgres.NewConfirmationGateway(db.Pool)
 
 	// The first confirmation must succeed — precondition, or the second
 	// call's unique violation would prove nothing.
-	if err := g.Confirm(ctx, id, operateurOrangeConfirmation, "première confirmation", now); err != nil {
-		t.Fatalf("première confirmation : %v attendu nil", err)
+	if err := g.Confirm(ctx, id, operatorOrangeConfirmation, "first confirmation", now); err != nil {
+		t.Fatalf("first confirmation: %v expected nil", err)
 	}
 
 	// The second confirmation, same (demande_id, operateur_id), hits the
 	// real primary key and must come back as port.ErrAlreadyConfirmed.
-	err = g.Confirm(ctx, id, operateurOrangeConfirmation, "rejeu", now)
+	err = g.Confirm(ctx, id, operatorOrangeConfirmation, "replay", now)
 	if !errors.Is(err, port.ErrAlreadyConfirmed) {
-		t.Fatalf("Confirm (rejeu) = %v, want port.ErrAlreadyConfirmed", err)
+		t.Fatalf("Confirm (replay) = %v, want port.ErrAlreadyConfirmed", err)
 	}
 }

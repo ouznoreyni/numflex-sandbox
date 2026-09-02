@@ -10,18 +10,18 @@ import (
 )
 
 func Issue(secret string, ttl time.Duration, username string, roles []string) (string, error) {
-	maintenant := time.Now()
+	now := time.Now()
 	t := jwt.NewWithClaims(jwt.SigningMethodHS512, jwt.MapClaims{
 		"sub":  username,
-		"auth": rolesEnChaine(roles),
-		"iat":  maintenant.Unix(),
-		"exp":  maintenant.Add(ttl).Unix(),
+		"auth": joinRoles(roles),
+		"iat":  now.Unix(),
+		"exp":  now.Add(ttl).Unix(),
 	})
 	return t.SignedString([]byte(secret))
 }
 
-func Verify(secret, jeton string) (string, error) {
-	t, err := jwt.Parse(jeton, func(t *jwt.Token) (any, error) {
+func Verify(secret, tokenString string) (string, error) {
+	t, err := jwt.Parse(tokenString, func(t *jwt.Token) (any, error) {
 		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("algorithme inattendu : %v", t.Header["alg"])
 		}
@@ -41,7 +41,7 @@ func Verify(secret, jeton string) (string, error) {
 	return sub, nil
 }
 
-func rolesEnChaine(roles []string) string {
+func joinRoles(roles []string) string {
 	out := ""
 	for i, r := range roles {
 		if i > 0 {

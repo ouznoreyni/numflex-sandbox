@@ -16,7 +16,7 @@ func restitutionInteractor(f *fixture) *creation.CreateRestitutionRequestInterac
 
 func TestCreateRestitutionRequestNominal(t *testing.T) {
 	f := newFixture()
-	portedLongAgo := time.Now().AddDate(0, 0, -240) // bien au-delà des 6 mois
+	portedLongAgo := time.Now().AddDate(0, 0, -240) // well beyond 6 months
 	f.numbers.Seed(entity.NumberState{
 		MSISDN: "773000001", CurrentOperatorID: yasID, OriginOperatorID: orangeID,
 		LastPortingDate: &portedLongAgo,
@@ -26,17 +26,17 @@ func TestCreateRestitutionRequestNominal(t *testing.T) {
 		creation.CreateRestitutionRequestInput{MSISDN: "773000001"})
 	require.Nil(t, fault)
 	require.Equal(t, "RESTITUTION", view.RequestType)
-	// L'opérateur d'origine (appelant) récupère le numéro : il est destinataire.
+	// The origin operator (caller) gets the number back: it is the recipient.
 	require.Equal(t, orangeID, view.RecipientOperatorID)
 	require.Equal(t, yasID, view.SourceOperatorID)
 	require.Nil(t, view.RoutingInfo)
-	require.Nil(t, view.Processus)
-	require.Nil(t, view.Client, "une restitution ne porte aucune identité client")
+	require.Nil(t, view.Process)
+	require.Nil(t, view.Client, "a restitution carries no client identity")
 }
 
-func TestCreateRestitutionRequestNumeroNonPorte(t *testing.T) {
+func TestCreateRestitutionRequestNumberNotPorted(t *testing.T) {
 	f := newFixture()
-	// Jamais porté : détenteur actuel == opérateur d'origine.
+	// Never ported: current holder == origin operator.
 	f.numbers.Seed(entity.NumberState{MSISDN: "771000001", CurrentOperatorID: orangeID, OriginOperatorID: orangeID})
 
 	_, fault := restitutionInteractor(f).Execute(ctxCaller(orangeID),
@@ -45,7 +45,7 @@ func TestCreateRestitutionRequestNumeroNonPorte(t *testing.T) {
 	require.Equal(t, "NUMERO_NON_PORTE", fault.Code)
 }
 
-func TestCreateRestitutionRequestReserveeALOperateurDOrigine(t *testing.T) {
+func TestCreateRestitutionRequestReservedToOriginOperator(t *testing.T) {
 	f := newFixture()
 	portedLongAgo := time.Now().AddDate(0, 0, -240)
 	f.numbers.Seed(entity.NumberState{
@@ -53,7 +53,7 @@ func TestCreateRestitutionRequestReserveeALOperateurDOrigine(t *testing.T) {
 		LastPortingDate: &portedLongAgo,
 	})
 
-	// L'appelant n'est ni le détenteur ni l'origine du numéro.
+	// The caller is neither the holder nor the origin of the number.
 	_, fault := restitutionInteractor(f).Execute(ctxCaller("operateur-expresso"),
 		creation.CreateRestitutionRequestInput{MSISDN: "773000001"})
 	require.NotNil(t, fault)
@@ -61,9 +61,9 @@ func TestCreateRestitutionRequestReserveeALOperateurDOrigine(t *testing.T) {
 	require.Equal(t, 0, f.requests.RequestCount())
 }
 
-func TestCreateRestitutionRequestDelaiNonRespecte(t *testing.T) {
+func TestCreateRestitutionRequestDelayNotRespected(t *testing.T) {
 	f := newFixture()
-	portedRecently := time.Now().AddDate(0, 0, -60) // 60 jours < 6 mois
+	portedRecently := time.Now().AddDate(0, 0, -60) // 60 days < 6 months
 	f.numbers.Seed(entity.NumberState{
 		MSISDN: "774000001", CurrentOperatorID: yasID, OriginOperatorID: orangeID,
 		LastPortingDate: &portedRecently,
@@ -75,7 +75,7 @@ func TestCreateRestitutionRequestDelaiNonRespecte(t *testing.T) {
 	require.Equal(t, "DELAI_RESTITUTION_NON_RESPECTE", fault.Code)
 }
 
-func TestCreateRestitutionRequestDejaRestituee(t *testing.T) {
+func TestCreateRestitutionRequestAlreadyRestituted(t *testing.T) {
 	f := newFixture()
 	portedLongAgo := time.Now().AddDate(0, 0, -240)
 	f.numbers.Seed(entity.NumberState{

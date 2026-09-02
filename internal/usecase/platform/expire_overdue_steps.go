@@ -30,7 +30,7 @@ func NewExpireOverdueSteps(requests port.RequestGateway, uow port.UnitOfWork, cl
 
 // Execute reproduces expirerEtapes: asOf is the single instant the whole
 // tick shares — internal/framework/engine.Engine.Tick's own doc comment
-// explains why (a request that converges with a short EtapeTimeout must not
+// explains why (a request that converges with a short StepTimeout must not
 // re-match this predicate within the same tick). A zero timeout disables
 // expiration entirely, exactly as before.
 func (i *ExpireOverdueStepsInteractor) Execute(ctx context.Context, asOf time.Time) error {

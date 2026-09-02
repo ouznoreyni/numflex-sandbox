@@ -66,8 +66,8 @@ func NewAcceptFleetRequest(
 // A fleet accept (accepte:true) instead validates every numerosRejetes
 // entry before writing anything — each number must belong to this request,
 // and its own motif, if given, must exist — exactly as the deleted handler
-// did ("on valide tout avant de rien écrire, pour ne jamais laisser une
-// flotte à moitié marquée"). The write itself is one transaction: reject
+// did ("everything is validated before anything is written, so as never to
+// leave a fleet half marked"). The write itself is one transaction: reject
 // each named number, then decide — from inside that same transaction, so
 // the check sees the rows it just wrote — whether any number is still
 // active. [HYP] The guide never says what becomes of a fleet rejected
@@ -96,7 +96,7 @@ func (i *AcceptFleetRequestInteractor) Execute(
 	}
 
 	if !in.Accept {
-		// Rejet total : même traitement qu'un particulier, la flotte entière tombe.
+		// Total rejection: same handling as an individual request, the whole fleet falls.
 		if in.RejectionReasonID == "" {
 			return port.RequestView{}, entity.RejectionReasonRequired()
 		}
@@ -113,16 +113,16 @@ func (i *AcceptFleetRequestInteractor) Execute(
 		return i.readBack(ctx, dm.ID)
 	}
 
-	// Rejet partiel : chaque numéro visé doit appartenir à la flotte, et son
-	// motif — s'il en porte un — doit exister. Tout est validé avant
-	// d'ouvrir la transaction, pour ne jamais laisser une flotte à moitié
-	// marquée.
+	// Partial rejection: each targeted number must belong to the fleet, and
+	// its own reason — if it carries one — must exist. Everything is
+	// validated before opening the transaction, so as never to leave a
+	// fleet half marked.
 	for _, nr := range in.RejectedNumbers {
-		appartient, err := i.requests.NumberBelongs(ctx, dm.ID, nr.MSISDN)
+		belongs, err := i.requests.NumberBelongs(ctx, dm.ID, nr.MSISDN)
 		if err != nil {
 			return port.RequestView{}, entity.InternalError("vérification du numéro")
 		}
-		if !appartient {
+		if !belongs {
 			return port.RequestView{}, entity.ValidationFailed(
 				fmt.Sprintf("Le numéro %s ne fait pas partie de cette demande", nr.MSISDN))
 		}
@@ -131,7 +131,7 @@ func (i *AcceptFleetRequestInteractor) Execute(
 		}
 	}
 
-	var flotteEpuisee bool
+	var fleetExhausted bool
 	err = i.uow.Do(ctx, func(repos port.Repositories) error {
 		for _, nr := range in.RejectedNumbers {
 			if err := repos.Requests.RejectNumber(ctx, dm.ID, nr.MSISDN, nr.RejectionReasonID); err != nil {
@@ -144,7 +144,7 @@ func (i *AcceptFleetRequestInteractor) Execute(
 			return entity.InternalError("vérification de la flotte")
 		}
 		if !active {
-			flotteEpuisee = true
+			fleetExhausted = true
 			if err := repos.Requests.Reject(ctx, dm.ID, caller.OperatorID, "",
 				in.Comment, i.clock.Now()); err != nil {
 				return entity.InternalError("rejet de la demande")
@@ -161,7 +161,7 @@ func (i *AcceptFleetRequestInteractor) Execute(
 		return port.RequestView{}, entity.FaultFrom(err)
 	}
 
-	if !flotteEpuisee {
+	if !fleetExhausted {
 		if err := i.engine.ScheduleTransition(ctx, dm.ID); err != nil {
 			return port.RequestView{}, entity.InternalError("planification de la transition")
 		}

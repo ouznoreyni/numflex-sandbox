@@ -11,48 +11,48 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func insererReverse(t *testing.T, db *persistence.DB, id string) {
+func insertReverse(t *testing.T, db *persistence.DB, id string) {
 	t.Helper()
 	_, err := db.Pool.Exec(context.Background(),
 		`INSERT INTO reverse_request (id, numero, operateur_id, statut, date_demande)
-		 VALUES ($1,'773000001',$2,'EN_ATTENTE',now())`, id, seed.OperateurOrange)
+		 VALUES ($1,'773000001',$2,'EN_ATTENTE',now())`, id, seed.OperatorOrangeID)
 	require.NoError(t, err)
 }
 
-func TestValidationCreeUneDemandeDirectementEnConfirmation(t *testing.T) {
-	e, db := moteur(t)
-	insererReverse(t, db, "r1")
+func TestValidationCreatesARequestDirectlyInConfirmation(t *testing.T) {
+	e, db := newTestEngine(t)
+	insertReverse(t, db, "r1")
 
-	require.NoError(t, ValiderReverse(context.Background(), db, "r1"))
+	require.NoError(t, ValidateReverse(context.Background(), db, "r1"))
 
-	var statut string
-	var demandeID *string
+	var status string
+	var requestID *string
 	require.NoError(t, db.Pool.QueryRow(context.Background(),
 		`SELECT statut, demande_id FROM reverse_request WHERE id = 'r1'`).
-		Scan(&statut, &demandeID))
-	require.Equal(t, "VALIDE", statut)
-	require.NotNil(t, demandeID)
+		Scan(&status, &requestID))
+	require.Equal(t, "VALIDE", status)
+	require.NotNil(t, requestID)
 
-	var typeDem, etape string
+	var requestType, step string
 	require.NoError(t, db.Pool.QueryRow(context.Background(),
-		`SELECT type_demande, etape_actuelle FROM demande WHERE id = $1`, *demandeID).
-		Scan(&typeDem, &etape))
-	require.Equal(t, "REVERSE", typeDem)
-	require.Equal(t, "CONFIRMATION", etape, "ni ACCEPTATION, ni DESACTIVATION/ACTIVATION")
+		`SELECT type_demande, etape_actuelle FROM demande WHERE id = $1`, *requestID).
+		Scan(&requestType, &step))
+	require.Equal(t, "REVERSE", requestType)
+	require.Equal(t, "CONFIRMATION", step, "ni ACCEPTATION, ni DESACTIVATION/ACTIVATION")
 
 	_ = e
 }
 
-func TestRejetNeCreeAucuneDemande(t *testing.T) {
-	_, db := moteur(t)
-	insererReverse(t, db, "r1")
+func TestRejectionCreatesNoRequest(t *testing.T) {
+	_, db := newTestEngine(t)
+	insertReverse(t, db, "r1")
 
-	require.NoError(t, RejeterReverse(context.Background(), db, "r1"))
+	require.NoError(t, RejectReverse(context.Background(), db, "r1"))
 
-	var statut string
+	var status string
 	require.NoError(t, db.Pool.QueryRow(context.Background(),
-		`SELECT statut FROM reverse_request WHERE id = 'r1'`).Scan(&statut))
-	require.Equal(t, "REJETE", statut)
+		`SELECT statut FROM reverse_request WHERE id = 'r1'`).Scan(&status))
+	require.Equal(t, "REJETE", status)
 
 	var n int
 	require.NoError(t, db.Pool.QueryRow(context.Background(),
@@ -60,52 +60,52 @@ func TestRejetNeCreeAucuneDemande(t *testing.T) {
 	require.Equal(t, 0, n)
 }
 
-func TestValidationAutomatiqueApresDelai(t *testing.T) {
-	e, db := moteur(t, func(c *config.Config) {
+func TestAutomaticValidationAfterDelay(t *testing.T) {
+	e, db := newTestEngine(t, func(c *config.Config) {
 		c.ReverseAutoValidation = time.Nanosecond
 	})
-	insererReverse(t, db, "r1")
+	insertReverse(t, db, "r1")
 
 	require.NoError(t, e.Tick(context.Background()))
 
-	var statut string
+	var status string
 	require.NoError(t, db.Pool.QueryRow(context.Background(),
-		`SELECT statut FROM reverse_request WHERE id = 'r1'`).Scan(&statut))
-	require.Equal(t, "VALIDE", statut)
+		`SELECT statut FROM reverse_request WHERE id = 'r1'`).Scan(&status))
+	require.Equal(t, "VALIDE", status)
 }
 
-func TestPasDeValidationAutomatiqueParDefaut(t *testing.T) {
-	e, db := moteur(t) // ReverseAutoValidation = 0
-	insererReverse(t, db, "r1")
+func TestNoAutomaticValidationByDefault(t *testing.T) {
+	e, db := newTestEngine(t) // ReverseAutoValidation = 0
+	insertReverse(t, db, "r1")
 
 	require.NoError(t, e.Tick(context.Background()))
 
-	var statut string
+	var status string
 	require.NoError(t, db.Pool.QueryRow(context.Background(),
-		`SELECT statut FROM reverse_request WHERE id = 'r1'`).Scan(&statut))
-	require.Equal(t, "EN_ATTENTE", statut)
+		`SELECT statut FROM reverse_request WHERE id = 'r1'`).Scan(&status))
+	require.Equal(t, "EN_ATTENTE", status)
 }
 
-func TestLARTPCompleteUnReverseUneFoisToutLeMondeConfirme(t *testing.T) {
-	e, db := moteur(t)
-	insererReverse(t, db, "r1")
-	require.NoError(t, ValiderReverse(context.Background(), db, "r1"))
+func TestARTPCompletesAReverseOnceEveryoneHasConfirmed(t *testing.T) {
+	e, db := newTestEngine(t)
+	insertReverse(t, db, "r1")
+	require.NoError(t, ValidateReverse(context.Background(), db, "r1"))
 
-	var demandeID string
+	var requestID string
 	require.NoError(t, db.Pool.QueryRow(context.Background(),
-		`SELECT demande_id FROM reverse_request WHERE id = 'r1'`).Scan(&demandeID))
+		`SELECT demande_id FROM reverse_request WHERE id = 'r1'`).Scan(&requestID))
 
-	for _, op := range []string{seed.OperateurOrange, seed.OperateurYAS, seed.OperateurExpresso} {
+	for _, op := range []string{seed.OperatorOrangeID, seed.OperatorYASID, seed.OperatorExpressoID} {
 		_, err := db.Pool.Exec(context.Background(),
 			`INSERT INTO confirmation (demande_id, operateur_id, date_conf) VALUES ($1,$2,now())`,
-			demandeID, op)
+			requestID, op)
 		require.NoError(t, err)
 	}
 
 	require.NoError(t, e.Tick(context.Background()))
 	require.NoError(t, e.Tick(context.Background()))
 
-	etape, _, statutDemande := etatDemande(t, db, demandeID)
-	require.Equal(t, "TERMINE", statutDemande)
-	require.Equal(t, "COMPLETION", etape)
+	step, _, requestStatus := requestState(t, db, requestID)
+	require.Equal(t, "TERMINE", requestStatus)
+	require.Equal(t, "COMPLETION", step)
 }

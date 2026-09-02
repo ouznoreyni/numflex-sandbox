@@ -21,7 +21,7 @@ func validEnterpriseInput(fleetMSISDN string, fleet []string) creation.CreateEnt
 	return creation.CreateEnterpriseRequestInput{
 		FleetMSISDN: fleetMSISDN, OTPCode: "123456",
 		SourceOperatorID: orangeID, RecipientOperatorID: yasID,
-		Processus: "POSTPAID", FleetNumbers: fleet,
+		Process: "POSTPAID", FleetNumbers: fleet,
 		Client: creation.ClientInput{
 			LastName: "Diallo", FirstName: "Ousmane", BirthDate: "1975-03-20",
 			BirthPlace: "Dakar", IDType: "CNI", IDNumber: "123",
@@ -51,7 +51,7 @@ func TestCreateEnterpriseRequestNominal(t *testing.T) {
 	require.True(t, stored.Consumed)
 }
 
-func TestCreateEnterpriseRequestFlotteVide(t *testing.T) {
+func TestCreateEnterpriseRequestEmptyFleet(t *testing.T) {
 	f := newFixture()
 
 	_, fault := enterpriseInteractor(f).Execute(ctxCaller(yasID),
@@ -61,7 +61,7 @@ func TestCreateEnterpriseRequestFlotteVide(t *testing.T) {
 	require.Equal(t, 0, f.requests.RequestCount())
 }
 
-func TestCreateEnterpriseRequestOperateursMixtes(t *testing.T) {
+func TestCreateEnterpriseRequestMixedOperators(t *testing.T) {
 	f := newFixture()
 	f.numbers.Seed(entity.NumberState{MSISDN: "771000001", CurrentOperatorID: orangeID, OriginOperatorID: orangeID})
 	f.numbers.Seed(entity.NumberState{MSISDN: "701000001", CurrentOperatorID: "operateur-expresso", OriginOperatorID: "operateur-expresso"})
@@ -73,14 +73,14 @@ func TestCreateEnterpriseRequestOperateursMixtes(t *testing.T) {
 	require.Equal(t, "FLOTTE_OPERATEURS_MIXTES", fault.Code)
 }
 
-func TestCreateEnterpriseRequestExclusionPartielle(t *testing.T) {
-	// BR-006 / invariant 11 : la flotte réussit avec moins de numéros que demandé.
+func TestCreateEnterpriseRequestPartialExclusion(t *testing.T) {
+	// BR-006 / invariant 11: the fleet succeeds with fewer numbers than requested.
 	f := newFixture()
 	f.requests.SeedPrefix(orangeID, "191")
 	f.numbers.Seed(entity.NumberState{MSISDN: "771000001", CurrentOperatorID: orangeID, OriginOperatorID: orangeID})
 	f.numbers.Seed(entity.NumberState{
 		MSISDN: "771000002", CurrentOperatorID: orangeID, OriginOperatorID: orangeID,
-		RequestInProgress: true, // déjà bloqué par une autre demande EN_COURS
+		RequestInProgress: true, // already blocked by another request EN_COURS
 	})
 	seedOTP(t, f, "771000001", "123456")
 
@@ -94,9 +94,9 @@ func TestCreateEnterpriseRequestExclusionPartielle(t *testing.T) {
 	require.Len(t, f.requests.Excluded(out.ID), 1)
 }
 
-func TestCreateEnterpriseRequestAucunNumeroEligible(t *testing.T) {
+func TestCreateEnterpriseRequestNoEligibleNumber(t *testing.T) {
 	f := newFixture()
-	within3Months := time.Now().AddDate(0, 0, -25) // porté il y a 25 jours
+	within3Months := time.Now().AddDate(0, 0, -25) // ported 25 days ago
 	f.numbers.Seed(entity.NumberState{
 		MSISDN: "772000001", CurrentOperatorID: orangeID, OriginOperatorID: orangeID,
 		LastPortingDate: &within3Months,

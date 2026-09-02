@@ -41,7 +41,7 @@ func (p *Contract) Failure(f *entity.Fault, _ string) ViewModel {
 	if f == nil {
 		f = entity.InternalError("erreur interne")
 	}
-	return ViewModel{Status: statutContrat(f.Kind), Body: Envelope{
+	return ViewModel{Status: contractStatus(f.Kind), Body: Envelope{
 		Success: false,
 		Code:    f.Code,
 		Message: f.Message,
@@ -54,7 +54,7 @@ func (p *Contract) Rendered(t time.Time) time.Time {
 	return p.clock.Rendered(t)
 }
 
-func statutContrat(k entity.FaultKind) int {
+func contractStatus(k entity.FaultKind) int {
 	switch k {
 	case entity.FaultValidation:
 		return http.StatusBadRequest

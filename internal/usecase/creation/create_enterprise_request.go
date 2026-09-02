@@ -18,7 +18,7 @@ type CreateEnterpriseRequestInput struct {
 	OTPCode             string
 	SourceOperatorID    string
 	RecipientOperatorID string
-	Processus           string // PREPAID or POSTPAID
+	Process             string // PREPAID or POSTPAID
 	FleetNumbers        []string
 	Client              ClientInput
 }
@@ -78,8 +78,8 @@ func NewCreateEnterpriseRequest(
 func (i *CreateEnterpriseRequestInteractor) Execute(
 	ctx context.Context, in CreateEnterpriseRequestInput,
 ) (CreateEnterpriseRequestOutput, *entity.Fault) {
-	// §9 : le catalogue réserve un code à ce cas précis. Le traiter comme une
-	// violation de bean validation le rendrait inatteignable.
+	// §9: the catalogue reserves a code for exactly this case. Treating it as
+	// a bean-validation violation would make it unreachable.
 	if len(in.FleetNumbers) == 0 {
 		return CreateEnterpriseRequestOutput{}, entity.FleetEmpty()
 	}
@@ -95,31 +95,31 @@ func (i *CreateEnterpriseRequestInteractor) Execute(
 	}
 
 	states := make(map[string]entity.NumberState, len(in.FleetNumbers))
-	for _, numero := range in.FleetNumbers {
-		state, found, err := i.numbers.State(ctx, numero)
+	for _, number := range in.FleetNumbers {
+		state, found, err := i.numbers.State(ctx, number)
 		if err != nil {
 			return CreateEnterpriseRequestOutput{}, entity.InternalError("lecture du numéro")
 		}
 		if !found {
 			return CreateEnterpriseRequestOutput{}, entity.IncorrectSourceOperator()
 		}
-		states[numero] = state
+		states[number] = state
 	}
-	for _, numero := range in.FleetNumbers {
-		if states[numero].CurrentOperatorID != states[in.FleetNumbers[0]].CurrentOperatorID {
+	for _, number := range in.FleetNumbers {
+		if states[number].CurrentOperatorID != states[in.FleetNumbers[0]].CurrentOperatorID {
 			return CreateEnterpriseRequestOutput{}, entity.FleetMixedOperators()
 		}
 	}
 
 	var retained []string
 	excluded := []ExcludedNumber{}
-	for _, numero := range in.FleetNumbers {
-		if f := entity.CheckPortingEligibility(states[numero], in.SourceOperatorID,
+	for _, number := range in.FleetNumbers {
+		if f := entity.CheckPortingEligibility(states[number], in.SourceOperatorID,
 			in.RecipientOperatorID, entity.DelayBetweenPortings); f != nil {
-			excluded = append(excluded, ExcludedNumber{MSISDN: numero, Reason: f.Message, ErrorCode: f.Code})
+			excluded = append(excluded, ExcludedNumber{MSISDN: number, Reason: f.Message, ErrorCode: f.Code})
 			continue
 		}
-		retained = append(retained, numero)
+		retained = append(retained, number)
 	}
 	if len(retained) == 0 {
 		return CreateEnterpriseRequestOutput{}, entity.NoEligibleNumber()
@@ -127,7 +127,7 @@ func (i *CreateEnterpriseRequestInteractor) Execute(
 
 	id := i.ids.NewID()
 	now := i.clock.Now()
-	processus := in.Processus
+	process := in.Process
 	var companyName, rcNumber *string
 	if in.Client.CompanyName != "" {
 		companyName = &in.Client.CompanyName
@@ -147,15 +147,15 @@ func (i *CreateEnterpriseRequestInteractor) Execute(
 			RequestType:      string(entity.RequestTypePorting),
 			SourceOperatorID: in.SourceOperatorID, RecipientOperatorID: in.RecipientOperatorID,
 			CreatorOperatorID: in.RecipientOperatorID,
-			Processus:         &processus,
+			Process:           &process,
 			RoutingInfo:       &prefix,
 			RequestDate:       now,
 		}); err != nil {
 			return entity.InternalError("création de la demande")
 		}
-		for _, numero := range retained {
+		for _, number := range retained {
 			if err := repos.Requests.AddNumber(ctx, port.RequestNumberInput{
-				RequestID: id, MSISDN: numero, RoutingInfo: &prefix,
+				RequestID: id, MSISDN: number, RoutingInfo: &prefix,
 			}); err != nil {
 				return entity.InternalError("enregistrement du numéro")
 			}

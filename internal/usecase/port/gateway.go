@@ -65,7 +65,7 @@ type NumberGateway interface {
 }
 
 // CreateRequestInput carries the fields a new porting/restitution request
-// persists into the demande table. Processus and RoutingInfo are nil for a
+// persists into the demande table. Process and RoutingInfo are nil for a
 // restitution, which has neither dimension before its own COMPLETION.
 type CreateRequestInput struct {
 	ID                  string
@@ -75,7 +75,7 @@ type CreateRequestInput struct {
 	SourceOperatorID    string
 	RecipientOperatorID string
 	CreatorOperatorID   string
-	Processus           *string
+	Process             *string
 	RoutingInfo         *string
 	RequestDate         time.Time
 }
@@ -132,7 +132,7 @@ type RequestView struct {
 	SourceOperatorID, SourceOperatorName       string
 	RecipientOperatorID, RecipientOperatorName string
 	RequestDate                                time.Time
-	Processus, RoutingInfo                     *string
+	Process, RoutingInfo                       *string
 	CompletionDate                             *time.Time
 	Client                                     *ClientView
 }
@@ -195,7 +195,7 @@ type RequestGateway interface {
 	// HasActiveNumber answers whether request id still has at least one
 	// demande_numero row that is not REJETE — the fleet-rejection guard
 	// deciding whether a partially-rejected fleet still has something to
-	// port, or has been rejected numéro by numéro until nothing is left.
+	// port, or has been rejected number by number until nothing is left.
 	HasActiveNumber(ctx context.Context, requestID string) (bool, error)
 
 	// Reject closes a request definitively: REJETE, its current step marked
@@ -203,7 +203,7 @@ type RequestGateway interface {
 	// of origin ACTION — no transition of the engine ever writes this one,
 	// since R-10 only governs acceptance's own convergence. Shared by an
 	// individual rejection and a fleet rejected in full, either outright or
-	// numéro by numéro until nothing is left ([HYP], see
+	// number by number until nothing is left ([HYP], see
 	// internal/usecase/acceptance).
 	Reject(ctx context.Context, requestID, operatorID, rejectionReasonID, comment string, now time.Time) error
 
@@ -252,7 +252,7 @@ type RequestGateway interface {
 	// rejected — transfererAuRegistre, ACTIVATION's own exit effect for a
 	// PORTAGE (§7.10). This filter is load-bearing: including an excluded or
 	// rejected number here would transfer a number the operator never
-	// agreed to port (see TestTransfertRegistreExclutNumerosExclusEtRejetes).
+	// agreed to port (see TestRegistryTransferExcludesExcludedAndRejectedNumbers).
 	TransferToRegistry(ctx context.Context, id, recipientOperatorID string) error
 
 	// ApplyRouting finalises routage_info number by number (sourcePrefix for
@@ -269,7 +269,7 @@ type RequestGateway interface {
 	ApplyEndOfRequestRestitution(ctx context.Context, id, msisdn, recipientOperatorID, recipientPrefix string) error
 
 	// ScheduleTransitionAt marks id's current step processed and fixes the
-	// instant its transition will actually apply — PlanifierTransition's own
+	// instant its transition will actually apply — ScheduleTransition's own
 	// deferred branch (R-10). The deadline itself is computed database-side,
 	// deliberately (commit 94af3f2): a single delaySeconds parameter, not a
 	// Go-computed time.Time, so the same now() Postgres will reread in
@@ -289,12 +289,12 @@ type RequestGateway interface {
 	// own SELECT. asOf is the single instant the whole tick shares (see
 	// internal/framework/engine.Engine.Tick's own doc comment): passed in
 	// rather than read again here, so a request that converges with a short
-	// EtapeTimeout cannot re-match this predicate within the same tick.
+	// StepTimeout cannot re-match this predicate within the same tick.
 	OverdueSteps(ctx context.Context, timeoutSeconds float64, asOf time.Time) ([]string, error)
 
 	// CreateAtConfirmation inserts a new request directly at
 	// entity.StepConfirmation rather than entity.StepAcceptance — the shape
-	// ValiderReverse's own INSERT needs (§6): an ARTP validation creates a
+	// ValidateReverse's own INSERT needs (§6): an ARTP validation creates a
 	// REVERSE demande that skips ACCEPTATION and DESACTIVATION/ACTIVATION
 	// entirely. A separate method from Create rather than a parameter on it:
 	// every other caller of Create always starts at ACCEPTATION, and this
@@ -426,12 +426,12 @@ type ReverseGateway interface {
 	Own(ctx context.Context, operatorID string, page, size int) ([]string, error)
 
 	// LockPending reads a reverse request's number, operator and status with
-	// a row lock (FOR UPDATE) — the read ValiderReverse (§6, Task 17) opens
+	// a row lock (FOR UPDATE) — the read ValidateReverse (§6, Task 17) opens
 	// every validation with. err is a genuine failure (id absent included,
 	// matching the deleted internal/engine/reverse.go's own
 	// tx.QueryRow(...).Scan, which never swallowed ErrNoRows); status is
 	// returned rather than a bool so the caller can apply the same no-op
-	// rule ValiderReverse always has: only "EN_ATTENTE" is actionable.
+	// rule ValidateReverse always has: only "EN_ATTENTE" is actionable.
 	LockPending(ctx context.Context, id string) (msisdn, operatorID, status string, err error)
 
 	// MarkValidated records that id was validated into demandeID — the same
@@ -439,15 +439,15 @@ type ReverseGateway interface {
 	// on when the act happened.
 	MarkValidated(ctx context.Context, id, demandeID string, now time.Time) error
 
-	// Reject marks id REJETE without creating any Demande — RejeterReverse's
+	// Reject marks id REJETE without creating any Demande — RejectReverse's
 	// own single UPDATE, guarded on statut = 'EN_ATTENTE' so a second call
-	// (or a call racing ValiderReverse) is a silent no-op, exactly as
+	// (or a call racing ValidateReverse) is a silent no-op, exactly as
 	// before. date_decision stays Postgres's own now(): unlike MarkValidated,
 	// nothing else needs to agree with this instant.
 	Reject(ctx context.Context, id string) error
 
 	// CurrentOperatorFor reads a number's current holder
-	// (numero.operateur_actuel_id) — the one field ValiderReverse needs from
+	// (numero.operateur_actuel_id) — the one field ValidateReverse needs from
 	// the registry to become a Demande's operateur_source_id. Placed on
 	// ReverseGateway rather than NumberGateway so this read stays inside the
 	// same transaction as LockPending's own lock, which
@@ -523,7 +523,7 @@ type IncidentGateway interface {
 	Own(ctx context.Context, operatorID string, systemLocked bool, page, size int) ([]string, error)
 
 	// MarketFrozen answers whether any operator has an EN_COURS,
-	// fige_systeme incident open — BR-012, PlaceGelee's own read. Reading it
+	// fige_systeme incident open — BR-012, MarketFrozen's own read. Reading it
 	// through IncidentGateway rather than a dedicated port keeps a single
 	// source of truth on what freezes the market: exactly the table
 	// DeclareIncidentInteractor and ResolveIncidentInteractor already write,
@@ -542,9 +542,9 @@ type SandboxGateway interface {
 	// createur_operateur_id, never the /mes-demandes filter: a request
 	// belongs to two operators at once, and only its creator may purge it.
 	RequestIDsToPurge(ctx context.Context, operatorID string) ([]string, error)
-	// NumbersToRestore lists every numéro referenced by requestIDs, on
+	// NumbersToRestore lists every number referenced by requestIDs, on
 	// demande.numero (particulier) or demande_numero.numero (flotte,
-	// exclus compris — a number can have moved before being excluded).
+	// excluded ones included — a number can have moved before being excluded).
 	NumbersToRestore(ctx context.Context, requestIDs []string) ([]string, error)
 	// DeleteReverseRequests removes every reverse_request belonging to
 	// operatorID or attached to one of requestIDs — ahead of

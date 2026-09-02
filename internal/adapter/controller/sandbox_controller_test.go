@@ -17,33 +17,33 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const cheminPurge = "/api/sandbox/v1/demandes"
+const purgePath = "/api/sandbox/v1/demandes"
 
-// creerPortageVers crée une demande particulier dont le destinataire — donc le
-// créateur — est le compte donné. creerPortage ne sait faire que ORANGE → YAS.
-func creerPortageVers(h *routerharness.RouterHarness, numero, username, motDePasse, source, destinataire string) string {
+// createPortingTo creates an individual request whose recipient — hence its
+// creator — is the given account. createPorting only ever does ORANGE → YAS.
+func createPortingTo(h *routerharness.RouterHarness, msisdn, username, password, source, recipient string) string {
 	h.T.Helper()
-	jeton := h.Jeton(username, motDePasse)
-	h.Appel(http.MethodPost, "/api/gateway/v1/otp/send", jeton, map[string]any{"numero": numero})
+	token := h.Token(username, password)
+	h.Call(http.MethodPost, "/api/gateway/v1/otp/send", token, map[string]any{"numero": msisdn})
 
-	corpsDem := corpsParticulier(numero)
-	corpsDem["operateurSourceId"] = source
-	corpsDem["operateurDestinataireId"] = destinataire
+	body := individualBody(msisdn)
+	body["operateurSourceId"] = source
+	body["operateurDestinataireId"] = recipient
 
-	rep, corps := h.Appel(http.MethodPost, "/api/gateway/v1/demandes/particulier", jeton, corpsDem)
-	require.Equal(h.T, http.StatusCreated, rep.StatusCode, corps)
-	return corps["data"].(map[string]any)["id"].(string)
+	resp, body := h.Call(http.MethodPost, "/api/gateway/v1/demandes/particulier", token, body)
+	require.Equal(h.T, http.StatusCreated, resp.StatusCode, body)
+	return body["data"].(map[string]any)["id"].(string)
 }
 
-func numeroRegistre(h *routerharness.RouterHarness, msisdn string) (actuel string, portage *string) {
+func registryNumber(h *routerharness.RouterHarness, msisdn string) (current string, portingDate *string) {
 	h.T.Helper()
 	require.NoError(h.T, h.DB.Pool.QueryRow(context.Background(),
 		`SELECT operateur_actuel_id, date_dernier_portage::text FROM numero WHERE msisdn = $1`,
-		msisdn).Scan(&actuel, &portage))
-	return actuel, portage
+		msisdn).Scan(&current, &portingDate))
+	return current, portingDate
 }
 
-func compteDemandes(h *routerharness.RouterHarness) int {
+func requestCount(h *routerharness.RouterHarness) int {
 	h.T.Helper()
 	var n int
 	require.NoError(h.T, h.DB.Pool.QueryRow(context.Background(),
@@ -51,95 +51,97 @@ func compteDemandes(h *routerharness.RouterHarness) int {
 	return n
 }
 
-// La surface du sandbox doit rester celle de l'ARTP tant que la purge n'est pas
-// demandée : route non enregistrée, donc 404 — indistinguable d'un chemin qui
-// n'existe pas, y compris avec un jeton valide.
-func TestPurgeAbsenteParDefaut(t *testing.T) {
+// The sandbox's surface must stay the ARTP's as long as the purge is not
+// requested: route not registered, hence 404 — indistinguishable from a
+// path that does not exist, even with a valid token.
+func TestPurgeAbsentByDefault(t *testing.T) {
 	h := routerharness.NewRouterHarness(t)
 
-	rep := h.Brut(http.MethodDelete, cheminPurge, h.Jeton("yas", "yas2026"), nil)
-	require.Equal(t, http.StatusNotFound, rep.StatusCode)
+	resp := h.Raw(http.MethodDelete, purgePath, h.Token("yas", "yas2026"), nil)
+	require.Equal(t, http.StatusNotFound, resp.StatusCode)
 
-	rep = h.Brut(http.MethodDelete, cheminPurge, "", nil)
-	require.Equal(t, http.StatusNotFound, rep.StatusCode)
+	resp = h.Raw(http.MethodDelete, purgePath, "", nil)
+	require.Equal(t, http.StatusNotFound, resp.StatusCode)
 }
 
-func TestPurgeExigeUnJeton(t *testing.T) {
+func TestPurgeRequiresAToken(t *testing.T) {
 	h := routerharness.NewRouterHarness(t, routerharness.SandboxAdmin)
 
-	rep := h.Brut(http.MethodDelete, cheminPurge, "", nil)
-	require.Equal(t, http.StatusUnauthorized, rep.StatusCode)
+	resp := h.Raw(http.MethodDelete, purgePath, "", nil)
+	require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 }
 
-// Le périmètre est createur_operateur_id : ce qu'un opérateur a fabriqué, et
-// rien d'autre. Une demande créée par un partenaire survit, même si l'appelant
-// y est partie.
-func TestPurgeNeToucheQueMesCreations(t *testing.T) {
+// The scope is createur_operateur_id: what an operator created, and nothing
+// else. A request created by a partner survives, even if the caller is a
+// party to it.
+func TestPurgeOnlyTouchesMyOwnCreations(t *testing.T) {
 	h := routerharness.NewRouterHarness(t, routerharness.SandboxAdmin)
 
-	idYAS := creerPortage(h, "771000001") // créée par YAS, ORANGE → YAS
-	idOrange := creerPortageVers(h, "761000001", "orange", "orange2026",
-		operateurYAS, operateurOrange)
+	idYAS := createPorting(h, "771000001") // created by YAS, ORANGE → YAS
+	idOrange := createPortingTo(h, "761000001", "orange", "orange2026",
+		operatorYAS, operatorOrange)
 
-	rep, corps := h.Appel(http.MethodDelete, cheminPurge, h.Jeton("yas", "yas2026"), nil)
+	resp, body := h.Call(http.MethodDelete, purgePath, h.Token("yas", "yas2026"), nil)
 
-	require.Equal(t, http.StatusOK, rep.StatusCode, corps)
-	require.Equal(t, true, corps["success"])
-	require.Equal(t, "Demandes purgées avec succès", corps["message"])
-	data := corps["data"].(map[string]any)
+	require.Equal(t, http.StatusOK, resp.StatusCode, body)
+	require.Equal(t, true, body["success"])
+	require.Equal(t, "Demandes purgées avec succès", body["message"])
+	data := body["data"].(map[string]any)
 	require.EqualValues(t, 1, data["demandesSupprimees"])
 
-	require.Equal(t, 1, compteDemandes(h), "la demande d'ORANGE doit survivre")
+	require.Equal(t, 1, requestCount(h), "ORANGE's request must survive")
 
-	// YAS est destinataire de idYAS et source de idOrange : après purge il ne
-	// lui reste que celle du partenaire.
-	restantes := h.Liste("/api/gateway/v1/demandes/mes-demandes", h.Jeton("yas", "yas2026"))
-	require.Len(t, restantes, 1)
-	require.Equal(t, idOrange, restantes[0].(map[string]any)["id"])
+	// YAS is recipient of idYAS and source of idOrange: after the purge,
+	// only its partner's request remains.
+	remaining := h.List("/api/gateway/v1/demandes/mes-demandes", h.Token("yas", "yas2026"))
+	require.Len(t, remaining, 1)
+	require.Equal(t, idOrange, remaining[0].(map[string]any)["id"])
 
-	rep, _ = h.Appel(http.MethodGet, "/api/gateway/v1/demandes/a-accepter/"+idYAS,
-		h.Jeton("orange", "orange2026"), nil)
-	require.Equal(t, http.StatusInternalServerError, rep.StatusCode,
-		"la demande purgée est introuvable")
+	resp, _ = h.Call(http.MethodGet, "/api/gateway/v1/demandes/a-accepter/"+idYAS,
+		h.Token("orange", "orange2026"), nil)
+	require.Equal(t, http.StatusInternalServerError, resp.StatusCode,
+		"the purged request is not found")
 }
 
-// Sans restauration du registre, DELAI_PORTAGE_NON_RESPECTE bloquerait le
-// numéro trois mois et la purge ne servirait à rien pour rejouer un scénario.
-func TestPurgeRestaureLeRegistreEtRendLeNumeroRejouable(t *testing.T) {
+// Without restoring the registry, DELAI_PORTAGE_NON_RESPECTE would block the
+// number for three months and the purge would be useless for replaying a
+// scenario.
+func TestPurgeRestoresTheRegistryAndMakesTheNumberReplayable(t *testing.T) {
 	h := routerharness.NewRouterHarness(t, routerharness.SandboxAdmin)
-	jetonYAS := h.Jeton("yas", "yas2026")
+	tokenYAS := h.Token("yas", "yas2026")
 
-	id := creerPortage(h, "771000001")
-	avancerA(h, id, "ACTIVATION")
-	rep, corps := h.Appel(http.MethodPost, "/api/gateway/v1/demandes/traitement", jetonYAS,
+	id := createPorting(h, "771000001")
+	advanceTo(h, id, "ACTIVATION")
+	resp, body := h.Call(http.MethodPost, "/api/gateway/v1/demandes/traitement", tokenYAS,
 		map[string]any{"idDemande": id})
-	require.Equal(t, http.StatusOK, rep.StatusCode, corps)
+	require.Equal(t, http.StatusOK, resp.StatusCode, body)
 
-	actuel, portage := numeroRegistre(h, "771000001")
-	require.Equal(t, operateurYAS, actuel, "le portage a bien transféré le numéro")
-	require.NotNil(t, portage)
+	current, portingDate := registryNumber(h, "771000001")
+	require.Equal(t, operatorYAS, current, "the porting did transfer the number")
+	require.NotNil(t, portingDate)
 
-	_, corps = h.Appel(http.MethodDelete, cheminPurge, jetonYAS, nil)
-	data := corps["data"].(map[string]any)
+	_, body = h.Call(http.MethodDelete, purgePath, tokenYAS, nil)
+	data := body["data"].(map[string]any)
 	require.EqualValues(t, 1, data["demandesSupprimees"])
 	require.EqualValues(t, 1, data["numerosRestaures"])
 
-	actuel, portage = numeroRegistre(h, "771000001")
-	require.Equal(t, operateurOrange, actuel, "le numéro rejoint son opérateur d'origine")
-	require.Nil(t, portage, "date_dernier_portage effacée")
+	current, portingDate = registryNumber(h, "771000001")
+	require.Equal(t, operatorOrange, current, "the number rejoins its origin operator")
+	require.Nil(t, portingDate, "date_dernier_portage cleared")
 
-	// Le scénario se rejoue immédiatement : c'est la raison d'être de la purge.
-	creerPortage(h, "771000001")
+	// The scenario replays immediately: that is the purge's whole purpose.
+	createPorting(h, "771000001")
 }
 
-// L'OTP est consommé à la création ; sans purge le même numéro ne pourrait pas
-// être redemandé sans repasser par otp/send — et la ligne resterait orpheline.
-func TestPurgeEffaceLesOTPDesNumerosPurges(t *testing.T) {
+// The OTP is consumed at creation; without a purge the same number could
+// not be requested again without going back through otp/send — and the row
+// would stay orphaned.
+func TestPurgeErasesOTPOfPurgedNumbers(t *testing.T) {
 	h := routerharness.NewRouterHarness(t, routerharness.SandboxAdmin)
-	creerPortage(h, "771000001")
+	createPorting(h, "771000001")
 
-	_, corps := h.Appel(http.MethodDelete, cheminPurge, h.Jeton("yas", "yas2026"), nil)
-	require.EqualValues(t, 1, corps["data"].(map[string]any)["otpSupprimes"])
+	_, body := h.Call(http.MethodDelete, purgePath, h.Token("yas", "yas2026"), nil)
+	require.EqualValues(t, 1, body["data"].(map[string]any)["otpSupprimes"])
 
 	var n int
 	require.NoError(t, h.DB.Pool.QueryRow(context.Background(),
@@ -147,43 +149,43 @@ func TestPurgeEffaceLesOTPDesNumerosPurges(t *testing.T) {
 	require.Zero(t, n)
 }
 
-func TestPurgeSansRienAPurgerReussit(t *testing.T) {
+func TestPurgeWithNothingToPurgeSucceeds(t *testing.T) {
 	h := routerharness.NewRouterHarness(t, routerharness.SandboxAdmin)
 
-	rep, corps := h.Appel(http.MethodDelete, cheminPurge, h.Jeton("expresso", "expresso2026"), nil)
+	resp, body := h.Call(http.MethodDelete, purgePath, h.Token("expresso", "expresso2026"), nil)
 
-	require.Equal(t, http.StatusOK, rep.StatusCode)
-	data := corps["data"].(map[string]any)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	data := body["data"].(map[string]any)
 	require.EqualValues(t, 0, data["demandesSupprimees"])
 	require.EqualValues(t, 0, data["numerosRestaures"])
 	require.EqualValues(t, 0, data["otpSupprimes"])
 	require.EqualValues(t, 0, data["reverseSupprimees"])
 }
 
-// La gateway ne gagne aucune route : l'invariant des 33 routes tient même
-// purge activée.
-func TestPurgeNAjouteRienALaGateway(t *testing.T) {
+// The gateway gains no route: the 33-route invariant holds even with the
+// purge enabled.
+func TestPurgeAddsNothingToTheGateway(t *testing.T) {
 	h := routerharness.NewRouterHarness(t, routerharness.SandboxAdmin)
 
-	rep := h.Brut(http.MethodDelete, "/api/gateway/v1/demandes",
-		h.Jeton("yas", "yas2026"), nil)
-	require.Equal(t, http.StatusNotFound, rep.StatusCode)
+	resp := h.Raw(http.MethodDelete, "/api/gateway/v1/demandes",
+		h.Token("yas", "yas2026"), nil)
+	require.Equal(t, http.StatusNotFound, resp.StatusCode)
 }
 
-// reverse_request référence demande sans ON DELETE CASCADE : sans traitement
-// explicite, sa clé étrangère bloquerait la suppression. Les demandes de
-// reverse de l'appelant partent donc avec le reste de ses données de test.
-func TestPurgeEmporteLesDemandesDeReverse(t *testing.T) {
+// reverse_request references demande without ON DELETE CASCADE: without
+// explicit handling, its foreign key would block the deletion. The caller's
+// reverse requests therefore leave with the rest of its test data.
+func TestPurgeTakesReverseRequestsWithIt(t *testing.T) {
 	h := routerharness.NewRouterHarness(t, routerharness.SandboxAdmin)
-	jetonYAS := h.Jeton("yas", "yas2026")
+	tokenYAS := h.Token("yas", "yas2026")
 
-	// 77200xxxx : détenu par ORANGE, d'origine YAS — YAS peut en demander le reverse.
-	rep, corps := h.Appel(http.MethodPost, "/api/gateway/v1/reverse-requests", jetonYAS,
+	// 77200xxxx: held by ORANGE, originally YAS — YAS may request its reverse.
+	resp, body := h.Call(http.MethodPost, "/api/gateway/v1/reverse-requests", tokenYAS,
 		map[string]any{"numero": "772000001"})
-	require.Equal(t, http.StatusCreated, rep.StatusCode, corps)
+	require.Equal(t, http.StatusCreated, resp.StatusCode, body)
 
-	_, corps = h.Appel(http.MethodDelete, cheminPurge, jetonYAS, nil)
-	require.EqualValues(t, 1, corps["data"].(map[string]any)["reverseSupprimees"])
+	_, body = h.Call(http.MethodDelete, purgePath, tokenYAS, nil)
+	require.EqualValues(t, 1, body["data"].(map[string]any)["reverseSupprimees"])
 
-	require.Empty(t, h.Liste("/api/gateway/v1/reverse-requests/mes-demandes", jetonYAS))
+	require.Empty(t, h.List("/api/gateway/v1/reverse-requests/mes-demandes", tokenYAS))
 }

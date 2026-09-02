@@ -80,7 +80,7 @@ func TestAcceptRequestNominal(t *testing.T) {
 	require.Equal(t, "Demande conforme", f.requests.Comment("d1"))
 }
 
-// TestAcceptRequestExecuteNeVerifiePlusLeGel documents where the frozen-market
+// TestAcceptRequestExecuteNoLongerChecksFreeze documents where the frozen-market
 // check moved to: it is no longer Execute's business — AcceptanceController
 // must make it BEFORE decoding the request body, so that the "frozen market +
 // invalid body" case answers "frozen market" rather than a JSON format error
@@ -88,7 +88,7 @@ func TestAcceptRequestNominal(t *testing.T) {
 // Execute still checking the freeze after that move would reproduce exactly
 // the ordering bug the move fixes: this test guards against that by proving a
 // frozen market no longer keeps Execute from succeeding.
-func TestAcceptRequestExecuteNeVerifiePlusLeGel(t *testing.T) {
+func TestAcceptRequestExecuteNoLongerChecksFreeze(t *testing.T) {
 	f := newFixture()
 	seedRequest(f)
 	f.engine.Frozen = true
@@ -119,8 +119,8 @@ func TestMarketFrozen(t *testing.T) {
 	require.Equal(t, "ERREUR_INTERNE", fault.Code)
 }
 
-func TestAcceptRequestParLeDestinataireRefuse(t *testing.T) {
-	// TC-034 : seul l'opérateur source peut décider.
+func TestAcceptRequestByRecipientRefused(t *testing.T) {
+	// TC-034: only the source operator may decide.
 	f := newFixture()
 	seedRequest(f)
 
@@ -131,7 +131,7 @@ func TestAcceptRequestParLeDestinataireRefuse(t *testing.T) {
 	require.Equal(t, "DEMANDE_ACCES_REFUSE", fault.Code)
 }
 
-func TestAcceptRequestIdInconnu(t *testing.T) {
+func TestAcceptRequestUnknownID(t *testing.T) {
 	f := newFixture()
 	_, fault := acceptInteractor(f).Execute(ctxCaller(orangeID), acceptance.AcceptRequestInput{
 		RequestID: "inconnu", Accept: true,
@@ -140,7 +140,7 @@ func TestAcceptRequestIdInconnu(t *testing.T) {
 	require.Equal(t, "DEMANDE_NON_TROUVEE", fault.Code)
 }
 
-func TestAcceptRequestRejetSansMotifRefuse(t *testing.T) {
+func TestAcceptRequestRejectionWithoutReasonRefused(t *testing.T) {
 	f := newFixture()
 	seedRequest(f)
 
@@ -151,7 +151,7 @@ func TestAcceptRequestRejetSansMotifRefuse(t *testing.T) {
 	require.Equal(t, "MOTIF_REJET_OBLIGATOIRE", fault.Code)
 }
 
-func TestAcceptRequestRejetAvecMotifTermineLaDemande(t *testing.T) {
+func TestAcceptRequestRejectionWithReasonCompletesRequest(t *testing.T) {
 	f := newFixture()
 	seedRequest(f)
 	f.reasons.SeedRejectionReason(motifID, "Identité non prouvée")
@@ -163,10 +163,10 @@ func TestAcceptRequestRejetAvecMotifTermineLaDemande(t *testing.T) {
 	require.Equal(t, "d1", view.ID)
 	require.Equal(t, entity.RequestRejected, f.requests.Status("d1"))
 	require.Equal(t, motifID, f.requests.RejectionReason("d1"))
-	require.Empty(t, f.engine.Scheduled, "un rejet ne planifie aucune transition")
+	require.Empty(t, f.engine.Scheduled, "a rejection schedules no transition")
 }
 
-func TestAcceptRequestMotifRejetInconnuRefuseMemeSurAcceptation(t *testing.T) {
+func TestAcceptRequestUnknownRejectionReasonRefusedEvenOnAcceptance(t *testing.T) {
 	// The motifRejetId existence check does not depend on accepte: an unknown
 	// identifier is refused even on an acceptance.
 	f := newFixture()
@@ -180,14 +180,14 @@ func TestAcceptRequestMotifRejetInconnuRefuseMemeSurAcceptation(t *testing.T) {
 	require.Equal(t, "Motif de rejet inconnu", fault.Message)
 }
 
-// TestAcceptRequestEchecEcritureNArretePasAvantLaTransaction is the proof, at
+// TestAcceptRequestWriteFailureStopsBeforeTransaction is the proof, at
 // the interactor level, that a rejection whose write fails never goes on to
 // schedule anything, nor to read the request back — the order of the calls
 // inside one transaction. The proof that a REAL UnitOfWork does undo its
 // writes on that same path (no etape_historique row, demande unchanged) lives
 // in internal/framework/persistence (Postgres, //go:build integration): this
 // test cannot simulate it, an in-memory double rolling nothing back.
-func TestAcceptRequestEchecEcritureNArretePasAvantLaTransaction(t *testing.T) {
+func TestAcceptRequestWriteFailureStopsBeforeTransaction(t *testing.T) {
 	f := newFixture()
 	seedRequest(f)
 	f.reasons.SeedRejectionReason(motifID, "Identité non prouvée")
@@ -199,5 +199,5 @@ func TestAcceptRequestEchecEcritureNArretePasAvantLaTransaction(t *testing.T) {
 	require.NotNil(t, fault)
 	require.Equal(t, "ERREUR_INTERNE", fault.Code)
 	require.NotEqual(t, entity.RequestRejected, f.requests.Status("d1"),
-		"Reject a échoué : le statut ne doit pas avoir bougé")
+		"Reject failed: the status must not have moved")
 }

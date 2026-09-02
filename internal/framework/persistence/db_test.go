@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestMigrationsEtSchema(t *testing.T) {
+func TestMigrationsAndSchema(t *testing.T) {
 	db := testsupport.NewTestDB(t)
 	ctx := context.Background()
 
@@ -28,7 +28,7 @@ func TestMigrationsEtSchema(t *testing.T) {
 	}
 }
 
-func TestNewTestDBEstIsolee(t *testing.T) {
+func TestNewTestDBIsIsolated(t *testing.T) {
 	db := testsupport.NewTestDB(t)
 	ctx := context.Background()
 

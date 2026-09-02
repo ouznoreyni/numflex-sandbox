@@ -57,7 +57,7 @@ func (i *PurgeTestDataInteractor) Execute(ctx context.Context) (PurgeTestDataRes
 			return entity.InternalError("lecture des demandes à purger")
 		}
 
-		numeros, err := repos.Sandbox.NumbersToRestore(ctx, ids)
+		numbers, err := repos.Sandbox.NumbersToRestore(ctx, ids)
 		if err != nil {
 			return entity.InternalError("lecture des numéros à restaurer")
 		}
@@ -69,7 +69,7 @@ func (i *PurgeTestDataInteractor) Execute(ctx context.Context) (PurgeTestDataRes
 			return entity.InternalError("purge des demandes de reverse")
 		}
 
-		otpCount, err := repos.Sandbox.DeleteOTP(ctx, numeros)
+		otpCount, err := repos.Sandbox.DeleteOTP(ctx, numbers)
 		if err != nil {
 			return entity.InternalError("purge des OTP")
 		}
@@ -79,7 +79,7 @@ func (i *PurgeTestDataInteractor) Execute(ctx context.Context) (PurgeTestDataRes
 			return entity.InternalError("purge des demandes")
 		}
 
-		numberCount, err := repos.Sandbox.RestoreNumbers(ctx, numeros)
+		numberCount, err := repos.Sandbox.RestoreNumbers(ctx, numbers)
 		if err != nil {
 			return entity.InternalError("restauration du registre")
 		}

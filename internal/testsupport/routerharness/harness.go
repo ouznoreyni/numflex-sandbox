@@ -36,10 +36,10 @@ type RouterHarness struct {
 	Srv    *httptest.Server
 	DB     *persistence.DB
 	Cfg    *config.Config
-	Moteur *engine.Engine
+	Engine *engine.Engine
 }
 
-// FiabiliteContrat switches the harness's fidelity mode to "contract" — the
+// ContractFidelity switches the harness's fidelity mode to "contract" — the
 // adjustment TestCreationParticulierEnModeContratRendUnCodeMetier and
 // TestFlotteVideRenvoieFlotteVide need. It exists here, rather than being
 // written inline as func(c *config.Config) { c.Fidelity = ... } at the call
@@ -48,15 +48,15 @@ type RouterHarness struct {
 // dependency rule applies to _test.go files too): routerharness already
 // imports config for NewRouterHarness's own signature, so this is the one
 // place that dependency is allowed to live.
-func FiabiliteContrat(c *config.Config) {
+func ContractFidelity(c *config.Config) {
 	c.Fidelity = config.FidelityContract
 }
 
-// Convergence returns an ajuste function that fixes the engine's
-// convergence window to [min, max] — the same reason FiabiliteContrat
+// Convergence returns an adjust function that fixes the engine's
+// convergence window to [min, max] — the same reason ContractFidelity
 // exists: a controller test cannot name internal/framework/config's
 // *config.Config field directly, only through a func literal built here.
-// A non-zero window makes PlanifierTransition defer the transition (R-10)
+// A non-zero window makes ScheduleTransition defer the transition (R-10)
 // rather than apply it synchronously within the request.
 func Convergence(min, max time.Duration) func(*config.Config) {
 	return func(c *config.Config) {
@@ -64,22 +64,22 @@ func Convergence(min, max time.Duration) func(*config.Config) {
 	}
 }
 
-// CompletionLatency returns an ajuste function that fixes
-// config.CompletionLatency (ANO-005) — the same reason FiabiliteContrat
+// CompletionLatency returns an adjust function that fixes
+// config.CompletionLatency (ANO-005) — the same reason ContractFidelity
 // exists.
 func CompletionLatency(d time.Duration) func(*config.Config) {
 	return func(c *config.Config) { c.CompletionLatency = d }
 }
 
 // SandboxAdmin opens /api/sandbox/v1 for the harness's router — the same
-// reason FiabiliteContrat exists: a controller test cannot name
+// reason ContractFidelity exists: a controller test cannot name
 // internal/framework/config's own SandboxAdmin field directly.
 func SandboxAdmin(c *config.Config) { c.SandboxAdmin = true }
 
 // NewRouterHarness mounts the full router in a deterministic profile.
-// ajuste lets a test override a default config value before the router is
+// adjust lets a test override a default config value before the router is
 // built.
-func NewRouterHarness(t *testing.T, ajuste ...func(*config.Config)) *RouterHarness {
+func NewRouterHarness(t *testing.T, adjust ...func(*config.Config)) *RouterHarness {
 	t.Helper()
 	db := testsupport.NewTestDB(t)
 
@@ -93,99 +93,98 @@ func NewRouterHarness(t *testing.T, ajuste ...func(*config.Config)) *RouterHarne
 		OTPTTL:         5 * time.Minute,
 		OTPMaxAttempts: 3,
 	}
-	for _, f := range ajuste {
+	for _, f := range adjust {
 		f(cfg)
 	}
 
-	mot := engine.New(cfg, db)
+	eng := engine.New(cfg, db)
 	d := &web.Deps{
 		Cfg:    cfg,
 		DB:     db,
-		Moteur: mot,
+		Engine: eng,
 	}
 	srv := httptest.NewServer(web.NewRouter(d))
 	t.Cleanup(srv.Close)
 
-	return &RouterHarness{T: t, Srv: srv, DB: db, Cfg: cfg, Moteur: mot}
+	return &RouterHarness{T: t, Srv: srv, DB: db, Cfg: cfg, Engine: eng}
 }
 
-// Converger déclenche un passage du moteur et vérifie qu'aucune transition
-// ne reste due. Les tests pilotent le moteur explicitement plutôt que
-// d'attendre son ticker — celui-ci n'est jamais démarré ici, comme
-// internal/api's own harnais (internal/api/testutil_test.go) ne le démarre
-// pas non plus.
-func (h *RouterHarness) Converger() {
+// Converge triggers one engine pass and checks that no transition is still
+// due. Tests drive the engine explicitly rather than waiting on its
+// ticker — the ticker is never started here, just as internal/api's own
+// harness (internal/api/testutil_test.go) never started it either.
+func (h *RouterHarness) Converge() {
 	h.T.Helper()
-	require.NoError(h.T, h.Moteur.Tick(context.Background()))
+	require.NoError(h.T, h.Engine.Tick(context.Background()))
 }
 
-// ValiderReverse rejoue l'acte de l'ARTP — engine.ValiderReverse, exposé ici
-// pour la même raison que FiabiliteContrat : un test de contrôleur ne peut
-// pas importer internal/framework/engine directement (couche 2 vers couche
-// 3, que test/architecture_test.go interdirait).
-func (h *RouterHarness) ValiderReverse(reverseID string) {
+// ValidateReverse replays the ARTP's act — engine.ValidateReverse, exposed
+// here for the same reason as ContractFidelity: a controller test cannot
+// import internal/framework/engine directly (layer 2 into layer 3, which
+// test/architecture_test.go would forbid).
+func (h *RouterHarness) ValidateReverse(reverseID string) {
 	h.T.Helper()
-	require.NoError(h.T, engine.ValiderReverse(context.Background(), h.DB, reverseID))
+	require.NoError(h.T, engine.ValidateReverse(context.Background(), h.DB, reverseID))
 }
 
-// Brut exécute une requête HTTP brute, sans décoder la réponse.
-func (h *RouterHarness) Brut(methode, chemin, jeton string, corps any) *http.Response {
+// Raw executes a raw HTTP request, without decoding the response.
+func (h *RouterHarness) Raw(method, path, token string, payload any) *http.Response {
 	h.T.Helper()
 	var body *bytes.Reader
-	if corps != nil {
-		b, err := json.Marshal(corps)
+	if payload != nil {
+		b, err := json.Marshal(payload)
 		require.NoError(h.T, err)
 		body = bytes.NewReader(b)
 	} else {
 		body = bytes.NewReader(nil)
 	}
-	req, err := http.NewRequest(methode, h.Srv.URL+chemin, body)
+	req, err := http.NewRequest(method, h.Srv.URL+path, body)
 	require.NoError(h.T, err)
 	req.Header.Set("Content-Type", "application/json")
-	if jeton != "" {
-		req.Header.Set("Authorization", "Bearer "+jeton)
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
 	}
-	rep, err := http.DefaultClient.Do(req)
+	resp, err := http.DefaultClient.Do(req)
 	require.NoError(h.T, err)
-	h.T.Cleanup(func() { rep.Body.Close() })
-	return rep
+	h.T.Cleanup(func() { resp.Body.Close() })
+	return resp
 }
 
-// Appel exécute une requête authentifiée et décode le corps en map.
-func (h *RouterHarness) Appel(methode, chemin, jeton string, corps any) (*http.Response, map[string]any) {
+// Call executes an authenticated request and decodes the body into a map.
+func (h *RouterHarness) Call(method, path, token string, payload any) (*http.Response, map[string]any) {
 	h.T.Helper()
-	rep := h.Brut(methode, chemin, jeton, corps)
-	var decode map[string]any
-	_ = json.NewDecoder(rep.Body).Decode(&decode)
-	return rep, decode
+	resp := h.Raw(method, path, token, payload)
+	var parsed map[string]any
+	_ = json.NewDecoder(resp.Body).Decode(&parsed)
+	return resp, parsed
 }
 
-// Liste exécute un GET authentifié dont data est un tableau. Promoted here
+// List executes an authenticated GET whose data is an array. Promoted here
 // (ruling R25) from reference_controller_test.go's local liste(), its first
 // caller — a second capability (Task 12, the seven read-only queues) needing
 // the exact same helper is the signal the ruling names for promoting rather
 // than copying it again.
-func (h *RouterHarness) Liste(chemin, jeton string) []any {
+func (h *RouterHarness) List(path, token string) []any {
 	h.T.Helper()
-	rep, corps := h.Appel(http.MethodGet, chemin, jeton, nil)
-	require.Equal(h.T, http.StatusOK, rep.StatusCode, chemin)
-	data, ok := corps["data"].([]any)
-	require.Truef(h.T, ok, "%s : data n'est pas un tableau (%v)", chemin, corps)
+	resp, body := h.Call(http.MethodGet, path, token, nil)
+	require.Equal(h.T, http.StatusOK, resp.StatusCode, path)
+	data, ok := body["data"].([]any)
+	require.Truef(h.T, ok, "%s: data is not an array (%v)", path, body)
 	return data
 }
 
-// Jeton authentifie un compte du seed et retourne son id_token.
-func (h *RouterHarness) Jeton(username, motDePasse string) string {
+// Token authenticates a seeded account and returns its id_token.
+func (h *RouterHarness) Token(username, password string) string {
 	h.T.Helper()
-	rep := h.Brut(http.MethodPost, "/api/authenticate", "", map[string]any{
-		"username": username, "password": motDePasse, "rememberMe": false,
+	resp := h.Raw(http.MethodPost, "/api/authenticate", "", map[string]any{
+		"username": username, "password": password, "rememberMe": false,
 	})
-	require.Equal(h.T, http.StatusOK, rep.StatusCode)
+	require.Equal(h.T, http.StatusOK, resp.StatusCode)
 
-	var corps struct {
+	var body struct {
 		IDToken string `json:"id_token"`
 	}
-	require.NoError(h.T, json.NewDecoder(rep.Body).Decode(&corps))
-	require.NotEmpty(h.T, corps.IDToken)
-	return corps.IDToken
+	require.NoError(h.T, json.NewDecoder(resp.Body).Decode(&body))
+	require.NotEmpty(h.T, body.IDToken)
+	return body.IDToken
 }

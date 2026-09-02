@@ -38,12 +38,12 @@ func (g *IncidentGateway) TypeIDFor(ctx context.Context, systemLocked bool) (str
 }
 
 func (g *IncidentGateway) HasOpen(ctx context.Context, operatorID string) (bool, error) {
-	var dejaOuvert bool
+	var alreadyOpen bool
 	err := g.db.QueryRow(ctx,
 		`SELECT EXISTS (SELECT 1 FROM incident
 		   WHERE operateur_id = $1 AND statut = 'EN_COURS' AND fige_systeme)`,
-		operatorID).Scan(&dejaOuvert)
-	return dejaOuvert, err
+		operatorID).Scan(&alreadyOpen)
+	return alreadyOpen, err
 }
 
 func (g *IncidentGateway) Create(ctx context.Context, in port.IncidentCreateInput) error {
@@ -90,10 +90,10 @@ func (g *IncidentGateway) Resolve(ctx context.Context, id, comment string, now t
 // internal/api/incidents.go's incidentDTO.
 func (g *IncidentGateway) Get(ctx context.Context, id string) (port.IncidentView, bool, error) {
 	var (
-		typeID, typeLibelle, description, statut string
-		figeSysteme                              bool
-		dateOuverture                            time.Time
-		operateurID, operateurNom                string
+		typeID, typeLabel, description, status string
+		systemLocked                           bool
+		openedAt                               time.Time
+		operatorID, operatorName               string
 	)
 	err := g.db.QueryRow(ctx, `
 		SELECT inc.type_incident_id, ti.libelle, inc.fige_systeme, inc.description,
@@ -102,8 +102,8 @@ func (g *IncidentGateway) Get(ctx context.Context, id string) (port.IncidentView
 		  JOIN type_incident ti ON ti.id = inc.type_incident_id
 		  JOIN operateur op ON op.id = inc.operateur_id
 		 WHERE inc.id = $1`, id).Scan(
-		&typeID, &typeLibelle, &figeSysteme, &description,
-		&statut, &dateOuverture, &operateurID, &operateurNom)
+		&typeID, &typeLabel, &systemLocked, &description,
+		&status, &openedAt, &operatorID, &operatorName)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return port.IncidentView{}, false, nil
 	}
@@ -111,9 +111,9 @@ func (g *IncidentGateway) Get(ctx context.Context, id string) (port.IncidentView
 		return port.IncidentView{}, false, err
 	}
 	return port.IncidentView{
-		ID: id, TypeID: typeID, TypeLabel: typeLibelle, SystemLocked: figeSysteme,
-		Description: description, Status: statut, OpenedAt: dateOuverture,
-		OperatorID: operateurID, OperatorName: operateurNom,
+		ID: id, TypeID: typeID, TypeLabel: typeLabel, SystemLocked: systemLocked,
+		Description: description, Status: status, OpenedAt: openedAt,
+		OperatorID: operatorID, OperatorName: operatorName,
 	}, true, nil
 }
 
@@ -147,10 +147,10 @@ func (g *IncidentGateway) Own(ctx context.Context, operatorID string, systemLock
 
 // MarketFrozen answers whether any operator has an EN_COURS, fige_systeme
 // incident open — BR-012, moved verbatim from the deleted
-// internal/engine/engine.go's own PlaceGelee. Lit la colonne dénormalisée
-// incident.fige_systeme — la même que consulte l'index unique partiel du
-// §7.12 — plutôt que de rejoindre type_incident, pour n'avoir qu'une seule
-// source de vérité sur ce qui gèle le système.
+// internal/engine/engine.go's own MarketFrozen. Reads the denormalized
+// incident.fige_systeme column — the same one the §7.12 partial unique
+// index consults — rather than joining type_incident, so there is only one
+// source of truth for what freezes the system.
 func (g *IncidentGateway) MarketFrozen(ctx context.Context) (bool, error) {
 	var n int
 	err := g.db.QueryRow(ctx,

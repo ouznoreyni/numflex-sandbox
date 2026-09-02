@@ -36,9 +36,9 @@ package postgres
 //	Go field       SQL column   Notes
 //	-----------    ----------   -----
 //	OperatorID     id           entity.Caller's half
-//	OperatorName   nom          entity.Caller's half
+//	OperatorName   name          entity.Caller's half
 //	ID             id           entity.Operator's half
-//	Name           nom          entity.Operator's half
+//	Name           name          entity.Operator's half
 
 // Table motif_rejet — entity.RejectionReason (internal/usecase/port/gateway.go).
 // port.ReferenceGateway.RejectionReasonExists (Task 14) reads only id, an
@@ -68,7 +68,7 @@ package postgres
 //	Go field       SQL column     Notes
 //	-----------    ------------   -----
 //	ID             id
-//	Label          libelle
+//	Label          label
 //	SystemLocked   fige_systeme
 
 // Table numero — entity.NumberState, via port.NumberGateway.State
@@ -86,9 +86,10 @@ package postgres
 //	                                            numero — not a column
 
 // Table demande — port.CreateRequestInput / port.RequestView, via
-// port.RequestGateway (internal/usecase/port/gateway.go). Statut, étape and
-// leur statut sont fixés en dur à la création ('EN_COURS', 'ACCEPTATION',
-// 'EN_COURS') : ni Create ni sa colonne ne les paramètrent.
+// port.RequestGateway (internal/usecase/port/gateway.go). The status, the
+// step and the step's own status are hardcoded at creation ('EN_COURS',
+// 'ACCEPTATION', 'EN_COURS'): neither Create nor its column parameterizes
+// them.
 //
 //	Go field               SQL column                  Notes
 //	--------               ----------                  -----
@@ -106,7 +107,7 @@ package postgres
 //	                                                      today, kept distinct
 //	                                                      for a future capacity
 //	                                                      where it might diverge
-//	Processus              processus                     nil ⇒ NULL (restitution)
+//	Process              processus                     nil ⇒ NULL (restitution)
 //	RoutingInfo            routage_info                  nil ⇒ NULL (restitution)
 //	RequestDate            date_demande                  also written to
 //	                                                      date_debut_etape
@@ -178,7 +179,7 @@ package postgres
 //
 //	Go field      SQL column       Notes
 //	--------      ----------       -----
-//	LastName      nom
+//	LastName      name
 //	FirstName     prenom
 //	BirthDate     date_naissance   ClientInput carries the yyyy-mm-dd string
 //	                               bound from JSON as-is; ClientView reads it
@@ -226,7 +227,7 @@ package postgres
 //	OperatorID     operateur_id
 //	RequestDate    date_demande
 //	Status         statut         read-only on ReverseView
-//	OperatorName   —              joined from operateur.nom, ReverseView only
+//	OperatorName   —              joined from operateur.name, ReverseView only
 //
 // Own filters on operateur_id = $1, ordered by date_demande, paginated —
 // the one queue among this task's three capabilities to accept page/size,
@@ -254,9 +255,9 @@ package postgres
 //	—                         date_resolution           write-only: set by Resolve
 //	—                         commentaire_resolution    write-only: set by Resolve
 //	TypeLabel                 —                         joined from
-//	                                                     type_incident.libelle,
+//	                                                     type_incident.label,
 //	                                                     IncidentView only
-//	OperatorName              —                         joined from operateur.nom,
+//	OperatorName              —                         joined from operateur.name,
 //	                                                     IncidentView only
 //
 // TypeIDFor reads type_incident.id filtered on fige_systeme — the endpoint's

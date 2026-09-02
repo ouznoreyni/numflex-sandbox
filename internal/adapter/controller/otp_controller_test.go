@@ -22,138 +22,138 @@ import (
 	"github.com/ouznoreyni/numflex-sandbox/internal/testsupport/routerharness"
 )
 
-func TestOTPSendOmetLeChampDataEnModeReel(t *testing.T) {
-	// ANO-011 : le champ data est absent, pas null.
+func TestOTPSendOmitsTheDataFieldInRealMode(t *testing.T) {
+	// ANO-011: the data field is absent, not null.
 	h := routerharness.NewRouterHarness(t)
-	rep, corps := h.Appel(http.MethodPost, "/api/gateway/v1/otp/send",
-		h.Jeton("yas", "yas2026"), map[string]any{"numero": "771000001"})
+	resp, body := h.Call(http.MethodPost, "/api/gateway/v1/otp/send",
+		h.Token("yas", "yas2026"), map[string]any{"numero": "771000001"})
 
-	require.Equal(t, http.StatusOK, rep.StatusCode)
-	require.Equal(t, true, corps["success"])
-	require.NotContains(t, corps, "data")
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.Equal(t, true, body["success"])
+	require.NotContains(t, body, "data")
 }
 
-func TestOTPVerifyNeConsommePas(t *testing.T) {
-	// TC-021 : verify pré-vérifie sans consommer — le code reste utilisable.
+func TestOTPVerifyDoesNotConsume(t *testing.T) {
+	// TC-021: verify pre-checks without consuming — the code stays usable.
 	h := routerharness.NewRouterHarness(t)
-	jeton := h.Jeton("yas", "yas2026")
+	token := h.Token("yas", "yas2026")
 
-	h.Appel(http.MethodPost, "/api/gateway/v1/otp/send", jeton,
+	h.Call(http.MethodPost, "/api/gateway/v1/otp/send", token,
 		map[string]any{"numero": "771000001"})
 
 	for i := 0; i < 3; i++ {
-		rep, _ := h.Appel(http.MethodPost, "/api/gateway/v1/otp/verify", jeton,
+		resp, _ := h.Call(http.MethodPost, "/api/gateway/v1/otp/verify", token,
 			map[string]any{"numero": "771000001", "otpCode": "123456"})
-		require.Equal(t, http.StatusOK, rep.StatusCode, "vérification %d", i)
+		require.Equal(t, http.StatusOK, resp.StatusCode, "verification %d", i)
 	}
 
-	var consomme bool
+	var consumed bool
 	require.NoError(t, h.DB.Pool.QueryRow(context.Background(),
-		"SELECT consomme FROM otp WHERE numero = $1", "771000001").Scan(&consomme))
-	require.False(t, consomme)
+		"SELECT consomme FROM otp WHERE numero = $1", "771000001").Scan(&consumed))
+	require.False(t, consumed)
 }
 
-func TestOTPVerifyCodeIncorrect(t *testing.T) {
+func TestOTPVerifyIncorrectCode(t *testing.T) {
 	h := routerharness.NewRouterHarness(t)
-	jeton := h.Jeton("yas", "yas2026")
-	h.Appel(http.MethodPost, "/api/gateway/v1/otp/send", jeton,
+	token := h.Token("yas", "yas2026")
+	h.Call(http.MethodPost, "/api/gateway/v1/otp/send", token,
 		map[string]any{"numero": "771000001"})
 
-	rep, corps := h.Appel(http.MethodPost, "/api/gateway/v1/otp/verify", jeton,
+	resp, body := h.Call(http.MethodPost, "/api/gateway/v1/otp/verify", token,
 		map[string]any{"numero": "771000001", "otpCode": "000000"})
 
-	// ANO-003 : les erreurs d'état sortent en 500 en mode réel.
-	require.Equal(t, http.StatusInternalServerError, rep.StatusCode)
-	require.NotContains(t, corps, "code")
+	// ANO-003: state errors come out as 500 in real mode.
+	require.Equal(t, http.StatusInternalServerError, resp.StatusCode)
+	require.NotContains(t, body, "code")
 }
 
-func TestOTPMaxTentatives(t *testing.T) {
+func TestOTPMaxAttempts(t *testing.T) {
 	h := routerharness.NewRouterHarness(t)
-	jeton := h.Jeton("yas", "yas2026")
-	h.Appel(http.MethodPost, "/api/gateway/v1/otp/send", jeton,
+	token := h.Token("yas", "yas2026")
+	h.Call(http.MethodPost, "/api/gateway/v1/otp/send", token,
 		map[string]any{"numero": "771000001"})
 
 	for i := 0; i < 3; i++ {
-		h.Appel(http.MethodPost, "/api/gateway/v1/otp/verify", jeton,
+		h.Call(http.MethodPost, "/api/gateway/v1/otp/verify", token,
 			map[string]any{"numero": "771000001", "otpCode": "000000"})
 	}
 
-	// La quatrième tentative est refusée même avec le bon code.
-	rep, _ := h.Appel(http.MethodPost, "/api/gateway/v1/otp/verify", jeton,
+	// The fourth attempt is refused even with the right code.
+	resp, _ := h.Call(http.MethodPost, "/api/gateway/v1/otp/verify", token,
 		map[string]any{"numero": "771000001", "otpCode": "123456"})
-	require.Equal(t, http.StatusInternalServerError, rep.StatusCode)
+	require.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 }
 
-func TestOTPExpire(t *testing.T) {
+func TestOTPExpired(t *testing.T) {
 	h := routerharness.NewRouterHarness(t)
-	jeton := h.Jeton("yas", "yas2026")
-	h.Appel(http.MethodPost, "/api/gateway/v1/otp/send", jeton,
+	token := h.Token("yas", "yas2026")
+	h.Call(http.MethodPost, "/api/gateway/v1/otp/send", token,
 		map[string]any{"numero": "771000001"})
 
 	_, err := h.DB.Pool.Exec(context.Background(),
 		"UPDATE otp SET expire_a = now() - interval '1 minute' WHERE numero = $1", "771000001")
 	require.NoError(t, err)
 
-	rep, corps := h.Appel(http.MethodPost, "/api/gateway/v1/otp/verify", jeton,
+	resp, body := h.Call(http.MethodPost, "/api/gateway/v1/otp/verify", token,
 		map[string]any{"numero": "771000001", "otpCode": "123456"})
 
-	require.Equal(t, http.StatusInternalServerError, rep.StatusCode)
-	require.Equal(t, "Le code OTP a expiré", corps["detail"])
+	require.Equal(t, http.StatusInternalServerError, resp.StatusCode)
+	require.Equal(t, "Le code OTP a expiré", body["detail"])
 }
 
-func TestOTPAbsent(t *testing.T) {
+func TestOTPMissing(t *testing.T) {
 	h := routerharness.NewRouterHarness(t)
-	rep, corps := h.Appel(http.MethodPost, "/api/gateway/v1/otp/verify",
-		h.Jeton("yas", "yas2026"),
+	resp, body := h.Call(http.MethodPost, "/api/gateway/v1/otp/verify",
+		h.Token("yas", "yas2026"),
 		map[string]any{"numero": "779999999", "otpCode": "123456"})
 
-	require.Equal(t, http.StatusInternalServerError, rep.StatusCode)
-	require.Equal(t, "Aucun OTP actif pour ce numéro", corps["detail"])
+	require.Equal(t, http.StatusInternalServerError, resp.StatusCode)
+	require.Equal(t, "Aucun OTP actif pour ce numéro", body["detail"])
 }
 
-func TestOTPNumeroInvalideEstUneErreurDeValidation(t *testing.T) {
+func TestOTPInvalidNumeroIsAValidationError(t *testing.T) {
 	h := routerharness.NewRouterHarness(t)
-	rep, corps := h.Appel(http.MethodPost, "/api/gateway/v1/otp/send",
-		h.Jeton("yas", "yas2026"), map[string]any{"numero": "77"})
+	resp, body := h.Call(http.MethodPost, "/api/gateway/v1/otp/send",
+		h.Token("yas", "yas2026"), map[string]any{"numero": "77"})
 
-	require.Equal(t, http.StatusBadRequest, rep.StatusCode)
-	require.Contains(t, corps, "fieldErrors")
+	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	require.Contains(t, body, "fieldErrors")
 }
 
-func TestOTPRenvoiReinitialiseCompteurEtConsommation(t *testing.T) {
-	// Le brief exige qu'un renvoi d'OTP sur un numéro déjà couvert remplace le
-	// code et remette tentatives/consomme à zéro/faux (clause ON CONFLICT).
+func TestOTPResendResetsCounterAndConsumption(t *testing.T) {
+	// The brief requires that resending an OTP for an already-covered number
+	// replace the code and reset tentatives/consomme to zero/false (ON CONFLICT clause).
 	h := routerharness.NewRouterHarness(t)
-	jeton := h.Jeton("yas", "yas2026")
+	token := h.Token("yas", "yas2026")
 
-	h.Appel(http.MethodPost, "/api/gateway/v1/otp/send", jeton,
+	h.Call(http.MethodPost, "/api/gateway/v1/otp/send", token,
 		map[string]any{"numero": "771000001"})
 
-	// Deux tentatives ratées entament le compteur sans l'épuiser.
+	// Two failed attempts start the counter without exhausting it.
 	for i := 0; i < 2; i++ {
-		h.Appel(http.MethodPost, "/api/gateway/v1/otp/verify", jeton,
+		h.Call(http.MethodPost, "/api/gateway/v1/otp/verify", token,
 			map[string]any{"numero": "771000001", "otpCode": "000000"})
 	}
 
-	var tentatives int
+	var attempts int
 	require.NoError(t, h.DB.Pool.QueryRow(context.Background(),
-		"SELECT tentatives FROM otp WHERE numero = $1", "771000001").Scan(&tentatives))
-	require.Equal(t, 2, tentatives, "précondition : le compteur a bien été entamé")
+		"SELECT tentatives FROM otp WHERE numero = $1", "771000001").Scan(&attempts))
+	require.Equal(t, 2, attempts, "precondition: the counter has indeed started")
 
-	// Le renvoi doit réinitialiser tentatives et consomme.
-	rep, _ := h.Appel(http.MethodPost, "/api/gateway/v1/otp/send", jeton,
+	// The resend must reset tentatives and consomme.
+	resp, _ := h.Call(http.MethodPost, "/api/gateway/v1/otp/send", token,
 		map[string]any{"numero": "771000001"})
-	require.Equal(t, http.StatusOK, rep.StatusCode)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
 
-	var consomme bool
+	var consumed bool
 	require.NoError(t, h.DB.Pool.QueryRow(context.Background(),
 		"SELECT tentatives, consomme FROM otp WHERE numero = $1", "771000001").
-		Scan(&tentatives, &consomme))
-	require.Equal(t, 0, tentatives, "le renvoi doit remettre le compteur à zéro")
-	require.False(t, consomme, "le renvoi doit remettre consomme à faux")
+		Scan(&attempts, &consumed))
+	require.Equal(t, 0, attempts, "the resend must reset the counter to zero")
+	require.False(t, consumed, "the resend must reset consomme to false")
 
-	// Le code reste vérifiable après le renvoi.
-	rep, _ = h.Appel(http.MethodPost, "/api/gateway/v1/otp/verify", jeton,
+	// The code stays verifiable after the resend.
+	resp, _ = h.Call(http.MethodPost, "/api/gateway/v1/otp/verify", token,
 		map[string]any{"numero": "771000001", "otpCode": "123456"})
-	require.Equal(t, http.StatusOK, rep.StatusCode)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
 }

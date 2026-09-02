@@ -92,14 +92,14 @@ func (i *ConfirmRequestInteractor) Execute(
 	}
 	expected := entity.ExpectedConfirmers(dm, ids)
 
-	attendu := false
+	awaited := false
 	for _, op := range expected {
 		if op == caller.OperatorID {
-			attendu = true
+			awaited = true
 			break
 		}
 	}
-	if !attendu {
+	if !awaited {
 		return port.RequestView{}, entity.RequestAccessDenied(
 			"Votre opérateur n'a pas à confirmer cette demande.")
 	}

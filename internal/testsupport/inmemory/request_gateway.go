@@ -18,12 +18,12 @@ import (
 // OTP unconsumed) is proven separately, against real Postgres, in
 // internal/framework/persistence.
 //
-// demandes, comments and the two numero maps back Task 14's six acceptance
-// methods (ByID, SetComment, NumberBelongs, RejectNumber, HasActiveNumber,
-// Reject). They are a separate state machine from requests/numbers above,
-// seeded directly with Seed/SeedNumbers rather than through Create/AddNumber:
-// an acceptance test starts from a request already sitting at ACCEPTATION,
-// it does not create one first.
+// portingRequests, comments and the two number maps back Task 14's six
+// acceptance methods (ByID, SetComment, NumberBelongs, RejectNumber,
+// HasActiveNumber, Reject). They are a separate state machine from
+// requests/numbers above, seeded directly with Seed/SeedNumbers rather than
+// through Create/AddNumber: an acceptance test starts from a request
+// already sitting at ACCEPTATION, it does not create one first.
 type RequestGateway struct {
 	mu       sync.Mutex
 	prefixes map[string]string
@@ -32,10 +32,10 @@ type RequestGateway struct {
 	excluded map[string][]port.ExcludedNumberInput
 	clients  map[string]port.ClientInput
 
-	demandes         map[string]entity.PortingRequest
+	portingRequests  map[string]entity.PortingRequest
 	comments         map[string]string
 	rejectionReasons map[string]string            // requestID -> motifRejetId, written by Reject
-	numberStatus     map[string]map[string]string // requestID -> msisdn -> statut
+	numberStatus     map[string]map[string]string // requestID -> msisdn -> status
 	numberMotif      map[string]map[string]string // requestID -> msisdn -> motifRejetId
 
 	FailCreate       error
@@ -54,7 +54,7 @@ func NewRequestGateway() *RequestGateway {
 		excluded: map[string][]port.ExcludedNumberInput{},
 		clients:  map[string]port.ClientInput{},
 
-		demandes:         map[string]entity.PortingRequest{},
+		portingRequests:  map[string]entity.PortingRequest{},
 		comments:         map[string]string{},
 		rejectionReasons: map[string]string{},
 		numberStatus:     map[string]map[string]string{},
@@ -119,7 +119,7 @@ func (g *RequestGateway) Get(_ context.Context, id string) (port.RequestView, bo
 		// Not created through Create/AddNumber: fall back to a request
 		// Seed()ed directly for an acceptance test, which starts from a
 		// request already sitting at ACCEPTATION rather than creating one.
-		pr, ok := g.demandes[id]
+		pr, ok := g.portingRequests[id]
 		if !ok {
 			return port.RequestView{}, false, nil
 		}
@@ -138,7 +138,7 @@ func (g *RequestGateway) Get(_ context.Context, id string) (port.RequestView, bo
 		Status: "EN_COURS", CurrentStep: "ACCEPTATION", CurrentStepStatus: "EN_COURS",
 		SourceOperatorID: req.SourceOperatorID, SourceOperatorName: req.SourceOperatorID,
 		RecipientOperatorID: req.RecipientOperatorID, RecipientOperatorName: req.RecipientOperatorID,
-		RequestDate: req.RequestDate, Processus: req.Processus, RoutingInfo: req.RoutingInfo,
+		RequestDate: req.RequestDate, Process: req.Process, RoutingInfo: req.RoutingInfo,
 	}
 	if c, ok := g.clients[id]; ok {
 		view.Client = &port.ClientView{
@@ -179,7 +179,7 @@ func (g *RequestGateway) RequestCount() int {
 func (g *RequestGateway) Seed(pr entity.PortingRequest) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	g.demandes[pr.ID] = pr
+	g.portingRequests[pr.ID] = pr
 }
 
 // SeedNumbers registers requestID's fleet members, all initially EN_COURS —
@@ -187,18 +187,18 @@ func (g *RequestGateway) Seed(pr entity.PortingRequest) {
 func (g *RequestGateway) SeedNumbers(requestID string, msisdns ...string) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	statuts := map[string]string{}
+	statuses := map[string]string{}
 	for _, m := range msisdns {
-		statuts[m] = "EN_COURS"
+		statuses[m] = "EN_COURS"
 	}
-	g.numberStatus[requestID] = statuts
+	g.numberStatus[requestID] = statuses
 	g.numberMotif[requestID] = map[string]string{}
 }
 
 func (g *RequestGateway) ByID(_ context.Context, id string) (entity.PortingRequest, bool, error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	pr, ok := g.demandes[id]
+	pr, ok := g.portingRequests[id]
 	return pr, ok, nil
 }
 
@@ -233,8 +233,8 @@ func (g *RequestGateway) RejectNumber(_ context.Context, requestID, msisdn, reje
 func (g *RequestGateway) HasActiveNumber(_ context.Context, requestID string) (bool, error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	for _, statut := range g.numberStatus[requestID] {
-		if statut != "REJETE" {
+	for _, status := range g.numberStatus[requestID] {
+		if status != "REJETE" {
 			return true, nil
 		}
 	}
@@ -248,17 +248,17 @@ func (g *RequestGateway) Reject(_ context.Context, requestID, _, rejectionReason
 	if g.FailReject != nil {
 		return g.FailReject
 	}
-	pr := g.demandes[requestID]
+	pr := g.portingRequests[requestID]
 	pr.Status = entity.RequestRejected
 	pr.CurrentStepStatus = entity.StepCompleted
-	g.demandes[requestID] = pr
+	g.portingRequests[requestID] = pr
 	g.comments[requestID] = comment
 	g.rejectionReasons[requestID] = rejectionReasonID
 	return nil
 }
 
 // Cancel — moved verbatim in shape from Reject above (Task 15): a
-// cancellation has no rejection reason and no commentaire, but does move
+// cancellation has no rejection reason and no comment, but does move
 // the request to RequestCancelled rather than RequestRejected. expectedStep
 // is accepted for interface conformance with the real gateway's step guard
 // (Task 17b) but not checked here: this double has no concurrent writer to
@@ -270,10 +270,10 @@ func (g *RequestGateway) Cancel(_ context.Context, requestID, _ string, _ entity
 	if g.FailCancel != nil {
 		return g.FailCancel
 	}
-	pr := g.demandes[requestID]
+	pr := g.portingRequests[requestID]
 	pr.Status = entity.RequestCancelled
 	pr.CurrentStepStatus = entity.StepCompleted
-	g.demandes[requestID] = pr
+	g.portingRequests[requestID] = pr
 	return nil
 }
 
@@ -282,17 +282,17 @@ func (g *RequestGateway) Cancel(_ context.Context, requestID, _ string, _ entity
 func (g *RequestGateway) Status(id string) entity.RequestStatus {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	return g.demandes[id].Status
+	return g.portingRequests[id].Status
 }
 
-// Comment exposes the commentaire written by SetComment or Reject.
+// Comment exposes the comment written by SetComment or Reject.
 func (g *RequestGateway) Comment(id string) string {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	return g.comments[id]
 }
 
-// NumberStatus exposes one fleet member's current statut — EN_COURS unless
+// NumberStatus exposes one fleet member's current status — EN_COURS unless
 // RejectNumber (or a full Reject) marked it REJETE.
 func (g *RequestGateway) NumberStatus(requestID, msisdn string) string {
 	g.mu.Lock()
@@ -320,45 +320,46 @@ func (g *RequestGateway) NumberRejectionReason(requestID, msisdn string) string 
 // The methods below back internal/usecase/platform, exercised at the
 // integration level (internal/framework/engine, against real Postgres); no
 // use-case-level unit test drives them today. They operate on the same
-// demandes map ByID/Seed already use, kept just correct enough to satisfy
+// portingRequests map ByID/Seed already use, kept just correct enough to
+// satisfy
 // port.RequestGateway rather than mirroring every SQL side effect (routage,
 // registry transfer) that has no equivalent map here.
 
 func (g *RequestGateway) LockForTransition(_ context.Context, id string) (entity.PortingRequest, bool, error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	pr, ok := g.demandes[id]
+	pr, ok := g.portingRequests[id]
 	return pr, ok, nil
 }
 
 func (g *RequestGateway) CloseCurrentStep(_ context.Context, id string, closedStatus entity.StepStatus, _ string, _ time.Time) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	pr := g.demandes[id]
+	pr := g.portingRequests[id]
 	pr.CurrentStepStatus = closedStatus
-	g.demandes[id] = pr
+	g.portingRequests[id] = pr
 	return nil
 }
 
 func (g *RequestGateway) CompleteRequest(_ context.Context, id string, closedStatus entity.StepStatus, _ time.Time) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	pr := g.demandes[id]
+	pr := g.portingRequests[id]
 	pr.Status = entity.RequestCompleted
 	pr.CurrentStepStatus = closedStatus
 	pr.PendingTransition = false
-	g.demandes[id] = pr
+	g.portingRequests[id] = pr
 	return nil
 }
 
 func (g *RequestGateway) AdvanceStep(_ context.Context, id string, next entity.Step, _ time.Time) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	pr := g.demandes[id]
+	pr := g.portingRequests[id]
 	pr.CurrentStep = next
 	pr.CurrentStepStatus = entity.StepInProgress
 	pr.PendingTransition = false
-	g.demandes[id] = pr
+	g.portingRequests[id] = pr
 	return nil
 }
 
@@ -373,9 +374,9 @@ func (g *RequestGateway) ApplyEndOfRequestRestitution(_ context.Context, _, _, _
 func (g *RequestGateway) ScheduleTransitionAt(_ context.Context, id string, _ float64) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	pr := g.demandes[id]
+	pr := g.portingRequests[id]
 	pr.PendingTransition = true
-	g.demandes[id] = pr
+	g.portingRequests[id] = pr
 	return nil
 }
 
@@ -394,7 +395,7 @@ func (g *RequestGateway) CreateAtConfirmation(_ context.Context, in port.CreateR
 		return g.FailCreate
 	}
 	g.requests[in.ID] = in
-	g.demandes[in.ID] = entity.PortingRequest{
+	g.portingRequests[in.ID] = entity.PortingRequest{
 		ID: in.ID, MSISDN: in.MSISDN,
 		RequestType: entity.RequestType(in.RequestType), SubscriberType: entity.SubscriberType(in.SubscriberType),
 		Status: entity.RequestInProgress, CurrentStep: entity.StepConfirmation, CurrentStepStatus: entity.StepInProgress,

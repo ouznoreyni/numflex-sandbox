@@ -1,8 +1,8 @@
 package entity
 
 // --- OTP (§9) ---------------------------------------------------------------
-// ANO-014 : en recette ces situations sortent en texte libre. Les messages
-// ci-dessous sont ceux qui ont été mesurés.
+// ANO-014: in UAT these situations come out as free text. The messages
+// below are the ones that were measured.
 
 func OTPInvalid() *Fault {
 	return New(FaultState, "OTP_INVALID", "Code OTP incorrect")
@@ -28,7 +28,7 @@ func OTPAbsent() *Fault {
 	return f
 }
 
-// --- Portage (§9) -----------------------------------------------------------
+// --- Porting (§9) -----------------------------------------------------------
 
 func NumberAlreadyAtRecipient() *Fault {
 	return New(FaultState, "NUMERO_DEJA_CHEZ_DESTINATAIRE",
@@ -45,9 +45,9 @@ func RequestAlreadyInProgressForNumber() *Fault {
 		"Demande déjà en cours pour ce numéro")
 }
 
-// PortingDelayNotRespected — ANO-002 : la couche de validation est franchie et
-// l'exception survient dans la logique métier. Le client reçoit une panne serveur
-// là où le catalogue prévoit un refus métier.
+// PortingDelayNotRespected — ANO-002: the validation layer is bypassed and
+// the exception occurs in the business logic. The client receives a server
+// failure where the catalogue expects a business rejection.
 func PortingDelayNotRespected() *Fault {
 	f := New(FaultState, "DELAI_PORTAGE_NON_RESPECTE",
 		"Le délai minimum entre deux portages n'est pas respecté")
@@ -66,8 +66,8 @@ func NumberAlreadyRestituted() *Fault {
 	return New(FaultState, "NUMERO_DEJA_RESTITUE", "Ce numéro a déjà été restitué")
 }
 
-// RestitutionDelayNotRespected — ANO-020 : une erreur 400 sérialisée en chaîne,
-// encapsulée dans une 500. Le code exploitable existe mais reste enterré.
+// RestitutionDelayNotRespected — ANO-020: a 400 error serialized into a
+// string, wrapped in a 500. The usable code exists but stays buried.
 func RestitutionDelayNotRespected() *Fault {
 	f := New(FaultState, "DELAI_RESTITUTION_NON_RESPECTE",
 		"Le délai de 6 mois minimum n'est pas écoulé")
@@ -103,7 +103,7 @@ func IncidentNotFound() *Fault {
 	return New(FaultNotFound, "DEMANDE_NON_TROUVEE", "Incident introuvable")
 }
 
-// --- Flotte (§9) ------------------------------------------------------------
+// --- Fleet (§9) ------------------------------------------------------------
 
 func FleetEmpty() *Fault {
 	return New(FaultValidation, "FLOTTE_VIDE", "La liste des numéros de flotte est vide")
@@ -119,7 +119,7 @@ func NoEligibleNumber() *Fault {
 		"Aucun numéro de la flotte n'est éligible au portage")
 }
 
-// --- Accès et validation (§9) -----------------------------------------------
+// --- Access and validation (§9) ----------------------------------------------
 
 func AccessForbidden() *Fault {
 	return New(FaultAccess, "ACCES_INTERDIT",
@@ -144,7 +144,7 @@ func InternalError(message string) *Fault {
 	return New(FaultInternal, "ERREUR_INTERNE", message)
 }
 
-// --- Authentification ---------------------------------------------------
+// --- Authentication ---------------------------------------------------
 
 // BadCredentials is AuthenticateInteractor's answer to an unknown username or
 // a wrong password. ANO-016 : the real platform renders this outside the

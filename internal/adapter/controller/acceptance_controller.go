@@ -12,8 +12,8 @@ import (
 )
 
 // AcceptanceController is the interface-adapter for the two acceptance
-// routes: POST /demandes/acceptation (particulier/restitution) and
-// POST /demandes/:id/acceptation (entreprise/flotte). Each handler checks
+// routes: POST /demandes/acceptation (individual/restitution) and
+// POST /demandes/:id/acceptation (enterprise/fleet). Each handler checks
 // the frozen-market gate FIRST — before binding any JSON — then binds,
 // applies the one shape validation that is not the interactor's business
 // (idDemande must not be empty), delegates to a boundary, and renders the
@@ -48,39 +48,39 @@ func NewAcceptanceController(
 	}
 }
 
-// repondre renders the response common to both handlers: guide §7.3's
+// respond renders the response common to both handlers: guide §7.3's
 // shape, via the package-level requestViewDTO (request_view.go) — the one
 // shared implementation Task 15 consolidated ruling R28's deliberate
 // duplicates into — under the exact message the contract carries.
-func (ctl *AcceptanceController) repondre(c *gin.Context, view port.RequestView) {
+func (ctl *AcceptanceController) respond(c *gin.Context, view port.RequestView) {
 	render(c, ctl.pres.Success(http.StatusOK, "Décision d'acceptation enregistrée",
 		requestViewDTO(ctl.clock, view)))
 }
 
-// --- Particulier / restitution ----------------------------------------------
+// --- Individual / restitution ----------------------------------------------
 
-type acceptationRequest struct {
-	IDDemande    string `json:"idDemande"`
-	Accepte      bool   `json:"accepte"`
-	MotifRejetID string `json:"motifRejetId"`
-	Commentaire  string `json:"commentaire"`
+type acceptRequestDTO struct {
+	RequestID         string `json:"idDemande"`
+	Accepte           bool   `json:"accepte"`
+	RejectionReasonID string `json:"motifRejetId"`
+	Comment           string `json:"commentaire"`
 }
 
-// Acceptation handles POST /demandes/acceptation.
-func (ctl *AcceptanceController) Acceptation(c *gin.Context) {
+// Accept handles POST /demandes/acceptation.
+func (ctl *AcceptanceController) Accept(c *gin.Context) {
 	if f := acceptance.MarketFrozen(c.Request.Context(), ctl.engine); f != nil {
 		render(c, ctl.pres.Failure(f, c.Request.URL.Path))
 		return
 	}
 
-	var req acceptationRequest
+	var req acceptRequestDTO
 	if err := c.ShouldBindJSON(&req); err != nil {
 		render(c, ctl.pres.Failure(entity.InvalidJSONFormat(), c.Request.URL.Path))
 		return
 	}
-	// Rupture v1 → v2 : la demande n'est plus identifiée par numero (R-10 §8).
-	// Un corps qui n'envoie que numero laisse idDemande vide et échoue ici.
-	if req.IDDemande == "" {
+	// Break v1 → v2: the request is no longer identified by numero (R-10 §8).
+	// A body that sends only numero leaves idDemande empty and fails here.
+	if req.RequestID == "" {
 		render(c, ctl.pres.Failure(entity.Validation(entity.FieldFault{
 			ObjectName: "acceptationDTO", Field: "idDemande",
 			Message: "ne doit pas être vide",
@@ -89,57 +89,57 @@ func (ctl *AcceptanceController) Acceptation(c *gin.Context) {
 	}
 
 	view, fault := ctl.individual.Execute(c.Request.Context(), acceptance.AcceptRequestInput{
-		RequestID: req.IDDemande, Accept: req.Accepte,
-		RejectionReasonID: req.MotifRejetID, Comment: req.Commentaire,
+		RequestID: req.RequestID, Accept: req.Accepte,
+		RejectionReasonID: req.RejectionReasonID, Comment: req.Comment,
 	})
 	if fault != nil {
 		render(c, ctl.pres.Failure(fault, c.Request.URL.Path))
 		return
 	}
-	ctl.repondre(c, view)
+	ctl.respond(c, view)
 }
 
-// --- Entreprise (flotte) ------------------------------------------------------
+// --- Enterprise (fleet) ------------------------------------------------------
 
-type numeroRejeteFlotteDTO struct {
-	Numero       string `json:"numero"`
-	MotifRejetID string `json:"motifRejetId"`
+type rejectedFleetNumberDTO struct {
+	MSISDN            string `json:"numero"`
+	RejectionReasonID string `json:"motifRejetId"`
 }
 
-type acceptationFlotteRequest struct {
-	Accepte        bool                    `json:"accepte"`
-	NumerosRejetes []numeroRejeteFlotteDTO `json:"numerosRejetes"`
-	MotifRejetID   string                  `json:"motifRejetId"`
-	Commentaire    string                  `json:"commentaire"`
+type acceptFleetRequestDTO struct {
+	Accepte           bool                     `json:"accepte"`
+	RejectedNumbers   []rejectedFleetNumberDTO `json:"numerosRejetes"`
+	RejectionReasonID string                   `json:"motifRejetId"`
+	Comment           string                   `json:"commentaire"`
 }
 
-// AcceptationFlotte handles POST /demandes/:id/acceptation.
-func (ctl *AcceptanceController) AcceptationFlotte(c *gin.Context) {
+// AcceptFleet handles POST /demandes/:id/acceptation.
+func (ctl *AcceptanceController) AcceptFleet(c *gin.Context) {
 	if f := acceptance.MarketFrozen(c.Request.Context(), ctl.engine); f != nil {
 		render(c, ctl.pres.Failure(f, c.Request.URL.Path))
 		return
 	}
 
-	var req acceptationFlotteRequest
+	var req acceptFleetRequestDTO
 	if err := c.ShouldBindJSON(&req); err != nil {
 		render(c, ctl.pres.Failure(entity.InvalidJSONFormat(), c.Request.URL.Path))
 		return
 	}
 
-	rejetes := make([]acceptance.RejectedNumberInput, 0, len(req.NumerosRejetes))
-	for _, nr := range req.NumerosRejetes {
-		rejetes = append(rejetes, acceptance.RejectedNumberInput{
-			MSISDN: nr.Numero, RejectionReasonID: nr.MotifRejetID,
+	rejected := make([]acceptance.RejectedNumberInput, 0, len(req.RejectedNumbers))
+	for _, nr := range req.RejectedNumbers {
+		rejected = append(rejected, acceptance.RejectedNumberInput{
+			MSISDN: nr.MSISDN, RejectionReasonID: nr.RejectionReasonID,
 		})
 	}
 
 	view, fault := ctl.fleet.Execute(c.Request.Context(), acceptance.AcceptFleetRequestInput{
 		RequestID: c.Param("id"), Accept: req.Accepte,
-		RejectedNumbers: rejetes, RejectionReasonID: req.MotifRejetID, Comment: req.Commentaire,
+		RejectedNumbers: rejected, RejectionReasonID: req.RejectionReasonID, Comment: req.Comment,
 	})
 	if fault != nil {
 		render(c, ctl.pres.Failure(fault, c.Request.URL.Path))
 		return
 	}
-	ctl.repondre(c, view)
+	ctl.respond(c, view)
 }

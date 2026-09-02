@@ -30,13 +30,13 @@ func NewQueryGateway(db Querier) *QueryGateway {
 	return &QueryGateway{db: db}
 }
 
-// ids exécute une requête dont la seule colonne est l'id de demande, pour
-// les listes dont le filtre se réduit à une clause WHERE sur la table
-// demande. Le tri par date_demande reproduit l'ordre chronologique attendu
-// d'une file de travail — moved verbatim from Deps.idsDemandes.
-func (g *QueryGateway) ids(ctx context.Context, filtre string, args ...any) ([]string, error) {
+// ids runs a query whose only column is the request id, for the lists whose
+// filter reduces to a WHERE clause on the demande table. Ordering by
+// date_demande reproduces the chronological order expected of a work
+// queue — moved verbatim from Deps.idsDemandes.
+func (g *QueryGateway) ids(ctx context.Context, filter string, args ...any) ([]string, error) {
 	rows, err := g.db.Query(ctx,
-		`SELECT id FROM demande dm WHERE `+filtre+` ORDER BY date_demande`, args...)
+		`SELECT id FROM demande dm WHERE `+filter+` ORDER BY date_demande`, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -61,23 +61,22 @@ func (g *QueryGateway) Own(ctx context.Context, operatorID string) ([]string, er
 		`dm.operateur_source_id = $1 OR dm.operateur_destinataire_id = $1`, operatorID)
 }
 
-// filtreAAccepter — moved verbatim from Deps.filtreAAccepter.
-func filtreAAccepter() string {
+// toAcceptFilter — moved verbatim from Deps.filtreAAccepter.
+func toAcceptFilter() string {
 	return `dm.statut_demande = 'EN_COURS' AND dm.etape_actuelle = 'ACCEPTATION'
 	         AND dm.operateur_source_id = $1`
 }
 
 func (g *QueryGateway) ToAccept(ctx context.Context, operatorID string) ([]string, error) {
-	return g.ids(ctx, filtreAAccepter(), operatorID)
+	return g.ids(ctx, toAcceptFilter(), operatorID)
 }
 
-// filtreATraiter — moved verbatim from Deps.filtreATraiter, comment
-// included: ACCEPTATION y figure : la capture « 1.orange1_EN_COURS_Demandes
-// à traiter_next_ACCEPTATION » montre une demande à cette étape dans la
-// file de la source. a-traiter répond à « nécessitant une action de votre
-// part » (§7.7), pas à un sous-ensemble d'étapes — a-accepter n'en est
-// qu'une vue spécialisée.
-func filtreATraiter() string {
+// toProcessFilter — moved verbatim from Deps.filtreATraiter, comment
+// included: ACCEPTATION is in it: the capture « 1.orange1_EN_COURS_Demandes
+// à traiter_next_ACCEPTATION » shows a request at that step in the source's
+// queue. a-traiter answers "requiring action from you" (§7.7), not a
+// subset of steps — a-accepter is only one specialized view of it.
+func toProcessFilter() string {
 	return `dm.statut_demande = 'EN_COURS' AND (
 	           (dm.etape_actuelle IN ('ACCEPTATION', 'DESACTIVATION')
 	            AND dm.operateur_source_id = $1)
@@ -88,7 +87,7 @@ func filtreATraiter() string {
 }
 
 func (g *QueryGateway) ToProcess(ctx context.Context, operatorID string) ([]string, error) {
-	return g.ids(ctx, filtreATraiter(), operatorID)
+	return g.ids(ctx, toProcessFilter(), operatorID)
 }
 
 func (g *QueryGateway) Incoming(ctx context.Context, operatorID string) ([]string, error) {
@@ -105,23 +104,23 @@ func (g *QueryGateway) Outgoing(ctx context.Context, operatorID string) ([]strin
 
 // AlreadyConfirmed — moved verbatim from Deps.idsDejaConfirmees.
 //
-// ANO-019 — c'est le seul endroit du projet où une requête SQL dépend du
-// mode de fidélité. En mode real, la plateforme mesurée omet de cette liste
-// les confirmations émises par l'opérateur source de la demande : ORANGE,
-// source d'un portage, confirme avec succès mais sa propre confirmation
-// n'apparaît jamais dans /deja-confirmees ; celle d'un tiers si. En mode
-// contract ce filtre n'existe pas — excludeSource porte ce choix depuis la
-// couche de câblage (internal/api), la seule à connaître
+// ANO-019 — this is the sole place in the project where a SQL query depends
+// on the fidelity mode. In real mode, the measured platform omits from this
+// list the confirmations issued by the request's source operator: ORANGE,
+// source of a porting, confirms successfully but its own confirmation never
+// appears in /deja-confirmees; a third party's does. In contract mode this
+// filter does not exist — excludeSource carries that choice down from the
+// wiring layer (internal/api), the only one allowed to know
 // config.FidelityReal.
 func (g *QueryGateway) AlreadyConfirmed(ctx context.Context, operatorID string, excludeSource bool) ([]string, error) {
-	filtre := `c.operateur_id = $1`
+	filter := `c.operateur_id = $1`
 	if excludeSource {
-		filtre += ` AND c.operateur_id <> dm.operateur_source_id`
+		filter += ` AND c.operateur_id <> dm.operateur_source_id`
 	}
 	rows, err := g.db.Query(ctx, `
 		SELECT dm.id FROM demande dm
 		  JOIN confirmation c ON c.demande_id = dm.id
-		 WHERE `+filtre+`
+		 WHERE `+filter+`
 		 ORDER BY dm.date_demande`, operatorID)
 	if err != nil {
 		return nil, err
@@ -143,16 +142,16 @@ func (g *QueryGateway) AlreadyConfirmed(ctx context.Context, operatorID string, 
 }
 
 func (g *QueryGateway) ToConfirm(ctx context.Context, operatorID string) ([]string, error) {
-	return g.idsAConfirmer(ctx, operatorID)
+	return g.idsToConfirm(ctx, operatorID)
 }
 
-// idsAConfirmer liste les demandes EN_COURS/CONFIRMATION où l'opérateur
-// donné est un confirmateur attendu (entity.ExpectedConfirmers) et n'a pas
-// encore confirmé — moved verbatim from Deps.idsAConfirmer.
-func (g *QueryGateway) idsAConfirmer(ctx context.Context, operatorID string) ([]string, error) {
-	// Chargé avant d'ouvrir le curseur des candidats, pour ne jamais tenir
-	// deux requêtes en cours sur le pool en même temps.
-	tousOps, errOps := g.tousOperateurs(ctx)
+// idsToConfirm lists the EN_COURS/CONFIRMATION requests where the given
+// operator is an expected confirmer (entity.ExpectedConfirmers) and has not
+// yet confirmed — moved verbatim from Deps.idsAConfirmer.
+func (g *QueryGateway) idsToConfirm(ctx context.Context, operatorID string) ([]string, error) {
+	// Loaded before opening the candidates' cursor, so as to never hold two
+	// queries open on the pool at once.
+	allOps, errOps := g.allOperators(ctx)
 	if errOps != nil {
 		return nil, errOps
 	}
@@ -171,26 +170,26 @@ func (g *QueryGateway) idsAConfirmer(ctx context.Context, operatorID string) ([]
 
 	out := []string{}
 	for rows.Next() {
-		var id, typeDem, destinataireID string
-		var dejaConfirme bool
-		if err := rows.Scan(&id, &typeDem, &destinataireID, &dejaConfirme); err != nil {
+		var id, requestType, recipientID string
+		var alreadyConfirmed bool
+		if err := rows.Scan(&id, &requestType, &recipientID, &alreadyConfirmed); err != nil {
 			return nil, err
 		}
-		if dejaConfirme {
+		if alreadyConfirmed {
 			continue
 		}
 		dm := entity.PortingRequest{
-			RequestType:         entity.RequestType(typeDem),
-			RecipientOperatorID: destinataireID,
+			RequestType:         entity.RequestType(requestType),
+			RecipientOperatorID: recipientID,
 		}
-		attendu := false
-		for _, op := range entity.ExpectedConfirmers(dm, tousOps) {
+		expected := false
+		for _, op := range entity.ExpectedConfirmers(dm, allOps) {
 			if op == operatorID {
-				attendu = true
+				expected = true
 				break
 			}
 		}
-		if attendu {
+		if expected {
 			out = append(out, id)
 		}
 	}
@@ -200,8 +199,8 @@ func (g *QueryGateway) idsAConfirmer(ctx context.Context, operatorID string) ([]
 	return out, nil
 }
 
-// tousOperateurs — moved verbatim from Deps.tousOperateurs.
-func (g *QueryGateway) tousOperateurs(ctx context.Context) ([]string, error) {
+// allOperators — moved verbatim from Deps.tousOperateurs.
+func (g *QueryGateway) allOperators(ctx context.Context) ([]string, error) {
 	rows, err := g.db.Query(ctx, `SELECT id FROM operateur ORDER BY id`)
 	if err != nil {
 		return nil, err
@@ -222,43 +221,43 @@ func (g *QueryGateway) tousOperateurs(ctx context.Context) ([]string, error) {
 }
 
 // ByID — moved verbatim from Deps.detailFiltre for the two queues whose
-// membership is a plain SQL predicate, and reuses idsAConfirmer's Go-side
+// membership is a plain SQL predicate, and reuses idsToConfirm's Go-side
 // rule for a-confirmer, exactly as Deps.detailParmi scanned idsAConfirmer's
 // result before this task.
 func (g *QueryGateway) ByID(ctx context.Context, queue port.Queue, id, operatorID string) (entity.PortingRequest, bool, error) {
 	switch queue {
 	case port.QueueToAccept:
-		return g.byFiltre(ctx, filtreAAccepter(), id, operatorID)
+		return g.byFilter(ctx, toAcceptFilter(), id, operatorID)
 	case port.QueueToProcess:
-		return g.byFiltre(ctx, filtreATraiter(), id, operatorID)
+		return g.byFilter(ctx, toProcessFilter(), id, operatorID)
 	case port.QueueToConfirm:
 		return g.byConfirmer(ctx, id, operatorID)
 	default:
-		return entity.PortingRequest{}, false, fmt.Errorf("file de lecture inconnue : %q", queue)
+		return entity.PortingRequest{}, false, fmt.Errorf("unknown read queue: %q", queue)
 	}
 }
 
-// byFiltre réutilise le filtre d'une liste réduite à une clause WHERE sur
-// demande : une demande qui ne le satisfait pas n'existe pas pour cet
-// endpoint — moved verbatim from Deps.detailFiltre's query.
-func (g *QueryGateway) byFiltre(ctx context.Context, filtre, id, operatorID string) (entity.PortingRequest, bool, error) {
-	var trouve bool
+// byFilter reuses a list's filter reduced to a WHERE clause on demande: a
+// request that does not satisfy it does not exist for this endpoint —
+// moved verbatim from Deps.detailFiltre's query.
+func (g *QueryGateway) byFilter(ctx context.Context, filter, id, operatorID string) (entity.PortingRequest, bool, error) {
+	var found bool
 	err := g.db.QueryRow(ctx,
-		`SELECT EXISTS (SELECT 1 FROM demande dm WHERE dm.id = $2 AND `+filtre+`)`,
-		operatorID, id).Scan(&trouve)
+		`SELECT EXISTS (SELECT 1 FROM demande dm WHERE dm.id = $2 AND `+filter+`)`,
+		operatorID, id).Scan(&found)
 	if err != nil {
 		return entity.PortingRequest{}, false, err
 	}
-	if !trouve {
+	if !found {
 		return entity.PortingRequest{}, false, nil
 	}
 	return entity.PortingRequest{ID: id}, true, nil
 }
 
-// byConfirmer réutilise idsAConfirmer, dont le filtre n'est pas une simple
-// clause SQL — moved verbatim from Deps.detailParmi's scan.
+// byConfirmer reuses idsToConfirm, whose filter is not a plain SQL clause —
+// moved verbatim from Deps.detailParmi's scan.
 func (g *QueryGateway) byConfirmer(ctx context.Context, id, operatorID string) (entity.PortingRequest, bool, error) {
-	ids, err := g.idsAConfirmer(ctx, operatorID)
+	ids, err := g.idsToConfirm(ctx, operatorID)
 	if err != nil {
 		return entity.PortingRequest{}, false, err
 	}

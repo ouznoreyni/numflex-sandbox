@@ -40,7 +40,7 @@ func NewIncidentController(
 
 // incidentViewDTO serializes an incident per guide §7.12: {id,
 // typeIncidentId, type, figeSysteme, description, statut, dateOuverture,
-// operateur{id,nom}}.
+// operateur{id,name}}.
 func incidentViewDTO(clk port.Clock, v port.IncidentView) map[string]any {
 	return map[string]any{
 		"id":             v.ID,
@@ -55,14 +55,14 @@ func incidentViewDTO(clk port.Clock, v port.IncidentView) map[string]any {
 }
 
 // incidentBody is the sole shape POST /incidents/{gateway,interne} and its
-// resoudre counterpart accept. A typeIncidentId sent alongside is not
+// resolve counterpart accept. A typeIncidentId sent alongside is not
 // decoded, hence silently ignored (§7.12): it is the URL segment that
 // decides the category, never the body.
 type incidentBody struct {
-	Commentaire string `json:"commentaire"`
+	Comment string `json:"commentaire"`
 }
 
-func (ctl *IncidentController) declarer(c *gin.Context, systemLocked bool) {
+func (ctl *IncidentController) declareIncident(c *gin.Context, systemLocked bool) {
 	var req incidentBody
 	if err := c.ShouldBindJSON(&req); err != nil {
 		render(c, ctl.pres.Failure(entity.InvalidJSONFormat(), c.Request.URL.Path))
@@ -70,7 +70,7 @@ func (ctl *IncidentController) declarer(c *gin.Context, systemLocked bool) {
 	}
 
 	view, fault := ctl.declare.Execute(c.Request.Context(), incident.DeclareIncidentInput{
-		SystemLocked: systemLocked, Comment: req.Commentaire,
+		SystemLocked: systemLocked, Comment: req.Comment,
 	})
 	if fault != nil {
 		render(c, ctl.pres.Failure(fault, c.Request.URL.Path))
@@ -80,13 +80,13 @@ func (ctl *IncidentController) declarer(c *gin.Context, systemLocked bool) {
 		incidentViewDTO(ctl.clock, view)))
 }
 
-// DeclarerGateway handles POST /incidents/gateway.
-func (ctl *IncidentController) DeclarerGateway(c *gin.Context) { ctl.declarer(c, false) }
+// DeclareGateway handles POST /incidents/gateway.
+func (ctl *IncidentController) DeclareGateway(c *gin.Context) { ctl.declareIncident(c, false) }
 
-// DeclarerInterne handles POST /incidents/interne.
-func (ctl *IncidentController) DeclarerInterne(c *gin.Context) { ctl.declarer(c, true) }
+// DeclareInternal handles POST /incidents/interne.
+func (ctl *IncidentController) DeclareInternal(c *gin.Context) { ctl.declareIncident(c, true) }
 
-func (ctl *IncidentController) resoudre(c *gin.Context, systemLocked bool) {
+func (ctl *IncidentController) resolveIncident(c *gin.Context, systemLocked bool) {
 	var req incidentBody
 	if err := c.ShouldBindJSON(&req); err != nil {
 		render(c, ctl.pres.Failure(entity.InvalidJSONFormat(), c.Request.URL.Path))
@@ -94,7 +94,7 @@ func (ctl *IncidentController) resoudre(c *gin.Context, systemLocked bool) {
 	}
 
 	view, fault := ctl.resolve.Execute(c.Request.Context(), incident.ResolveIncidentInput{
-		IncidentID: c.Param("id"), SystemLocked: systemLocked, Comment: req.Commentaire,
+		IncidentID: c.Param("id"), SystemLocked: systemLocked, Comment: req.Comment,
 	})
 	if fault != nil {
 		render(c, ctl.pres.Failure(fault, c.Request.URL.Path))
@@ -104,18 +104,18 @@ func (ctl *IncidentController) resoudre(c *gin.Context, systemLocked bool) {
 		incidentViewDTO(ctl.clock, view)))
 }
 
-// ResoudreGateway handles POST /incidents/gateway/:id/resoudre.
-func (ctl *IncidentController) ResoudreGateway(c *gin.Context) { ctl.resoudre(c, false) }
+// ResolveGateway handles POST /incidents/gateway/:id/resoudre.
+func (ctl *IncidentController) ResolveGateway(c *gin.Context) { ctl.resolveIncident(c, false) }
 
-// ResoudreInterne handles POST /incidents/interne/:id/resoudre.
-func (ctl *IncidentController) ResoudreInterne(c *gin.Context) { ctl.resoudre(c, true) }
+// ResolveInternal handles POST /incidents/interne/:id/resoudre.
+func (ctl *IncidentController) ResolveInternal(c *gin.Context) { ctl.resolveIncident(c, true) }
 
-func (ctl *IncidentController) mesIncidents(c *gin.Context, systemLocked bool) {
+func (ctl *IncidentController) own(c *gin.Context, systemLocked bool) {
 	page := parseQueryInt(c, "page", 0)
 	size := parseQueryInt(c, "size", 20)
 
-	appelant := port.CallerFromContext(c.Request.Context())
-	views, fault := ctl.listOwn.Execute(c.Request.Context(), appelant.OperatorID, systemLocked, page, size)
+	caller := port.CallerFromContext(c.Request.Context())
+	views, fault := ctl.listOwn.Execute(c.Request.Context(), caller.OperatorID, systemLocked, page, size)
 	if fault != nil {
 		render(c, ctl.pres.Failure(fault, c.Request.URL.Path))
 		return
@@ -128,8 +128,8 @@ func (ctl *IncidentController) mesIncidents(c *gin.Context, systemLocked bool) {
 	render(c, ctl.pres.Success(http.StatusOK, "Incidents récupérés avec succès", out))
 }
 
-// MesIncidentsGateway handles GET /incidents/gateway/mes-incidents.
-func (ctl *IncidentController) MesIncidentsGateway(c *gin.Context) { ctl.mesIncidents(c, false) }
+// OwnGateway handles GET /incidents/gateway/mes-incidents.
+func (ctl *IncidentController) OwnGateway(c *gin.Context) { ctl.own(c, false) }
 
-// MesIncidentsInterne handles GET /incidents/interne/mes-incidents.
-func (ctl *IncidentController) MesIncidentsInterne(c *gin.Context) { ctl.mesIncidents(c, true) }
+// OwnInternal handles GET /incidents/interne/mes-incidents.
+func (ctl *IncidentController) OwnInternal(c *gin.Context) { ctl.own(c, true) }

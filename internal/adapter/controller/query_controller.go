@@ -58,48 +58,48 @@ func NewQueryController(
 // an empty views slice yields a non-nil, zero-length slice, so the caller's
 // JSON "data" field renders as [] — never null — exactly as
 // Deps.rendreListe was written to guarantee.
-func (ctl *QueryController) dtoList(views []port.RequestView, transforme func(map[string]any) map[string]any) []map[string]any {
+func (ctl *QueryController) dtoList(views []port.RequestView, transform func(map[string]any) map[string]any) []map[string]any {
 	out := make([]map[string]any, 0, len(views))
 	for _, v := range views {
-		out = append(out, transforme(requestViewDTO(ctl.clock, v)))
+		out = append(out, transform(requestViewDTO(ctl.clock, v)))
 	}
 	return out
 }
 
-func identite(dto map[string]any) map[string]any { return dto }
+func identity(dto map[string]any) map[string]any { return dto }
 
 // --- mes-demandes ------------------------------------------------------------
 
-// MesDemandes handles GET /demandes/mes-demandes.
-func (ctl *QueryController) MesDemandes(c *gin.Context) {
-	appelant := port.CallerFromContext(c.Request.Context())
-	views, fault := ctl.own.Execute(c.Request.Context(), appelant.OperatorID)
+// Own handles GET /demandes/mes-demandes.
+func (ctl *QueryController) Own(c *gin.Context) {
+	caller := port.CallerFromContext(c.Request.Context())
+	views, fault := ctl.own.Execute(c.Request.Context(), caller.OperatorID)
 	if fault != nil {
 		render(c, ctl.pres.Failure(fault, c.Request.URL.Path))
 		return
 	}
 	render(c, ctl.pres.Success(http.StatusOK, "Demandes récupérées avec succès",
-		ctl.dtoList(views, identite)))
+		ctl.dtoList(views, identity)))
 }
 
 // --- a-accepter ---------------------------------------------------------------
 
-// AAccepter handles GET /demandes/a-accepter.
-func (ctl *QueryController) AAccepter(c *gin.Context) {
-	appelant := port.CallerFromContext(c.Request.Context())
-	views, fault := ctl.toAccept.Execute(c.Request.Context(), appelant.OperatorID)
+// ToAccept handles GET /demandes/a-accepter.
+func (ctl *QueryController) ToAccept(c *gin.Context) {
+	caller := port.CallerFromContext(c.Request.Context())
+	views, fault := ctl.toAccept.Execute(c.Request.Context(), caller.OperatorID)
 	if fault != nil {
 		render(c, ctl.pres.Failure(fault, c.Request.URL.Path))
 		return
 	}
 	render(c, ctl.pres.Success(http.StatusOK, "Demandes à accepter récupérées avec succès",
-		ctl.dtoList(views, identite)))
+		ctl.dtoList(views, identity)))
 }
 
-// AAccepterDetail handles GET /demandes/a-accepter/:id.
-func (ctl *QueryController) AAccepterDetail(c *gin.Context) {
-	appelant := port.CallerFromContext(c.Request.Context())
-	view, fault := ctl.toAccept.Detail(c.Request.Context(), c.Param("id"), appelant.OperatorID)
+// ToAcceptDetail handles GET /demandes/a-accepter/:id.
+func (ctl *QueryController) ToAcceptDetail(c *gin.Context) {
+	caller := port.CallerFromContext(c.Request.Context())
+	view, fault := ctl.toAccept.Detail(c.Request.Context(), c.Param("id"), caller.OperatorID)
 	if fault != nil {
 		render(c, ctl.pres.Failure(fault, c.Request.URL.Path))
 		return
@@ -110,22 +110,22 @@ func (ctl *QueryController) AAccepterDetail(c *gin.Context) {
 
 // --- a-traiter ------------------------------------------------------------
 
-// ATraiter handles GET /demandes/a-traiter.
-func (ctl *QueryController) ATraiter(c *gin.Context) {
-	appelant := port.CallerFromContext(c.Request.Context())
-	views, fault := ctl.toProcess.Execute(c.Request.Context(), appelant.OperatorID)
+// ToProcess handles GET /demandes/a-traiter.
+func (ctl *QueryController) ToProcess(c *gin.Context) {
+	caller := port.CallerFromContext(c.Request.Context())
+	views, fault := ctl.toProcess.Execute(c.Request.Context(), caller.OperatorID)
 	if fault != nil {
 		render(c, ctl.pres.Failure(fault, c.Request.URL.Path))
 		return
 	}
 	render(c, ctl.pres.Success(http.StatusOK, "Demandes à traiter récupérées avec succès",
-		ctl.dtoList(views, identite)))
+		ctl.dtoList(views, identity)))
 }
 
-// ATraiterDetail handles GET /demandes/a-traiter/:id.
-func (ctl *QueryController) ATraiterDetail(c *gin.Context) {
-	appelant := port.CallerFromContext(c.Request.Context())
-	view, fault := ctl.toProcess.Detail(c.Request.Context(), c.Param("id"), appelant.OperatorID)
+// ToProcessDetail handles GET /demandes/a-traiter/:id.
+func (ctl *QueryController) ToProcessDetail(c *gin.Context) {
+	caller := port.CallerFromContext(c.Request.Context())
+	view, fault := ctl.toProcess.Detail(c.Request.Context(), c.Param("id"), caller.OperatorID)
 	if fault != nil {
 		render(c, ctl.pres.Failure(fault, c.Request.URL.Path))
 		return
@@ -136,10 +136,10 @@ func (ctl *QueryController) ATraiterDetail(c *gin.Context) {
 
 // --- a-confirmer ------------------------------------------------------------
 
-// AConfirmer handles GET /demandes/a-confirmer.
-func (ctl *QueryController) AConfirmer(c *gin.Context) {
-	appelant := port.CallerFromContext(c.Request.Context())
-	views, fault := ctl.toConfirm.Execute(c.Request.Context(), appelant.OperatorID)
+// ToConfirm handles GET /demandes/a-confirmer.
+func (ctl *QueryController) ToConfirm(c *gin.Context) {
+	caller := port.CallerFromContext(c.Request.Context())
+	views, fault := ctl.toConfirm.Execute(c.Request.Context(), caller.OperatorID)
 	if fault != nil {
 		render(c, ctl.pres.Failure(fault, c.Request.URL.Path))
 		return
@@ -148,10 +148,10 @@ func (ctl *QueryController) AConfirmer(c *gin.Context) {
 		ctl.dtoList(views, sansClient)))
 }
 
-// AConfirmerDetail handles GET /demandes/a-confirmer/:id.
-func (ctl *QueryController) AConfirmerDetail(c *gin.Context) {
-	appelant := port.CallerFromContext(c.Request.Context())
-	view, fault := ctl.toConfirm.Detail(c.Request.Context(), c.Param("id"), appelant.OperatorID)
+// ToConfirmDetail handles GET /demandes/a-confirmer/:id.
+func (ctl *QueryController) ToConfirmDetail(c *gin.Context) {
+	caller := port.CallerFromContext(c.Request.Context())
+	view, fault := ctl.toConfirm.Detail(c.Request.Context(), c.Param("id"), caller.OperatorID)
 	if fault != nil {
 		render(c, ctl.pres.Failure(fault, c.Request.URL.Path))
 		return
@@ -162,40 +162,40 @@ func (ctl *QueryController) AConfirmerDetail(c *gin.Context) {
 
 // --- deja-confirmees --------------------------------------------------------
 
-// DejaConfirmees handles GET /demandes/deja-confirmees.
-func (ctl *QueryController) DejaConfirmees(c *gin.Context) {
-	appelant := port.CallerFromContext(c.Request.Context())
-	views, fault := ctl.alreadyConfirmed.Execute(c.Request.Context(), appelant.OperatorID)
+// AlreadyConfirmed handles GET /demandes/deja-confirmees.
+func (ctl *QueryController) AlreadyConfirmed(c *gin.Context) {
+	caller := port.CallerFromContext(c.Request.Context())
+	views, fault := ctl.alreadyConfirmed.Execute(c.Request.Context(), caller.OperatorID)
 	if fault != nil {
 		render(c, ctl.pres.Failure(fault, c.Request.URL.Path))
 		return
 	}
 	render(c, ctl.pres.Success(http.StatusOK, "Demandes déjà confirmées récupérées avec succès",
-		ctl.dtoList(views, identite)))
+		ctl.dtoList(views, identity)))
 }
 
 // --- in / out -----------------------------------------------------------------
 
 // In handles GET /demandes/in.
 func (ctl *QueryController) In(c *gin.Context) {
-	appelant := port.CallerFromContext(c.Request.Context())
-	views, fault := ctl.incoming.Execute(c.Request.Context(), appelant.OperatorID)
+	caller := port.CallerFromContext(c.Request.Context())
+	views, fault := ctl.incoming.Execute(c.Request.Context(), caller.OperatorID)
 	if fault != nil {
 		render(c, ctl.pres.Failure(fault, c.Request.URL.Path))
 		return
 	}
 	render(c, ctl.pres.Success(http.StatusOK, "Demandes IN récupérées avec succès",
-		ctl.dtoList(views, identite)))
+		ctl.dtoList(views, identity)))
 }
 
 // Out handles GET /demandes/out.
 func (ctl *QueryController) Out(c *gin.Context) {
-	appelant := port.CallerFromContext(c.Request.Context())
-	views, fault := ctl.outgoing.Execute(c.Request.Context(), appelant.OperatorID)
+	caller := port.CallerFromContext(c.Request.Context())
+	views, fault := ctl.outgoing.Execute(c.Request.Context(), caller.OperatorID)
 	if fault != nil {
 		render(c, ctl.pres.Failure(fault, c.Request.URL.Path))
 		return
 	}
 	render(c, ctl.pres.Success(http.StatusOK, "Demandes OUT récupérées avec succès",
-		ctl.dtoList(views, identite)))
+		ctl.dtoList(views, identity)))
 }

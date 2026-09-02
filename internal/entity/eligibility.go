@@ -3,10 +3,10 @@ package entity
 import "time"
 
 const (
-	// DelayBetweenPortings — délai entre deux portages, motif de rejet ARTP
-	// « Dernier portage inférieur à 3 mois ».
+	// DelayBetweenPortings — delay between two portings, ARTP rejection
+	// reason "Last porting less than 3 months ago".
 	DelayBetweenPortings = 3 * 30 * 24 * time.Hour
-	// DelayBeforeRestitution — délai avant restitution — §7.5 du guide.
+	// DelayBeforeRestitution — delay before restitution — §7.5 of the guide.
 	DelayBeforeRestitution = 6 * 30 * 24 * time.Hour
 )
 

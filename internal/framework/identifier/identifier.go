@@ -15,19 +15,19 @@ import (
 )
 
 var (
-	processus [5]byte
-	compteur  uint32
+	processBytes [5]byte
+	counter      uint32
 )
 
 func init() {
-	if _, err := crand.Read(processus[:]); err != nil {
+	if _, err := crand.Read(processBytes[:]); err != nil {
 		panic("identifier : source d'aléa indisponible : " + err.Error())
 	}
-	var amorce [4]byte
-	if _, err := crand.Read(amorce[:]); err != nil {
+	var seedBytes [4]byte
+	if _, err := crand.Read(seedBytes[:]); err != nil {
 		panic("identifier : source d'aléa indisponible : " + err.Error())
 	}
-	compteur = binary.BigEndian.Uint32(amorce[:])
+	counter = binary.BigEndian.Uint32(seedBytes[:])
 }
 
 // New returns an ObjectId: 4 bytes of timestamp, 5 process-specific bytes,
@@ -35,8 +35,8 @@ func init() {
 func New() string {
 	var b [12]byte
 	binary.BigEndian.PutUint32(b[0:4], uint32(time.Now().Unix()))
-	copy(b[4:9], processus[:])
-	c := atomic.AddUint32(&compteur, 1)
+	copy(b[4:9], processBytes[:])
+	c := atomic.AddUint32(&counter, 1)
 	b[9] = byte(c >> 16)
 	b[10] = byte(c >> 8)
 	b[11] = byte(c)

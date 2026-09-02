@@ -46,48 +46,48 @@ func NewCreationController(
 	}
 }
 
-// --- Particulier -------------------------------------------------------------
+// --- Individual -------------------------------------------------------------
 
 type creationClientDTO struct {
-	Nom           string `json:"nom"`
-	Prenom        string `json:"prenom"`
-	DateNaissance string `json:"dateNaissance"`
-	LieuNaissance string `json:"lieuNaissance"`
-	TypePiece     string `json:"typePiece"`
-	NumeroPiece   string `json:"numeroPiece"`
-	RaisonSociale string `json:"raisonSociale"`
-	NumRC         string `json:"numRC"`
+	Name             string `json:"nom"`
+	Prenom           string `json:"prenom"`
+	DateNaissance    string `json:"dateNaissance"`
+	LieuNaissance    string `json:"lieuNaissance"`
+	TypePiece        string `json:"typePiece"`
+	IDDocumentNumber string `json:"numeroPiece"`
+	CompanyName      string `json:"raisonSociale"`
+	NumRC            string `json:"numRC"`
 }
 
-type demandeParticulierRequest struct {
-	Numero                  string            `json:"numero"`
-	OtpCode                 string            `json:"otpCode"`
-	OperateurSourceID       string            `json:"operateurSourceId"`
-	OperateurDestinataireID string            `json:"operateurDestinataireId"`
-	TypePortabilite         string            `json:"typePortabilite"`
-	Client                  creationClientDTO `json:"client"`
+type individualRequestDTO struct {
+	MSISDN              string            `json:"numero"`
+	OtpCode             string            `json:"otpCode"`
+	SourceOperatorID    string            `json:"operateurSourceId"`
+	RecipientOperatorID string            `json:"operateurDestinataireId"`
+	TypePortabilite     string            `json:"typePortabilite"`
+	Client              creationClientDTO `json:"client"`
 }
 
-// Particulier handles POST /demandes/particulier.
-func (ctl *CreationController) Particulier(c *gin.Context) {
-	var req demandeParticulierRequest
+// Individual handles POST /demandes/particulier.
+func (ctl *CreationController) Individual(c *gin.Context) {
+	var req individualRequestDTO
 	if err := c.ShouldBindJSON(&req); err != nil {
 		render(c, ctl.pres.Failure(entity.InvalidJSONFormat(), c.Request.URL.Path))
 		return
 	}
-	if champs := validerParticulier(req); len(champs) > 0 {
-		render(c, ctl.pres.Failure(entity.Validation(champs...), c.Request.URL.Path))
+	if fields := validateIndividual(req); len(fields) > 0 {
+		render(c, ctl.pres.Failure(entity.Validation(fields...), c.Request.URL.Path))
 		return
 	}
 
 	view, fault := ctl.individual.Execute(c.Request.Context(), creation.CreateIndividualRequestInput{
-		MSISDN: req.Numero, OTPCode: req.OtpCode,
-		SourceOperatorID: req.OperateurSourceID, RecipientOperatorID: req.OperateurDestinataireID,
-		Processus: req.TypePortabilite,
+		MSISDN: req.MSISDN, OTPCode: req.OtpCode,
+		SourceOperatorID: req.SourceOperatorID, RecipientOperatorID: req.RecipientOperatorID,
+		Process: req.TypePortabilite,
 		Client: creation.ClientInput{
-			LastName: req.Client.Nom, FirstName: req.Client.Prenom,
+			LastName: req.Client.Name, FirstName: req.Client.Prenom,
 			BirthDate: req.Client.DateNaissance, BirthPlace: req.Client.LieuNaissance,
-			IDType: req.Client.TypePiece, IDNumber: req.Client.NumeroPiece,
+			IDType: req.Client.TypePiece, IDNumber: req.Client.IDDocumentNumber,
 		},
 	})
 	if fault != nil {
@@ -99,83 +99,83 @@ func (ctl *CreationController) Particulier(c *gin.Context) {
 		requestViewDTO(ctl.clock, view)))
 }
 
-// validerParticulier reproduit la validation de la plateforme, y compris son
-// écart au guide : lieuNaissance est documenté facultatif mais rejeté si
-// absent (ANO-010).
-func validerParticulier(r demandeParticulierRequest) []entity.FieldFault {
-	var champs []entity.FieldFault
-	obligatoire := func(champ, valeur string) {
-		if valeur == "" {
-			champs = append(champs, entity.FieldFault{
-				ObjectName: "demandeParticulierDTO", Field: champ,
+// validateIndividual reproduces the platform's validation, including its
+// deviation from the guide: lieuNaissance is documented optional but
+// rejected when absent (ANO-010).
+func validateIndividual(r individualRequestDTO) []entity.FieldFault {
+	var fields []entity.FieldFault
+	required := func(field, value string) {
+		if value == "" {
+			fields = append(fields, entity.FieldFault{
+				ObjectName: "demandeParticulierDTO", Field: field,
 				Message: "ne doit pas être vide",
 			})
 		}
 	}
-	if !motifMSISDN.MatchString(r.Numero) {
-		champs = append(champs, entity.FieldFault{
+	if !msisdnPattern.MatchString(r.MSISDN) {
+		fields = append(fields, entity.FieldFault{
 			ObjectName: "demandeParticulierDTO", Field: "numero",
 			Message: "doit correspondre à \"^[0-9]{9}$\"",
 		})
 	}
-	obligatoire("otpCode", r.OtpCode)
-	obligatoire("operateurSourceId", r.OperateurSourceID)
-	obligatoire("operateurDestinataireId", r.OperateurDestinataireID)
-	obligatoire("client.nom", r.Client.Nom)
-	obligatoire("client.prenom", r.Client.Prenom)
-	obligatoire("client.dateNaissance", r.Client.DateNaissance)
-	obligatoire("client.lieuNaissance", r.Client.LieuNaissance)
-	obligatoire("client.typePiece", r.Client.TypePiece)
-	obligatoire("client.numeroPiece", r.Client.NumeroPiece)
+	required("otpCode", r.OtpCode)
+	required("operateurSourceId", r.SourceOperatorID)
+	required("operateurDestinataireId", r.RecipientOperatorID)
+	required("client.nom", r.Client.Name)
+	required("client.prenom", r.Client.Prenom)
+	required("client.dateNaissance", r.Client.DateNaissance)
+	required("client.lieuNaissance", r.Client.LieuNaissance)
+	required("client.typePiece", r.Client.TypePiece)
+	required("client.numeroPiece", r.Client.IDDocumentNumber)
 	if r.TypePortabilite != "PREPAID" && r.TypePortabilite != "POSTPAID" {
-		champs = append(champs, entity.FieldFault{
+		fields = append(fields, entity.FieldFault{
 			ObjectName: "demandeParticulierDTO", Field: "typePortabilite",
 			Message: "doit valoir PREPAID ou POSTPAID",
 		})
 	}
-	return champs
+	return fields
 }
 
-// --- Entreprise (flotte) ------------------------------------------------------
+// --- Enterprise (fleet) ------------------------------------------------------
 
-type demandeEntrepriseRequest struct {
-	NumeroPorteurFlotte     string            `json:"numeroPorteurFlotte"`
-	OtpCode                 string            `json:"otpCode"`
-	OperateurSourceID       string            `json:"operateurSourceId"`
-	OperateurDestinataireID string            `json:"operateurDestinataireId"`
-	TypePortabilite         string            `json:"typePortabilite"`
-	NumerosFlotte           []string          `json:"numerosFlotte"`
-	Client                  creationClientDTO `json:"client"`
+type enterpriseRequestDTO struct {
+	FleetHolderMSISDN   string            `json:"numeroPorteurFlotte"`
+	OtpCode             string            `json:"otpCode"`
+	SourceOperatorID    string            `json:"operateurSourceId"`
+	RecipientOperatorID string            `json:"operateurDestinataireId"`
+	TypePortabilite     string            `json:"typePortabilite"`
+	FleetMSISDNs        []string          `json:"numerosFlotte"`
+	Client              creationClientDTO `json:"client"`
 }
 
-// numeroExcluDTO porte le motif d'exclusion d'un numéro de la flotte (§7.4).
-type numeroExcluDTO struct {
-	Numero     string `json:"numero"`
-	Raison     string `json:"raison"`
-	CodeErreur string `json:"codeErreur"`
+// excludedNumberDTO carries the reason a fleet number was excluded (§7.4).
+type excludedNumberDTO struct {
+	MSISDN    string `json:"numero"`
+	Reason    string `json:"raison"`
+	ErrorCode string `json:"codeErreur"`
 }
 
-// Entreprise handles POST /demandes/entreprise.
-func (ctl *CreationController) Entreprise(c *gin.Context) {
-	var req demandeEntrepriseRequest
+// Enterprise handles POST /demandes/entreprise.
+func (ctl *CreationController) Enterprise(c *gin.Context) {
+	var req enterpriseRequestDTO
 	if err := c.ShouldBindJSON(&req); err != nil {
 		render(c, ctl.pres.Failure(entity.InvalidJSONFormat(), c.Request.URL.Path))
 		return
 	}
-	if champs := validerEntreprise(req); len(champs) > 0 {
-		render(c, ctl.pres.Failure(entity.Validation(champs...), c.Request.URL.Path))
+	if fields := validateEnterprise(req); len(fields) > 0 {
+		render(c, ctl.pres.Failure(entity.Validation(fields...), c.Request.URL.Path))
 		return
 	}
 
 	out, fault := ctl.enterprise.Execute(c.Request.Context(), creation.CreateEnterpriseRequestInput{
-		FleetMSISDN: req.NumeroPorteurFlotte, OTPCode: req.OtpCode,
-		SourceOperatorID: req.OperateurSourceID, RecipientOperatorID: req.OperateurDestinataireID,
-		Processus: req.TypePortabilite, FleetNumbers: req.NumerosFlotte,
+		FleetMSISDN: req.FleetHolderMSISDN, OTPCode: req.OtpCode,
+		SourceOperatorID: req.SourceOperatorID, RecipientOperatorID: req.RecipientOperatorID,
+		Process: req.TypePortabilite, FleetNumbers: req.FleetMSISDNs,
 		Client: creation.ClientInput{
-			LastName: req.Client.Nom, FirstName: req.Client.Prenom,
+			LastName: req.Client.Name, FirstName: req.Client.Prenom,
 			BirthDate: req.Client.DateNaissance, BirthPlace: req.Client.LieuNaissance,
-			IDType: req.Client.TypePiece, IDNumber: req.Client.NumeroPiece,
-			CompanyName: req.Client.RaisonSociale, RCNumber: req.Client.NumRC,
+			IDType: req.Client.TypePiece, IDNumber: req.Client.IDDocumentNumber,
+			CompanyName: req.Client.CompanyName, RCNumber: req.Client.NumRC,
 		},
 	})
 	if fault != nil {
@@ -183,9 +183,9 @@ func (ctl *CreationController) Entreprise(c *gin.Context) {
 		return
 	}
 
-	exclus := make([]numeroExcluDTO, 0, len(out.Excluded))
+	excluded := make([]excludedNumberDTO, 0, len(out.Excluded))
 	for _, ex := range out.Excluded {
-		exclus = append(exclus, numeroExcluDTO{Numero: ex.MSISDN, Raison: ex.Reason, CodeErreur: ex.ErrorCode})
+		excluded = append(excluded, excludedNumberDTO{MSISDN: ex.MSISDN, Reason: ex.Reason, ErrorCode: ex.ErrorCode})
 	}
 	data := gin.H{
 		"demande": gin.H{
@@ -197,68 +197,68 @@ func (ctl *CreationController) Entreprise(c *gin.Context) {
 		},
 		"numerosPortesCount": out.RetainedCount,
 		"numerosExclusCount": len(out.Excluded),
-		"numerosExclus":      exclus,
+		"numerosExclus":      excluded,
 	}
-	if len(exclus) > 0 {
-		data["avertissement"] = fmt.Sprintf("%d numéro(s) exclu(s) de la demande.", len(exclus))
+	if len(excluded) > 0 {
+		data["avertissement"] = fmt.Sprintf("%d numéro(s) exclu(s) de la demande.", len(excluded))
 	}
 	render(c, ctl.pres.Success(http.StatusCreated, "Demande flotte créée", data))
 }
 
-// validerEntreprise reproduit la validation de forme d'une demande flotte :
-// les mêmes champs obligatoires qu'une demande particulier, mais
-// numeroPorteurFlotte à la place de numero, raisonSociale/numRC à la place
-// d'une identité seule, et numerosFlotte dont la vacuité relève du code
-// FLOTTE_VIDE, hors de cette fonction (elle appartient à l'interactor).
-func validerEntreprise(r demandeEntrepriseRequest) []entity.FieldFault {
-	var champs []entity.FieldFault
-	obligatoire := func(champ, valeur string) {
-		if valeur == "" {
-			champs = append(champs, entity.FieldFault{
-				ObjectName: "demandeEntrepriseDTO", Field: champ,
+// validateEnterprise reproduces the shape validation of a fleet request: the
+// same required fields as an individual request, but numeroPorteurFlotte in
+// place of numero, raisonSociale/numRC in place of a bare identity, and
+// numerosFlotte whose emptiness is the FLOTTE_VIDE code, outside this
+// function (it belongs to the interactor).
+func validateEnterprise(r enterpriseRequestDTO) []entity.FieldFault {
+	var fields []entity.FieldFault
+	required := func(field, value string) {
+		if value == "" {
+			fields = append(fields, entity.FieldFault{
+				ObjectName: "demandeEntrepriseDTO", Field: field,
 				Message: "ne doit pas être vide",
 			})
 		}
 	}
-	if !motifMSISDN.MatchString(r.NumeroPorteurFlotte) {
-		champs = append(champs, entity.FieldFault{
+	if !msisdnPattern.MatchString(r.FleetHolderMSISDN) {
+		fields = append(fields, entity.FieldFault{
 			ObjectName: "demandeEntrepriseDTO", Field: "numeroPorteurFlotte",
 			Message: "doit correspondre à \"^[0-9]{9}$\"",
 		})
 	}
-	obligatoire("otpCode", r.OtpCode)
-	obligatoire("operateurSourceId", r.OperateurSourceID)
-	obligatoire("operateurDestinataireId", r.OperateurDestinataireID)
-	obligatoire("client.raisonSociale", r.Client.RaisonSociale)
-	obligatoire("client.numRC", r.Client.NumRC)
-	obligatoire("client.nom", r.Client.Nom)
-	obligatoire("client.prenom", r.Client.Prenom)
-	obligatoire("client.dateNaissance", r.Client.DateNaissance)
-	obligatoire("client.typePiece", r.Client.TypePiece)
-	obligatoire("client.numeroPiece", r.Client.NumeroPiece)
+	required("otpCode", r.OtpCode)
+	required("operateurSourceId", r.SourceOperatorID)
+	required("operateurDestinataireId", r.RecipientOperatorID)
+	required("client.raisonSociale", r.Client.CompanyName)
+	required("client.numRC", r.Client.NumRC)
+	required("client.nom", r.Client.Name)
+	required("client.prenom", r.Client.Prenom)
+	required("client.dateNaissance", r.Client.DateNaissance)
+	required("client.typePiece", r.Client.TypePiece)
+	required("client.numeroPiece", r.Client.IDDocumentNumber)
 	if r.TypePortabilite != "PREPAID" && r.TypePortabilite != "POSTPAID" {
-		champs = append(champs, entity.FieldFault{
+		fields = append(fields, entity.FieldFault{
 			ObjectName: "demandeEntrepriseDTO", Field: "typePortabilite",
 			Message: "doit valoir PREPAID ou POSTPAID",
 		})
 	}
-	return champs
+	return fields
 }
 
 // --- Restitution ---------------------------------------------------------------
 
-type demandeRestitutionRequest struct {
-	Numero string `json:"numero"`
+type restitutionRequestDTO struct {
+	MSISDN string `json:"numero"`
 }
 
 // Restitution handles POST /demandes/restitution.
 func (ctl *CreationController) Restitution(c *gin.Context) {
-	var req demandeRestitutionRequest
+	var req restitutionRequestDTO
 	if err := c.ShouldBindJSON(&req); err != nil {
 		render(c, ctl.pres.Failure(entity.InvalidJSONFormat(), c.Request.URL.Path))
 		return
 	}
-	if !motifMSISDN.MatchString(req.Numero) {
+	if !msisdnPattern.MatchString(req.MSISDN) {
 		render(c, ctl.pres.Failure(entity.Validation(entity.FieldFault{
 			ObjectName: "demandeRestitutionDTO", Field: "numero",
 			Message: "doit correspondre à \"^[0-9]{9}$\"",
@@ -267,7 +267,7 @@ func (ctl *CreationController) Restitution(c *gin.Context) {
 	}
 
 	view, fault := ctl.restitution.Execute(c.Request.Context(),
-		creation.CreateRestitutionRequestInput{MSISDN: req.Numero})
+		creation.CreateRestitutionRequestInput{MSISDN: req.MSISDN})
 	if fault != nil {
 		render(c, ctl.pres.Failure(fault, c.Request.URL.Path))
 		return

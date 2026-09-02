@@ -10,12 +10,12 @@ import (
 	"github.com/ouznoreyni/numflex-sandbox/internal/testsupport"
 )
 
-// operateurYAS is internal/framework/seed.OperateurYAS, recopié en littéral :
-// un test de gateway (couche adapter) ne peut pas importer
-// internal/framework (règle de dépendance, voir test/architecture_test.go),
-// même dans un fichier //go:build integration — précédent déjà posé par
+// operatorYAS is internal/framework/seed.OperatorYASID, copied as a literal:
+// a gateway test (adapter layer) cannot import internal/framework
+// (dependency rule, see test/architecture_test.go), even in a
+// //go:build integration file — a precedent already set by
 // internal/adapter/controller/creation_particulier_test.go.
-const operateurYAS = "6a2174c3e6c37b5b5b487ec4"
+const operatorYAS = "6a2174c3e6c37b5b5b487ec4"
 
 // TestUserGatewayByCredentialsResolvesSeededAccount pins the two SQL
 // statements moved verbatim from internal/api/auth.go: a seeded account's
@@ -47,7 +47,7 @@ func TestUserGatewayByCredentialsRejectsWrongPassword(t *testing.T) {
 	db := testsupport.NewTestDB(t)
 	g := postgres.NewUserGateway(db.Pool)
 
-	_, found, err := g.ByCredentials(context.Background(), "yas", "faux")
+	_, found, err := g.ByCredentials(context.Background(), "yas", "wrong")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -62,7 +62,7 @@ func TestUserGatewayByCredentialsRejectsUnknownUser(t *testing.T) {
 	db := testsupport.NewTestDB(t)
 	g := postgres.NewUserGateway(db.Pool)
 
-	_, found, err := g.ByCredentials(context.Background(), "fantome", "peu importe")
+	_, found, err := g.ByCredentials(context.Background(), "ghost", "irrelevant")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -71,10 +71,10 @@ func TestUserGatewayByCredentialsRejectsUnknownUser(t *testing.T) {
 	}
 }
 
-// TestUserGatewayByUsernameJoinsOperateur pins the join: OperatorID and
+// TestUserGatewayByUsernameJoinsOperator pins the join: OperatorID and
 // OperatorName come from the operateur row referenced by the seeded
 // account, not from utilisateur itself.
-func TestUserGatewayByUsernameJoinsOperateur(t *testing.T) {
+func TestUserGatewayByUsernameJoinsOperator(t *testing.T) {
 	db := testsupport.NewTestDB(t)
 	g := postgres.NewUserGateway(db.Pool)
 
@@ -85,8 +85,8 @@ func TestUserGatewayByUsernameJoinsOperateur(t *testing.T) {
 	if !found {
 		t.Fatal("expected the seeded yas account to resolve")
 	}
-	if caller.OperatorID != operateurYAS {
-		t.Fatalf("operatorId = %q, want %q", caller.OperatorID, operateurYAS)
+	if caller.OperatorID != operatorYAS {
+		t.Fatalf("operatorId = %q, want %q", caller.OperatorID, operatorYAS)
 	}
 	if caller.OperatorName != "YAS" {
 		t.Fatalf("operatorName = %q, want YAS", caller.OperatorName)
@@ -105,7 +105,7 @@ func TestUserGatewayByUsernameUnknownUser(t *testing.T) {
 	db := testsupport.NewTestDB(t)
 	g := postgres.NewUserGateway(db.Pool)
 
-	_, found, err := g.ByUsername(context.Background(), "fantome")
+	_, found, err := g.ByUsername(context.Background(), "ghost")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

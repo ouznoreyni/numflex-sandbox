@@ -16,16 +16,16 @@ import (
 )
 
 // seedPurgeable inserts, directly by SQL, everything one purge touches: an
-// already-ported numéro (owned by ORANGE, origin YAS — the same shape as
+// already-ported number (owned by ORANGE, origin YAS — the same shape as
 // the seed's own 77200 tranche), a demande created by operatorID that
-// references it, a live OTP for the same numéro, and a reverse_request tied
+// references it, a live OTP for the same number, and a reverse_request tied
 // to the demande — so that a single purge exercises all five tables Task
 // 16's own PurgeTestDataInteractor writes.
-func seedPurgeable(t *testing.T, db *persistence.DB, demandeID, msisdn, operatorID string) {
+func seedPurgeable(t *testing.T, db *persistence.DB, requestID, msisdn, operatorID string) {
 	t.Helper()
 	ctx := context.Background()
 	now := time.Now()
-	porte := now.Add(-30 * 24 * time.Hour)
+	portedAt := now.Add(-30 * 24 * time.Hour)
 
 	if _, err := db.Pool.Exec(ctx, `
 		INSERT INTO numero (msisdn, operateur_actuel_id, operateur_origine_id,
@@ -35,7 +35,7 @@ func seedPurgeable(t *testing.T, db *persistence.DB, demandeID, msisdn, operator
 		  SET operateur_actuel_id = EXCLUDED.operateur_actuel_id,
 		      operateur_origine_id = EXCLUDED.operateur_origine_id,
 		      date_dernier_portage = EXCLUDED.date_dernier_portage`,
-		msisdn, seed.OperateurOrange, seed.OperateurYAS, porte); err != nil {
+		msisdn, seed.OperatorOrangeID, seed.OperatorYASID, portedAt); err != nil {
 		t.Fatalf("seed numero : %v", err)
 	}
 
@@ -46,7 +46,7 @@ func seedPurgeable(t *testing.T, db *persistence.DB, demandeID, msisdn, operator
 		   createur_operateur_id, date_demande, date_debut_etape)
 		VALUES ($1, $2, 'PARTICULIER', 'PORTAGE', 'EN_COURS', 'ACCEPTATION', 'EN_COURS',
 		        $3, $4, $4, $5, $5)`,
-		demandeID, msisdn, seed.OperateurYAS, operatorID, now); err != nil {
+		requestID, msisdn, seed.OperatorYASID, operatorID, now); err != nil {
 		t.Fatalf("seed demande : %v", err)
 	}
 
@@ -60,7 +60,7 @@ func seedPurgeable(t *testing.T, db *persistence.DB, demandeID, msisdn, operator
 	if _, err := db.Pool.Exec(ctx, `
 		INSERT INTO reverse_request (id, numero, operateur_id, demande_id, statut, date_demande)
 		VALUES ($1, $2, $3, $4, 'EN_ATTENTE', $5)`,
-		identifier.New(), msisdn, operatorID, demandeID, now); err != nil {
+		identifier.New(), msisdn, operatorID, requestID, now); err != nil {
 		t.Fatalf("seed reverse_request : %v", err)
 	}
 }
@@ -79,27 +79,27 @@ func seedPurgeable(t *testing.T, db *persistence.DB, demandeID, msisdn, operator
 func TestSandboxPurgeRollsBack(t *testing.T) {
 	db := testsupport.NewTestDB(t)
 	ctx := context.Background()
-	const demandeID = "6a2100000000000000000010"
+	const requestID = "6a2100000000000000000010"
 	const msisdn = "779000010"
 
-	seedPurgeable(t, db, demandeID, msisdn, seed.OperateurYAS)
+	seedPurgeable(t, db, requestID, msisdn, seed.OperatorYASID)
 
 	uow := persistence.NewUnitOfWork(db)
 	boom := errors.New("boom")
 
 	err := uow.Do(ctx, func(repos port.Repositories) error {
-		ids, err := repos.Sandbox.RequestIDsToPurge(ctx, seed.OperateurYAS)
+		ids, err := repos.Sandbox.RequestIDsToPurge(ctx, seed.OperatorYASID)
 		if err != nil {
 			return err
 		}
-		numeros, err := repos.Sandbox.NumbersToRestore(ctx, ids)
+		numbers, err := repos.Sandbox.NumbersToRestore(ctx, ids)
 		if err != nil {
 			return err
 		}
-		if _, err := repos.Sandbox.DeleteReverseRequests(ctx, seed.OperateurYAS, ids); err != nil {
+		if _, err := repos.Sandbox.DeleteReverseRequests(ctx, seed.OperatorYASID, ids); err != nil {
 			return err
 		}
-		if _, err := repos.Sandbox.DeleteOTP(ctx, numeros); err != nil {
+		if _, err := repos.Sandbox.DeleteOTP(ctx, numbers); err != nil {
 			return err
 		}
 		// The request itself is deleted here, inside the transaction's own
@@ -113,13 +113,13 @@ func TestSandboxPurgeRollsBack(t *testing.T) {
 		t.Fatalf("expected boom, got %v", err)
 	}
 
-	var nDemande int
+	var requestCount int
 	if err := db.Pool.QueryRow(ctx,
-		"SELECT count(*) FROM demande WHERE id = $1", demandeID).Scan(&nDemande); err != nil {
+		"SELECT count(*) FROM demande WHERE id = $1", requestID).Scan(&requestCount); err != nil {
 		t.Fatal(err)
 	}
-	if nDemande != 1 {
-		t.Fatalf("la demande a survécu supprimée malgré le rollback (%d ligne(s))", nDemande)
+	if requestCount != 1 {
+		t.Fatalf("la demande a survécu supprimée malgré le rollback (%d ligne(s))", requestCount)
 	}
 
 	var nOTP int
@@ -133,19 +133,19 @@ func TestSandboxPurgeRollsBack(t *testing.T) {
 
 	var nReverse int
 	if err := db.Pool.QueryRow(ctx,
-		"SELECT count(*) FROM reverse_request WHERE demande_id = $1", demandeID).Scan(&nReverse); err != nil {
+		"SELECT count(*) FROM reverse_request WHERE demande_id = $1", requestID).Scan(&nReverse); err != nil {
 		t.Fatal(err)
 	}
 	if nReverse != 1 {
 		t.Fatalf("la demande de reverse a survécu supprimée malgré le rollback (%d ligne(s))", nReverse)
 	}
 
-	var operateurActuel string
+	var currentOperator string
 	if err := db.Pool.QueryRow(ctx,
-		"SELECT operateur_actuel_id FROM numero WHERE msisdn = $1", msisdn).Scan(&operateurActuel); err != nil {
+		"SELECT operateur_actuel_id FROM numero WHERE msisdn = $1", msisdn).Scan(&currentOperator); err != nil {
 		t.Fatal(err)
 	}
-	if operateurActuel != seed.OperateurOrange {
-		t.Fatalf("le registre a été restauré malgré le rollback (operateur_actuel_id = %s)", operateurActuel)
+	if currentOperator != seed.OperatorOrangeID {
+		t.Fatalf("le registre a été restauré malgré le rollback (operateur_actuel_id = %s)", currentOperator)
 	}
 }

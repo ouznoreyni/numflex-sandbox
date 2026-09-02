@@ -13,9 +13,9 @@ import (
 )
 
 func main() {
-	// Les arguments l'emportent sur l'environnement, qui l'emporte sur le
-	// fichier .env : un conteneur se règle indifféremment par `-e`, par un
-	// `.env` monté, ou par des arguments `CLEF=valeur`.
+	// Arguments take precedence over the environment, which takes precedence
+	// over the .env file: a container can be configured indifferently via
+	// `-e`, via a mounted `.env`, or via `KEY=value` arguments.
 	if err := config.ApplyArguments(os.Args[1:]); err != nil {
 		log.Fatalf("arguments : %v", err)
 	}
@@ -28,7 +28,7 @@ func main() {
 		log.Fatalf("configuration : %v", err)
 	}
 	log.Printf("numflex-sandbox — fidélité=%s expiration=%s port=%s",
-		c.Fidelity, c.EtapeTimeout, c.Port)
+		c.Fidelity, c.StepTimeout, c.Port)
 
 	if err := persistence.Migrate(c.DatabaseURL); err != nil {
 		log.Fatalf("migrations : %v", err)
@@ -47,8 +47,8 @@ func main() {
 		log.Fatalf("seed : %v", err)
 	}
 
-	moteur := engine.New(c, db)
-	go moteur.Run(ctx)
+	eng := engine.New(c, db)
+	go eng.Run(ctx)
 
 	// cmd/server/main.go is the composition root: config, database,
 	// migrations and seed are already built above; web.Deps carries the rest
@@ -57,7 +57,7 @@ func main() {
 	// presenter and controller exactly once, then wires the whole route
 	// table (Task 18 — internal/api is gone, this package is now the router
 	// actually served).
-	d := &web.Deps{Cfg: c, DB: db, Moteur: moteur}
+	d := &web.Deps{Cfg: c, DB: db, Engine: eng}
 	r := web.NewRouter(d)
 
 	if err := r.Run(":" + c.Port); err != nil {
