@@ -70,7 +70,7 @@ func Load() (*Config, error) {
 	if c.JWTTTL, err = dur("JWT_TTL_HOURS", 24, time.Hour); err != nil {
 		return nil, err
 	}
-	if c.StepTimeout, err = dur("ETAPE_TIMEOUT_SECONDS", 349, time.Second); err != nil {
+	if c.StepTimeout, err = dur("STEP_TIMEOUT_SECONDS", 349, time.Second); err != nil {
 		return nil, err
 	}
 	if c.EngineTick, err = dur("ENGINE_TICK_SECONDS", 10, time.Second); err != nil {

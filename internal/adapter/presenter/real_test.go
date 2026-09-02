@@ -147,14 +147,14 @@ func TestRealValidationWithoutFieldsRendersAPreciseMessage(t *testing.T) {
 	// 400 carrying the business message.
 	r := NewReal(inmemory.FixedClock{})
 
-	vm := r.Failure(entity.ValidationFailed("un message précis"), "/api/gateway/v1/demandes/flotte")
+	vm := r.Failure(entity.ValidationFailed("a precise message"), "/api/gateway/v1/demandes/flotte")
 
 	require.Equal(t, http.StatusBadRequest, vm.Status)
 	body := bodyMap(t, vm)
 	require.Equal(t, "https://www.jhipster.tech/problem/problem-with-message", body["type"])
 	require.Equal(t, "Bad Request", body["title"])
 	require.Equal(t, float64(400), body["status"])
-	require.Equal(t, "un message précis", body["detail"])
+	require.Equal(t, "a precise message", body["detail"])
 	require.Equal(t, "error.http.400", body["message"])
 	require.NotContains(t, body, "code")
 	require.NotContains(t, body, "fieldErrors")
@@ -172,14 +172,14 @@ func TestFailWithNilErrorDoesNotPanic(t *testing.T) {
 	require.NotPanics(t, func() {
 		f = entity.FaultFrom(nil)
 	})
-	require.Equal(t, entity.InternalError("erreur interne"), f)
+	require.Equal(t, entity.InternalError("internal error"), f)
 
 	r := NewReal(inmemory.FixedClock{})
 	vm := r.Failure(f, "/x")
 
 	require.Equal(t, http.StatusInternalServerError, vm.Status)
 	body := bodyMap(t, vm)
-	require.Equal(t, "RuntimeException: erreur interne", body["detail"])
+	require.Equal(t, "RuntimeException: internal error", body["detail"])
 }
 
 func TestFailWithNilApperrErrorTypeDoesNotPanic(t *testing.T) {
@@ -195,14 +195,14 @@ func TestFailWithNilApperrErrorTypeDoesNotPanic(t *testing.T) {
 	require.NotPanics(t, func() {
 		f = entity.FaultFrom(err)
 	})
-	require.Equal(t, entity.InternalError("erreur interne"), f)
+	require.Equal(t, entity.InternalError("internal error"), f)
 
 	r := NewReal(inmemory.FixedClock{})
 	vm := r.Failure(f, "/x")
 
 	require.Equal(t, http.StatusInternalServerError, vm.Status)
 	body := bodyMap(t, vm)
-	require.Equal(t, "RuntimeException: erreur interne", body["detail"])
+	require.Equal(t, "RuntimeException: internal error", body["detail"])
 }
 
 func TestFailBareErrorBecomes500WithItsText(t *testing.T) {
@@ -210,13 +210,13 @@ func TestFailBareErrorBecomes500WithItsText(t *testing.T) {
 	// an error that is not a *entity.Fault. Fix round 1 (finding 2):
 	// exercises entity.FaultFrom on a bare error rather than on the fault it
 	// would produce.
-	f := entity.FaultFrom(errors.New("panne imprévue"))
-	require.Equal(t, entity.InternalError("panne imprévue"), f)
+	f := entity.FaultFrom(errors.New("unexpected failure"))
+	require.Equal(t, entity.InternalError("unexpected failure"), f)
 
 	r := NewReal(inmemory.FixedClock{})
 	vm := r.Failure(f, "/x")
 
 	require.Equal(t, http.StatusInternalServerError, vm.Status)
 	body := bodyMap(t, vm)
-	require.Equal(t, "RuntimeException: panne imprévue", body["detail"])
+	require.Equal(t, "RuntimeException: unexpected failure", body["detail"])
 }

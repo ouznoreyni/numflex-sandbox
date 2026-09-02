@@ -54,7 +54,7 @@ func (i *DeclareIncidentInteractor) Execute(
 ) (port.IncidentView, *entity.Fault) {
 	typeID, err := i.incidents.TypeIDFor(ctx, in.SystemLocked)
 	if err != nil {
-		return port.IncidentView{}, entity.InternalError("résolution du type d'incident")
+		return port.IncidentView{}, entity.InternalError("resolving the incident type")
 	}
 
 	caller := port.CallerFromContext(ctx)
@@ -62,7 +62,7 @@ func (i *DeclareIncidentInteractor) Execute(
 	if in.SystemLocked {
 		open, err := i.incidents.HasOpen(ctx, caller.OperatorID)
 		if err != nil {
-			return port.IncidentView{}, entity.InternalError("vérification des incidents ouverts")
+			return port.IncidentView{}, entity.InternalError("checking the open incidents")
 		}
 		if open {
 			return port.IncidentView{}, entity.InvalidStep(
@@ -81,7 +81,7 @@ func (i *DeclareIncidentInteractor) Execute(
 			return entity.InvalidStep("Un incident interne est déjà ouvert pour votre opérateur.")
 		}
 		if err != nil {
-			return entity.InternalError("déclaration de l'incident")
+			return entity.InternalError("declaring the incident")
 		}
 		return nil
 	})
@@ -91,7 +91,7 @@ func (i *DeclareIncidentInteractor) Execute(
 
 	view, found, err := i.incidents.Get(ctx, id)
 	if err != nil || !found {
-		return port.IncidentView{}, entity.InternalError("relecture de l'incident")
+		return port.IncidentView{}, entity.InternalError("re-reading the incident")
 	}
 	return view, nil
 }

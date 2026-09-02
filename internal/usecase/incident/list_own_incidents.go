@@ -32,14 +32,14 @@ func (i *ListOwnIncidentsInteractor) Execute(
 ) ([]port.IncidentView, *entity.Fault) {
 	ids, err := i.incidents.Own(ctx, operatorID, systemLocked, page, size)
 	if err != nil {
-		return nil, entity.InternalError("lecture des incidents")
+		return nil, entity.InternalError("reading the incidents")
 	}
 
 	out := make([]port.IncidentView, 0, len(ids))
 	for _, id := range ids {
 		view, found, err := i.incidents.Get(ctx, id)
 		if err != nil || !found {
-			return nil, entity.InternalError("lecture de l'incident")
+			return nil, entity.InternalError("reading the incident")
 		}
 		out = append(out, view)
 	}

@@ -46,7 +46,7 @@ func TestConfirmationByAllExceptRecipient(t *testing.T) {
 	require.NoError(t, h.DB.Pool.QueryRow(context.Background(),
 		"SELECT transition_prevue_a::text FROM demande WHERE id = $1", id).Scan(&prevue))
 	require.Nil(t, prevue)
-	require.Equal(t, "CONFIRMATION", step(h, id), "il manque la confirmation d'EXPRESSO")
+	require.Equal(t, "CONFIRMATION", step(h, id), "EXPRESSO's confirmation is missing")
 
 	resp, _ = h.Call(http.MethodPost, "/api/gateway/v1/demandes/a-confirmer",
 		h.Token("expresso", "expresso2026"), map[string]any{"idDemande": id})
@@ -131,7 +131,7 @@ func TestAlreadyConfirmedDoesNotTraceSourceInRealMode(t *testing.T) {
 	require.Empty(t, h.List("/api/gateway/v1/demandes/deja-confirmees",
 		h.Token("orange", "orange2026")), "the source is not traced (ANO-019)")
 	require.Len(t, h.List("/api/gateway/v1/demandes/deja-confirmees",
-		h.Token("expresso", "expresso2026")), 1, "le tiers l'est")
+		h.Token("expresso", "expresso2026")), 1, "the third party is")
 }
 
 func TestAlreadyConfirmedTracesSourceInContractMode(t *testing.T) {

@@ -32,14 +32,14 @@ func (i *ListOwnReverseRequestsInteractor) Execute(
 ) ([]port.ReverseView, *entity.Fault) {
 	ids, err := i.reverse.Own(ctx, operatorID, page, size)
 	if err != nil {
-		return nil, entity.InternalError("lecture des demandes de reverse")
+		return nil, entity.InternalError("reading the reverse requests")
 	}
 
 	out := make([]port.ReverseView, 0, len(ids))
 	for _, id := range ids {
 		view, found, err := i.reverse.Get(ctx, id)
 		if err != nil || !found {
-			return nil, entity.InternalError("lecture de la demande de reverse")
+			return nil, entity.InternalError("reading the reverse request")
 		}
 		out = append(out, view)
 	}

@@ -25,7 +25,7 @@ func NewListOperators(g port.ReferenceGateway) *ListOperatorsInteractor {
 func (i *ListOperatorsInteractor) Execute(ctx context.Context) ([]entity.Operator, *entity.Fault) {
 	out, err := i.gateway.Operators(ctx)
 	if err != nil {
-		return nil, entity.InternalError("lecture des opérateurs")
+		return nil, entity.InternalError("reading the operators")
 	}
 	return out, nil
 }

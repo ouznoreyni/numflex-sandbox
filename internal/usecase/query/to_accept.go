@@ -29,12 +29,12 @@ func NewToAccept(q port.QueryGateway, r port.RequestGateway) *ToAcceptInteractor
 func (i *ToAcceptInteractor) Execute(ctx context.Context, operatorID string) ([]port.RequestView, *entity.Fault) {
 	ids, err := i.queries.ToAccept(ctx, operatorID)
 	if err != nil {
-		return nil, entity.InternalError("lecture des demandes à accepter")
+		return nil, entity.InternalError("reading the requests to accept")
 	}
 	return resolveViews(ctx, i.requests, ids)
 }
 
 func (i *ToAcceptInteractor) Detail(ctx context.Context, id, operatorID string) (port.RequestView, *entity.Fault) {
 	return detailView(ctx, i.queries, i.requests, port.QueueToAccept, id, operatorID,
-		"lecture de la demande")
+		"reading the request")
 }

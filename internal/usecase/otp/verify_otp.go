@@ -41,7 +41,7 @@ func NewVerifyOTP(g port.OTPGateway, c port.Clock, maxAttempts int) *VerifyOTPIn
 func (i *VerifyOTPInteractor) Execute(ctx context.Context, in VerifyOTPInput) *entity.Fault {
 	stored, found, err := i.gateway.Find(ctx, in.MSISDN)
 	if err != nil {
-		return entity.InternalError("lecture de l'OTP")
+		return entity.InternalError("reading the OTP")
 	}
 	if !found {
 		return entity.OTPAbsent()
@@ -60,7 +60,7 @@ func (i *VerifyOTPInteractor) Execute(ctx context.Context, in VerifyOTPInput) *e
 		// A failure of this increment cannot be swallowed: without it, the
 		// three-attempt limit silently stops applying.
 		if err := i.gateway.IncrementAttempts(ctx, in.MSISDN); err != nil {
-			return entity.InternalError("incrément des tentatives OTP")
+			return entity.InternalError("incrementing the OTP attempts")
 		}
 		return entity.OTPInvalid()
 	}

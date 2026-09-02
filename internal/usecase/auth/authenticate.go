@@ -58,7 +58,7 @@ func NewAuthenticate(users port.UserGateway, issue TokenIssuer, ttl time.Duratio
 func (i *AuthenticateInteractor) Execute(ctx context.Context, in AuthenticateInput) (AuthenticateOutput, *entity.Fault) {
 	caller, found, err := i.users.ByCredentials(ctx, in.Username, in.Password)
 	if err != nil {
-		return AuthenticateOutput{}, entity.InternalError("authentification impossible")
+		return AuthenticateOutput{}, entity.InternalError("authentication failed")
 	}
 	if !found {
 		return AuthenticateOutput{}, entity.BadCredentials()
@@ -66,7 +66,7 @@ func (i *AuthenticateInteractor) Execute(ctx context.Context, in AuthenticateInp
 
 	token, err := i.issue(caller.Username, caller.Roles)
 	if err != nil {
-		return AuthenticateOutput{}, entity.InternalError("émission du jeton impossible")
+		return AuthenticateOutput{}, entity.InternalError("token issuance failed")
 	}
 	return AuthenticateOutput{Token: token}, nil
 }

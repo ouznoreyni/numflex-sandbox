@@ -25,7 +25,7 @@ import (
 func MarketFrozen(ctx context.Context, engine port.Engine) *entity.Fault {
 	frozen, err := engine.MarketFrozen(ctx)
 	if err != nil {
-		return entity.InternalError("vérification du gel de la place")
+		return entity.InternalError("checking the market-wide freeze")
 	}
 	if frozen {
 		return entity.InternalError(
@@ -46,7 +46,7 @@ func rejectionReasonValid(ctx context.Context, reasons port.ReferenceGateway, id
 	}
 	exists, err := reasons.RejectionReasonExists(ctx, id)
 	if err != nil {
-		return entity.InternalError("vérification du motif de rejet")
+		return entity.InternalError("checking the rejection reason")
 	}
 	if !exists {
 		return entity.ValidationFailed("Motif de rejet inconnu")
@@ -108,7 +108,7 @@ func (i *AcceptRequestInteractor) Execute(
 	caller := port.CallerFromContext(ctx)
 	dm, found, err := i.requests.ByID(ctx, in.RequestID)
 	if err != nil {
-		return port.RequestView{}, entity.InternalError("lecture de la demande")
+		return port.RequestView{}, entity.InternalError("reading the request")
 	}
 	if !found {
 		return port.RequestView{}, entity.RequestNotFound()
@@ -127,7 +127,7 @@ func (i *AcceptRequestInteractor) Execute(
 		err := i.uow.Do(ctx, func(repos port.Repositories) error {
 			if err := repos.Requests.Reject(ctx, dm.ID, caller.OperatorID,
 				in.RejectionReasonID, in.Comment, i.clock.Now()); err != nil {
-				return entity.InternalError("rejet de la demande")
+				return entity.InternalError("rejecting the request")
 			}
 			return nil
 		})
@@ -137,7 +137,7 @@ func (i *AcceptRequestInteractor) Execute(
 	} else {
 		err := i.uow.Do(ctx, func(repos port.Repositories) error {
 			if err := repos.Requests.SetComment(ctx, dm.ID, in.Comment); err != nil {
-				return entity.InternalError("enregistrement du commentaire")
+				return entity.InternalError("saving the comment")
 			}
 			return nil
 		})
@@ -145,13 +145,13 @@ func (i *AcceptRequestInteractor) Execute(
 			return port.RequestView{}, entity.FaultFrom(err)
 		}
 		if err := i.engine.ScheduleTransition(ctx, dm.ID); err != nil {
-			return port.RequestView{}, entity.InternalError("planification de la transition")
+			return port.RequestView{}, entity.InternalError("scheduling the transition")
 		}
 	}
 
 	view, found, err := i.requests.Get(ctx, dm.ID)
 	if err != nil || !found {
-		return port.RequestView{}, entity.InternalError("relecture de la demande")
+		return port.RequestView{}, entity.InternalError("re-reading the request")
 	}
 	return view, nil
 }

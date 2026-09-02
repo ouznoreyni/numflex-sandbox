@@ -28,7 +28,7 @@ test-unit:
 ```
 
 `make test` démarre les deux Postgres (`5432` applicatif, `5433` de test), impose
-le profil déterministe (`ETAPE_TIMEOUT_SECONDS=0`, convergence à zéro, pas de
+le profil déterministe (`STEP_TIMEOUT_SECONDS=0`, convergence à zéro, pas de
 latence de complétion, pas de dérive d'horloge) et joue toute la suite.
 `make test-unit` joue le reste, sans Docker, en quelques secondes.
 

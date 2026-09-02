@@ -285,7 +285,7 @@ type RequestGateway interface {
 	DueConvergences(ctx context.Context) ([]string, error)
 
 	// OverdueSteps lists the ids whose current step has run past
-	// ETAPE_TIMEOUT_SECONDS without a pending transition — expirerEtapes's
+	// STEP_TIMEOUT_SECONDS without a pending transition — expirerEtapes's
 	// own SELECT. asOf is the single instant the whole tick shares (see
 	// internal/framework/engine.Engine.Tick's own doc comment): passed in
 	// rather than read again here, so a request that converges with a short
@@ -434,10 +434,10 @@ type ReverseGateway interface {
 	// rule ValidateReverse always has: only "EN_ATTENTE" is actionable.
 	LockPending(ctx context.Context, id string) (msisdn, operatorID, status string, err error)
 
-	// MarkValidated records that id was validated into demandeID — the same
+	// MarkValidated records that id was validated into requestID — the same
 	// instant now also stamps the Demande just created, so both rows agree
 	// on when the act happened.
-	MarkValidated(ctx context.Context, id, demandeID string, now time.Time) error
+	MarkValidated(ctx context.Context, id, requestID string, now time.Time) error
 
 	// Reject marks id REJETE without creating any Demande — RejectReverse's
 	// own single UPDATE, guarded on statut = 'EN_ATTENTE' so a second call

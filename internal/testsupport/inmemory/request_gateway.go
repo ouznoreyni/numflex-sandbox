@@ -36,7 +36,7 @@ type RequestGateway struct {
 	comments         map[string]string
 	rejectionReasons map[string]string            // requestID -> motifRejetId, written by Reject
 	numberStatus     map[string]map[string]string // requestID -> msisdn -> status
-	numberMotif      map[string]map[string]string // requestID -> msisdn -> motifRejetId
+	numberReason     map[string]map[string]string // requestID -> msisdn -> motifRejetId
 
 	FailCreate       error
 	FailReject       error // fails Reject, the seam acceptance's atomicity test uses
@@ -58,7 +58,7 @@ func NewRequestGateway() *RequestGateway {
 		comments:         map[string]string{},
 		rejectionReasons: map[string]string{},
 		numberStatus:     map[string]map[string]string{},
-		numberMotif:      map[string]map[string]string{},
+		numberReason:     map[string]map[string]string{},
 	}
 }
 
@@ -192,7 +192,7 @@ func (g *RequestGateway) SeedNumbers(requestID string, msisdns ...string) {
 		statuses[m] = "EN_COURS"
 	}
 	g.numberStatus[requestID] = statuses
-	g.numberMotif[requestID] = map[string]string{}
+	g.numberReason[requestID] = map[string]string{}
 }
 
 func (g *RequestGateway) ByID(_ context.Context, id string) (entity.PortingRequest, bool, error) {
@@ -226,7 +226,7 @@ func (g *RequestGateway) RejectNumber(_ context.Context, requestID, msisdn, reje
 		return g.FailRejectNumber
 	}
 	g.numberStatus[requestID][msisdn] = "REJETE"
-	g.numberMotif[requestID][msisdn] = rejectionReasonID
+	g.numberReason[requestID][msisdn] = rejectionReasonID
 	return nil
 }
 
@@ -312,7 +312,7 @@ func (g *RequestGateway) RejectionReason(id string) string {
 func (g *RequestGateway) NumberRejectionReason(requestID, msisdn string) string {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	return g.numberMotif[requestID][msisdn]
+	return g.numberReason[requestID][msisdn]
 }
 
 // --- Platform engine (Task 17) ----------------------------------------------

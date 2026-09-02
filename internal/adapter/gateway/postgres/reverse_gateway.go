@@ -92,12 +92,12 @@ func (g *ReverseGateway) LockPending(ctx context.Context, id string) (msisdn, op
 	return msisdn, operatorID, status, err
 }
 
-// MarkValidated records that id was validated into demandeID — moved
+// MarkValidated records that id was validated into requestID — moved
 // verbatim from ValidateReverse's own final tx.Exec.
-func (g *ReverseGateway) MarkValidated(ctx context.Context, id, demandeID string, now time.Time) error {
+func (g *ReverseGateway) MarkValidated(ctx context.Context, id, requestID string, now time.Time) error {
 	_, err := g.db.Exec(ctx,
 		`UPDATE reverse_request SET statut='VALIDE', date_decision=$2, demande_id=$3
-		  WHERE id = $1`, id, now, demandeID)
+		  WHERE id = $1`, id, now, requestID)
 	return err
 }
 

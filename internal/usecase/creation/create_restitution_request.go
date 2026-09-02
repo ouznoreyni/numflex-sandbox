@@ -51,7 +51,7 @@ func (i *CreateRestitutionRequestInteractor) Execute(
 ) (port.RequestView, *entity.Fault) {
 	state, found, err := i.numbers.State(ctx, in.MSISDN)
 	if err != nil {
-		return port.RequestView{}, entity.InternalError("lecture du numéro")
+		return port.RequestView{}, entity.InternalError("reading the number")
 	}
 	if !found {
 		return port.RequestView{}, entity.IncorrectSourceOperator()
@@ -87,12 +87,12 @@ func (i *CreateRestitutionRequestInteractor) Execute(
 			CreatorOperatorID: state.OriginOperatorID,
 			RequestDate:       now,
 		}); err != nil {
-			return entity.InternalError("création de la demande")
+			return entity.InternalError("creating the request")
 		}
 		if err := repos.Requests.AddNumber(ctx, port.RequestNumberInput{
 			RequestID: id, MSISDN: in.MSISDN,
 		}); err != nil {
-			return entity.InternalError("enregistrement du numéro")
+			return entity.InternalError("saving the number")
 		}
 		return nil
 	})
@@ -102,7 +102,7 @@ func (i *CreateRestitutionRequestInteractor) Execute(
 
 	view, found, err := i.requests.Get(ctx, id)
 	if err != nil || !found {
-		return port.RequestView{}, entity.InternalError("relecture de la demande")
+		return port.RequestView{}, entity.InternalError("re-reading the request")
 	}
 	return view, nil
 }

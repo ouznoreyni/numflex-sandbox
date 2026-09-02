@@ -88,6 +88,61 @@ docker run -d --name numflex-api --network numflex-net \
 `/app/migrations`. Le seul montage de l'exemple est le `.env`, et il est facultatif : tout passer
 en `-e` ou en arguments donne le même résultat.
 
+#### Tout-en-un, base comprise
+
+Une seconde cible du Dockerfile, `standalone`, embarque PostgreSQL à côté du serveur : le
+`docker-compose` de ce dépôt réduit à une seule image. Rien à orchestrer, rien à mettre en réseau.
+
+```bash
+make image-standalone     # ou : docker build --target standalone -t numflex-sandbox:standalone .
+make push-standalone      # construit ET publie, multi-arch, en une passe
+```
+
+Le répertoire de données de la base se règle **comme n'importe quel autre réglage**, avec la même
+précédence que tout le reste — argument, environnement, `.env`, défaut :
+
+```bash
+# 1. en argument
+docker run --rm -p 8080:8080 -v "$PWD/data:/data" \
+  numflex-sandbox:standalone PGDATA=/data
+
+# 2. en variable d'environnement
+docker run --rm -p 8080:8080 -v "$PWD/data:/data" \
+  -e PGDATA=/data numflex-sandbox:standalone
+
+# 3. dans un .env monté à l'emplacement par défaut — le serveur lit le même fichier
+printf 'PGDATA=/data\nFIDELITY=contract\n' > .env
+docker run --rm -p 8080:8080 -v "$PWD/data:/data" -v "$PWD/.env:/app/.env:ro" \
+  numflex-sandbox:standalone
+
+# 4. dans un .env ailleurs, désigné en argument
+docker run --rm -p 8080:8080 -v "$PWD/data:/data" -v "$PWD/prod.env:/cfg.env:ro" \
+  numflex-sandbox:standalone --env-file /cfg.env
+
+# 5. rien du tout — données éphémères, elles meurent avec le conteneur
+docker run --rm -p 8080:8080 numflex-sandbox:standalone
+```
+
+Un chemin absolu seul en premier argument est un raccourci : `… numflex-sandbox:standalone /data`
+vaut `PGDATA=/data`, et s'il désigne un fichier existant, c'est le `.env`. C'est le seul argument
+que le serveur ne saurait pas lire lui-même — il n'accepte que `--env-file` et `CLE=valeur`.
+
+`make run-standalone` fait tout ça pour toi :
+
+```bash
+make run-standalone
+make run-standalone DATA=/srv/numflex PORT=9000 ENV_FILE=./prod.env
+```
+
+`DATABASE_URL` est la seule variable que cette image tranche d'autorité : la base vit dans le
+conteneur, une valeur venue du `.env` pointerait vers une base qu'elle ne gère pas.
+
+C'est une commodité de démonstration, **pas** un durcissement, et il faut l'assumer : 456 Mo au
+lieu de 46, un shell et un gestionnaire de paquets dans l'image, un démarrage sous root le temps
+de l'`initdb`. Autrement dit tout ce que l'image `runtime` refuse. Pour un déploiement, c'est
+`make push` et une base à part. La base n'écoute que sur `127.0.0.1` dans le conteneur et 5432
+n'est jamais publié : l'API reste la seule porte.
+
 #### Monter des dossiers de l'hôte
 
 Un chemin en première position de `-v` suffit : Docker le monte tel quel, rien n'est à créer
@@ -130,7 +185,7 @@ réclame :
 ```bash
 docker run --rm --network numflex-net --entrypoint /usr/local/bin/artp \
   -e DATABASE_URL='postgres://numflex:numflex@numflex-db:5432/numflex?sslmode=disable' \
-  numflex-sandbox:latest reverse lister
+  numflex-sandbox:latest reverse list
 ```
 
 Pour publier :
@@ -197,7 +252,7 @@ l'état courant. Pour repartir à zéro, supprimer le volume Postgres.
 | `JWT_SECRET` | `numflex-sandbox-dev-secret` | Secret de signature HS512 |
 | `JWT_TTL_HOURS` | `24` | Validité du jeton |
 | `FIDELITY` | `real` | `real` \| `contract` — voir ci-dessous |
-| `ETAPE_TIMEOUT_SECONDS` | `349` | Expiration d'une étape ; `0` = pas d'expiration |
+| `STEP_TIMEOUT_SECONDS` | `349` | Expiration d'une étape ; `0` = pas d'expiration |
 | `ENGINE_TICK_SECONDS` | `10` | Cadence du moteur |
 | `CONVERGENCE_MIN_SECONDS` | `0` | Fenêtre de convergence — voir ci-dessous |
 | `CONVERGENCE_MAX_SECONDS` | `0` | `0` = transition appliquée dans la requête |
@@ -265,7 +320,7 @@ Les deux sources sont des mesures ; c'est la plus récente qui fait le défaut.
 ### Profil déterministe (CI)
 
 ```
-ETAPE_TIMEOUT_SECONDS=0 CONVERGENCE_MIN_SECONDS=0 CONVERGENCE_MAX_SECONDS=0
+STEP_TIMEOUT_SECONDS=0 CONVERGENCE_MIN_SECONDS=0 CONVERGENCE_MAX_SECONDS=0
 COMPLETION_LATENCY_MS=0 CLOCK_SKEW_SECONDS=0
 ```
 
@@ -421,9 +476,9 @@ go build -o artp ./cmd/artp
 
 export DATABASE_URL='postgres://numflex:numflex@localhost:5432/numflex?sslmode=disable'
 
-./artp reverse lister          # les demandes de reverse et leur statut
-./artp reverse valider <id>    # crée la Demande REVERSE, à CONFIRMATION
-./artp reverse rejeter <id>
+./artp reverse list          # les demandes de reverse et leur statut
+./artp reverse validate <id>    # crée la Demande REVERSE, à CONFIRMATION
+./artp reverse reject <id>
 ./artp seed                    # rejoue le seed (idempotent)
 ```
 
@@ -431,7 +486,7 @@ Le binaire est aussi dans l'image, à côté du serveur. Comme il n'en est pas l
 se réclame explicitement — et lit le même `.env` :
 
 ```bash
-docker compose run --rm --entrypoint /usr/local/bin/artp api reverse lister
+docker compose run --rm --entrypoint /usr/local/bin/artp api reverse list
 ```
 
 `artp` **ne joue pas les migrations** : le serveur est seul propriétaire du cycle de vie du schéma.

@@ -32,12 +32,12 @@ func NewToConfirm(q port.QueryGateway, r port.RequestGateway) *ToConfirmInteract
 func (i *ToConfirmInteractor) Execute(ctx context.Context, operatorID string) ([]port.RequestView, *entity.Fault) {
 	ids, err := i.queries.ToConfirm(ctx, operatorID)
 	if err != nil {
-		return nil, entity.InternalError("lecture des demandes à confirmer")
+		return nil, entity.InternalError("reading the requests to confirm")
 	}
 	return resolveViews(ctx, i.requests, ids)
 }
 
 func (i *ToConfirmInteractor) Detail(ctx context.Context, id, operatorID string) (port.RequestView, *entity.Fault) {
 	return detailView(ctx, i.queries, i.requests, port.QueueToConfirm, id, operatorID,
-		"lecture de la demande")
+		"reading the request")
 }

@@ -128,7 +128,7 @@ func TestZeroWindowAppliesTransitionImmediately(t *testing.T) {
 	require.NoError(t, e.ScheduleTransition(context.Background(), "d1"))
 
 	step, _, _ := requestState(t, db, "d1")
-	require.Equal(t, "ACTIVATION", step, "la transition est appliquée sans attendre un tick")
+	require.Equal(t, "ACTIVATION", step, "the transition is applied without waiting for a tick")
 
 	// Nothing is left for the engine to do.
 	require.NoError(t, e.Tick(context.Background()))
@@ -173,7 +173,7 @@ func TestConvergenceRespectsDelay(t *testing.T) {
 	require.NoError(t, e.Tick(context.Background()))
 
 	step, _, _ := requestState(t, db, "d1")
-	require.Equal(t, "DESACTIVATION", step, "la transition n'est pas encore due")
+	require.Equal(t, "DESACTIVATION", step, "the transition is not due yet")
 }
 
 func TestRoutingRecalculatedEnteringConfirmation(t *testing.T) {
@@ -186,7 +186,7 @@ func TestRoutingRecalculatedEnteringConfirmation(t *testing.T) {
 	var routing string
 	require.NoError(t, db.Pool.QueryRow(context.Background(),
 		`SELECT routage_info FROM demande WHERE id = 'd1'`).Scan(&routing))
-	require.Equal(t, "192", routing, "routage destinataire (YAS) pour un numéro porté")
+	require.Equal(t, "192", routing, "recipient routing (YAS) for a ported number")
 }
 
 func TestFrozenMarketSuspendsEngine(t *testing.T) {
@@ -208,7 +208,7 @@ func TestFrozenMarketSuspendsEngine(t *testing.T) {
 	require.NoError(t, e.Tick(context.Background()))
 
 	step, _, _ := requestState(t, db, "d1")
-	require.Equal(t, "ACCEPTATION", step, "le moteur ne doit rien avancer pendant le gel")
+	require.Equal(t, "ACCEPTATION", step, "the engine must not advance anything during the freeze")
 }
 
 func TestGatewayIncidentDoesNotFreeze(t *testing.T) {
@@ -264,10 +264,10 @@ func TestRegistryTransferExcludesExcludedAndRejectedNumbers(t *testing.T) {
 
 	// The excluded and the rejected numbers stay with the source operator
 	// and carry its prefix.
-	require.Equal(t, seed.OperatorOrangeID, currentOperator("771000002"), "un numéro exclu ne doit pas être transféré")
+	require.Equal(t, seed.OperatorOrangeID, currentOperator("771000002"), "an excluded number must not be transferred")
 	require.Equal(t, "191", numberRouting("771000002"))
 
-	require.Equal(t, seed.OperatorOrangeID, currentOperator("771000003"), "un numéro rejeté ne doit pas être transféré")
+	require.Equal(t, seed.OperatorOrangeID, currentOperator("771000003"), "a rejected number must not be transferred")
 	require.Equal(t, "191", numberRouting("771000003"))
 }
 

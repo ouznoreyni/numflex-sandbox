@@ -11,7 +11,7 @@ import (
 // QueryGateway is the Postgres implementation of port.QueryGateway. Its
 // methods carry the SQL that used to live in
 // internal/api/demandes_lecture.go, unchanged in substance: the same six
-// SELECT statements (idsDemandes, its a-confirmer and déjà-confirmées
+// SELECT statements (idsDemandes, its a-confirmer and deja-confirmees
 // variants, tousOperateurs, and the a-accepter/a-traiter detail EXISTS
 // query), now behind one method per queue instead of one *Deps method per
 // route. The a-confirmer filtering that cannot be expressed as a single SQL

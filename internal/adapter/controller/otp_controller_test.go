@@ -111,7 +111,7 @@ func TestOTPMissing(t *testing.T) {
 	require.Equal(t, "Aucun OTP actif pour ce numéro", body["detail"])
 }
 
-func TestOTPInvalidNumeroIsAValidationError(t *testing.T) {
+func TestOTPInvalidNumberIsAValidationError(t *testing.T) {
 	h := routerharness.NewRouterHarness(t)
 	resp, body := h.Call(http.MethodPost, "/api/gateway/v1/otp/send",
 		h.Token("yas", "yas2026"), map[string]any{"numero": "77"})

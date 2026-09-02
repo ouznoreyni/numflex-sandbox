@@ -72,7 +72,7 @@ func TestCreationFailsLeavingOTPReusable(t *testing.T) {
 		},
 	})
 	if fault == nil {
-		t.Fatal("la création aurait dû échouer (operateur_destinataire_id invalide)")
+		t.Fatal("the creation should have failed (invalid operateur_destinataire_id)")
 	}
 
 	// The rollback undid everything: no request exists.
@@ -81,7 +81,7 @@ func TestCreationFailsLeavingOTPReusable(t *testing.T) {
 		t.Fatal(err)
 	}
 	if n != 0 {
-		t.Fatalf("la transaction a laissé %d demande(s) derrière elle", n)
+		t.Fatalf("the transaction left %d request(s) behind", n)
 	}
 
 	// The OTP was not consumed: Consume is the transaction's last call,
@@ -94,12 +94,12 @@ func TestCreationFailsLeavingOTPReusable(t *testing.T) {
 		t.Fatal("l'OTP a disparu")
 	}
 	if stored.Consumed {
-		t.Fatal("l'OTP a été consommé malgré l'échec de la transaction")
+		t.Fatal("the OTP was consumed despite the transaction failure")
 	}
 
 	// Positive proof, not just the absence of the flag: the same code
 	// actually becomes usable again for a new attempt.
 	if f := verify.Execute(ctx, otp.VerifyOTPInput{MSISDN: msisdn, Code: "123456"}); f != nil {
-		t.Fatalf("l'OTP devrait rester valide après le rollback : %v", f)
+		t.Fatalf("the OTP should stay valid after the rollback: %v", f)
 	}
 }

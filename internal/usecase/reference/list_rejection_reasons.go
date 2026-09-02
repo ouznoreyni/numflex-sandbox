@@ -25,7 +25,7 @@ func NewListRejectionReasons(g port.ReferenceGateway) *ListRejectionReasonsInter
 func (i *ListRejectionReasonsInteractor) Execute(ctx context.Context) ([]entity.RejectionReason, *entity.Fault) {
 	out, err := i.gateway.RejectionReasons(ctx)
 	if err != nil {
-		return nil, entity.InternalError("lecture des motifs de rejet")
+		return nil, entity.InternalError("reading the rejection reasons")
 	}
 	return out, nil
 }

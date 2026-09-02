@@ -40,5 +40,5 @@ func TestNewTestDBIsIsolated(t *testing.T) {
 	db2 := testsupport.NewTestDB(t)
 	var n int
 	require.NoError(t, db2.Pool.QueryRow(ctx, "SELECT count(*) FROM otp").Scan(&n))
-	require.Equal(t, 0, n, "NewTestDB doit repartir d'une base vide")
+	require.Equal(t, 0, n, "NewTestDB must start from an empty database")
 }

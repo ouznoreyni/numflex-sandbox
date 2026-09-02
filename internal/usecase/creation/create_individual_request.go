@@ -71,7 +71,7 @@ func (i *CreateIndividualRequestInteractor) Execute(
 
 	state, found, err := i.numbers.State(ctx, in.MSISDN)
 	if err != nil {
-		return port.RequestView{}, entity.InternalError("lecture du numéro")
+		return port.RequestView{}, entity.InternalError("reading the number")
 	}
 	if !found {
 		return port.RequestView{}, entity.IncorrectSourceOperator()
@@ -100,24 +100,24 @@ func (i *CreateIndividualRequestInteractor) Execute(
 			RoutingInfo:       &prefix,
 			RequestDate:       now,
 		}); err != nil {
-			return entity.InternalError("création de la demande")
+			return entity.InternalError("creating the request")
 		}
 		if err := repos.Requests.AddNumber(ctx, port.RequestNumberInput{
 			RequestID: id, MSISDN: in.MSISDN, RoutingInfo: &prefix,
 		}); err != nil {
-			return entity.InternalError("enregistrement du numéro")
+			return entity.InternalError("saving the number")
 		}
 		if err := repos.Requests.AddClient(ctx, port.ClientInput{
 			RequestID: id, LastName: in.Client.LastName, FirstName: in.Client.FirstName,
 			BirthDate: in.Client.BirthDate, BirthPlace: in.Client.BirthPlace,
 			IDType: in.Client.IDType, IDNumber: in.Client.IDNumber,
 		}); err != nil {
-			return entity.InternalError("enregistrement du client")
+			return entity.InternalError("saving the customer")
 		}
 		// Last call of the transaction: if any of the previous three failed,
 		// this one is never reached and the OTP stays consumable.
 		if err := repos.OTP.Consume(ctx, in.MSISDN); err != nil {
-			return entity.InternalError("consommation de l'OTP")
+			return entity.InternalError("consuming the OTP")
 		}
 		return nil
 	})
@@ -127,7 +127,7 @@ func (i *CreateIndividualRequestInteractor) Execute(
 
 	view, found, err := i.requests.Get(ctx, id)
 	if err != nil || !found {
-		return port.RequestView{}, entity.InternalError("relecture de la demande")
+		return port.RequestView{}, entity.InternalError("re-reading the request")
 	}
 	return view, nil
 }

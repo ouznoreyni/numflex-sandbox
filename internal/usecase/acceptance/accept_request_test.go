@@ -18,10 +18,10 @@ const (
 	orangeID = "operateur-orange"
 	yasID    = "operateur-yas"
 
-	motifID = "motif-identite-non-prouvee"
+	reasonID = "motif-identite-non-prouvee"
 )
 
-var errBoom = errors.New("échec simulé de la couche gateway")
+var errBoom = errors.New("simulated gateway-layer failure")
 
 func ctxCaller(operatorID string) context.Context {
 	return port.WithCaller(context.Background(), entity.Caller{OperatorID: operatorID})
@@ -154,15 +154,15 @@ func TestAcceptRequestRejectionWithoutReasonRefused(t *testing.T) {
 func TestAcceptRequestRejectionWithReasonCompletesRequest(t *testing.T) {
 	f := newFixture()
 	seedRequest(f)
-	f.reasons.SeedRejectionReason(motifID, "Identité non prouvée")
+	f.reasons.SeedRejectionReason(reasonID, "Identité non prouvée")
 
 	view, fault := acceptInteractor(f).Execute(ctxCaller(orangeID), acceptance.AcceptRequestInput{
-		RequestID: "d1", Accept: false, RejectionReasonID: motifID, Comment: "Contrat non résilié",
+		RequestID: "d1", Accept: false, RejectionReasonID: reasonID, Comment: "Contrat non résilié",
 	})
 	require.Nil(t, fault)
 	require.Equal(t, "d1", view.ID)
 	require.Equal(t, entity.RequestRejected, f.requests.Status("d1"))
-	require.Equal(t, motifID, f.requests.RejectionReason("d1"))
+	require.Equal(t, reasonID, f.requests.RejectionReason("d1"))
 	require.Empty(t, f.engine.Scheduled, "a rejection schedules no transition")
 }
 
@@ -190,11 +190,11 @@ func TestAcceptRequestUnknownRejectionReasonRefusedEvenOnAcceptance(t *testing.T
 func TestAcceptRequestWriteFailureStopsBeforeTransaction(t *testing.T) {
 	f := newFixture()
 	seedRequest(f)
-	f.reasons.SeedRejectionReason(motifID, "Identité non prouvée")
+	f.reasons.SeedRejectionReason(reasonID, "Identité non prouvée")
 	f.requests.FailReject = errBoom
 
 	_, fault := acceptInteractor(f).Execute(ctxCaller(orangeID), acceptance.AcceptRequestInput{
-		RequestID: "d1", Accept: false, RejectionReasonID: motifID,
+		RequestID: "d1", Accept: false, RejectionReasonID: reasonID,
 	})
 	require.NotNil(t, fault)
 	require.Equal(t, "ERREUR_INTERNE", fault.Code)

@@ -27,7 +27,7 @@ func NewOutgoing(q port.QueryGateway, r port.RequestGateway) *OutgoingInteractor
 func (i *OutgoingInteractor) Execute(ctx context.Context, operatorID string) ([]port.RequestView, *entity.Fault) {
 	ids, err := i.queries.Outgoing(ctx, operatorID)
 	if err != nil {
-		return nil, entity.InternalError("lecture des demandes OUT")
+		return nil, entity.InternalError("reading the OUT requests")
 	}
 	return resolveViews(ctx, i.requests, ids)
 }

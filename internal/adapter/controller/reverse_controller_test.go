@@ -98,9 +98,9 @@ func TestReverseReachesCompletedThroughRealEndpoints(t *testing.T) {
 	// request at CONFIRMATION.
 	h.ValidateReverse(reverseID)
 
-	var demandeID string
+	var requestID string
 	require.NoError(t, h.DB.Pool.QueryRow(context.Background(),
-		`SELECT demande_id FROM reverse_request WHERE id = $1`, reverseID).Scan(&demandeID))
+		`SELECT demande_id FROM reverse_request WHERE id = $1`, reverseID).Scan(&requestID))
 
 	// 3. Every operator confirms via the real endpoint — recipient
 	// (the number's origin operator) included, as a REVERSE requires.
@@ -108,7 +108,7 @@ func TestReverseReachesCompletedThroughRealEndpoints(t *testing.T) {
 		{"orange", "orange2026"}, {"yas", "yas2026"}, {"expresso", "expresso2026"},
 	} {
 		resp, corpsConf := h.Call(http.MethodPost, "/api/gateway/v1/demandes/a-confirmer",
-			h.Token(account[0], account[1]), map[string]any{"idDemande": demandeID})
+			h.Token(account[0], account[1]), map[string]any{"idDemande": requestID})
 		require.Equal(t, http.StatusOK, resp.StatusCode, corpsConf)
 	}
 
@@ -117,7 +117,7 @@ func TestReverseReachesCompletedThroughRealEndpoints(t *testing.T) {
 	h.Converge()
 	h.Converge()
 
-	require.Equal(t, "TERMINE", requestStatus(h, demandeID))
+	require.Equal(t, "TERMINE", requestStatus(h, requestID))
 
 	var currentOperator string
 	require.NoError(t, h.DB.Pool.QueryRow(context.Background(),
@@ -141,24 +141,24 @@ func TestReverseCompletionAlwaysRefusedToOperators(t *testing.T) {
 	reverseID := body["data"].(map[string]any)["id"].(string)
 	h.ValidateReverse(reverseID)
 
-	var demandeID string
+	var requestID string
 	require.NoError(t, h.DB.Pool.QueryRow(context.Background(),
-		`SELECT demande_id FROM reverse_request WHERE id = $1`, reverseID).Scan(&demandeID))
+		`SELECT demande_id FROM reverse_request WHERE id = $1`, reverseID).Scan(&requestID))
 
 	for _, account := range [][2]string{
 		{"orange", "orange2026"}, {"yas", "yas2026"}, {"expresso", "expresso2026"},
 	} {
 		h.Call(http.MethodPost, "/api/gateway/v1/demandes/a-confirmer",
-			h.Token(account[0], account[1]), map[string]any{"idDemande": demandeID})
+			h.Token(account[0], account[1]), map[string]any{"idDemande": requestID})
 	}
 	h.Converge()
 	h.Converge()
-	require.Equal(t, "COMPLETION", step(h, demandeID))
+	require.Equal(t, "COMPLETION", step(h, requestID))
 
 	// Recipient like source: the refusal is the same, and it is the guide's.
 	for _, account := range [][2]string{{"orange", "orange2026"}, {"yas", "yas2026"}} {
 		resp, corpsRefus := h.Call(http.MethodPost, "/api/gateway/v1/demandes/traitement",
-			h.Token(account[0], account[1]), map[string]any{"idDemande": demandeID})
+			h.Token(account[0], account[1]), map[string]any{"idDemande": requestID})
 
 		require.Equal(t, http.StatusForbidden, resp.StatusCode, account[0])
 		require.Equal(t, "DEMANDE_ACCES_REFUSE", corpsRefus["code"], account[0])

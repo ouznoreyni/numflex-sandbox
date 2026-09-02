@@ -8,7 +8,7 @@ import (
 )
 
 // ExpireOverdueStepsInteractor implements ANO-006: a step left untouched
-// past ETAPE_TIMEOUT_SECONDS expires on its own, with no operator call.
+// past STEP_TIMEOUT_SECONDS expires on its own, with no operator call.
 // Moved in substance from the deleted internal/engine/engine.go's own
 // expirerEtapes.
 type ExpireOverdueStepsInteractor struct {
@@ -19,7 +19,7 @@ type ExpireOverdueStepsInteractor struct {
 }
 
 // NewExpireOverdueSteps wires an interactor against its dependencies.
-// timeout is ETAPE_TIMEOUT_SECONDS (internal/framework/config.Config), a
+// timeout is STEP_TIMEOUT_SECONDS (internal/framework/config.Config), a
 // plain time.Duration since this package may not import
 // internal/framework/config — the same boundary
 // internal/usecase/porting.ProcessStepInteractor's own completionLatency

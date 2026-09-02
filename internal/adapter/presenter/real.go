@@ -43,7 +43,7 @@ func (p *Real) SuccessWithoutData(status int, message string) ViewModel {
 // c.Request.URL.Path into chemin (including "" when there is no request).
 func (p *Real) Failure(f *entity.Fault, path string) ViewModel {
 	if f == nil {
-		f = entity.InternalError("erreur interne")
+		f = entity.InternalError("internal error")
 	}
 
 	// FaultValidation with Fields: a real bean-validation violation from
