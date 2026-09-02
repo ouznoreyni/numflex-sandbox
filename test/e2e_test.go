@@ -5,162 +5,163 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ouznoreyni/numflex-sandbox/internal/config"
-	"github.com/ouznoreyni/numflex-sandbox/internal/seed"
+	"github.com/ouznoreyni/numflex-sandbox/internal/framework/config"
+	"github.com/ouznoreyni/numflex-sandbox/internal/framework/seed"
 	"github.com/stretchr/testify/require"
 )
 
-// TestPortageCompletJusquATermine rejoue le §10 du guide : ORANGE → YAS, avec la
-// confirmation d'EXPRESSO, jusqu'à TERMINE et apparition dans /in et /out.
-func TestPortageCompletJusquATermine(t *testing.T) {
-	h := nouveauHarnais(t) // profil déterministe : convergence et latences nulles
+// TestPortingCompleteUntilTermine replays §10 of the guide: ORANGE → YAS, with
+// EXPRESSO's confirmation, through to TERMINE and appearance in /in and /out.
+func TestPortingCompleteUntilTermine(t *testing.T) {
+	h := newHarness(t) // deterministic profile: zero convergence and latency
 
-	yas := h.jeton("yas", "yas2026")
-	orange := h.jeton("orange", "orange2026")
-	expresso := h.jeton("expresso", "expresso2026")
+	yas := h.token("yas", "yas2026")
+	orange := h.token("orange", "orange2026")
+	expresso := h.token("expresso", "expresso2026")
 
-	// 1-2. OTP puis création par le destinataire.
+	// 1-2. OTP then creation by the recipient.
 	h.post("/api/gateway/v1/otp/send", yas, map[string]any{"numero": "771000001"})
-	_, corps := h.post("/api/gateway/v1/demandes/particulier", yas, corpsParticulier("771000001"))
-	id := corps["data"].(map[string]any)["id"].(string)
+	_, body := h.post("/api/gateway/v1/demandes/particulier", yas, individualBody("771000001"))
+	id := body["data"].(map[string]any)["id"].(string)
 
-	// 3. La source voit la demande dans sa file.
-	require.Len(t, h.liste("/api/gateway/v1/demandes/a-accepter", orange), 1)
+	// 3. The source sees the request in its queue.
+	require.Len(t, h.list("/api/gateway/v1/demandes/a-accepter", orange), 1)
 
-	// 4. Acceptation par la source, puis convergence.
+	// 4. Acceptance by the source, then convergence.
 	h.post("/api/gateway/v1/demandes/acceptation", orange,
 		map[string]any{"idDemande": id, "accepte": true})
-	h.converger()
-	require.Equal(t, "DESACTIVATION", h.etape(id))
+	h.converge()
+	require.Equal(t, "DESACTIVATION", h.step(id))
 
-	// 5. Désactivation par la source.
+	// 5. Deactivation by the source.
 	h.post("/api/gateway/v1/demandes/traitement", orange, map[string]any{"idDemande": id})
-	h.converger()
-	require.Equal(t, "ACTIVATION", h.etape(id))
+	h.converge()
+	require.Equal(t, "ACTIVATION", h.step(id))
 
-	// 6. Activation par le destinataire.
+	// 6. Activation by the recipient.
 	h.post("/api/gateway/v1/demandes/traitement", yas, map[string]any{"idDemande": id})
-	h.converger()
-	require.Equal(t, "CONFIRMATION", h.etape(id))
+	h.converge()
+	require.Equal(t, "CONFIRMATION", h.step(id))
 
-	// 7. Confirmation : la source, puis le tiers. Une seule ne suffit pas.
+	// 7. Confirmation: the source, then the third party. One alone is not enough.
 	h.post("/api/gateway/v1/demandes/a-confirmer", orange, map[string]any{"idDemande": id})
-	h.converger()
-	require.Equal(t, "CONFIRMATION", h.etape(id), "il manque la confirmation d'EXPRESSO")
+	h.converge()
+	require.Equal(t, "CONFIRMATION", h.step(id), "EXPRESSO's confirmation is still missing")
 
 	h.post("/api/gateway/v1/demandes/a-confirmer", expresso, map[string]any{"idDemande": id})
-	h.converger()
-	require.Equal(t, "COMPLETION", h.etape(id))
+	h.converge()
+	require.Equal(t, "COMPLETION", h.step(id))
 
-	// 8. Clôture par le destinataire.
+	// 8. Closure by the recipient.
 	h.post("/api/gateway/v1/demandes/traitement", yas, map[string]any{"idDemande": id})
-	h.converger()
+	h.converge()
 
-	require.Equal(t, "TERMINE", h.statutDemande(id))
+	require.Equal(t, "TERMINE", h.requestStatus(id))
 
-	// La demande apparaît des deux côtés.
-	in := h.liste("/api/gateway/v1/demandes/in", yas)
-	require.Len(t, in, 1)
-	require.Equal(t, id, in[0].(map[string]any)["id"])
+	// The request appears on both sides.
+	incoming := h.list("/api/gateway/v1/demandes/in", yas)
+	require.Len(t, incoming, 1)
+	require.Equal(t, id, incoming[0].(map[string]any)["id"])
 
-	out := h.liste("/api/gateway/v1/demandes/out", orange)
-	require.Len(t, out, 1)
+	outgoing := h.list("/api/gateway/v1/demandes/out", orange)
+	require.Len(t, outgoing, 1)
 
-	// Le numéro a changé d'opérateur au registre national.
-	require.Equal(t, seed.OperateurYAS, h.detenteur("771000001"))
+	// The number changed operator in the national registry.
+	require.Equal(t, seed.OperatorYASID, h.holder("771000001"))
 }
 
-// TestPortageParExpirationSansAucunAppel rejoue le portage n°2 du SIT : créé,
-// laissé sans action, TERMINE après cinq expirations d'étape (ANO-006, TC-062).
-func TestPortageParExpirationSansAucunAppel(t *testing.T) {
-	h := nouveauHarnais(t, func(c *config.Config) {
-		c.EtapeTimeout = 50 * time.Millisecond
+// TestPortingByExpirationWithoutAnyCall replays porting #2 of the SIT: created,
+// left without action, TERMINE after five step expirations (ANO-006, TC-062).
+func TestPortingByExpirationWithoutAnyCall(t *testing.T) {
+	h := newHarness(t, func(c *config.Config) {
+		c.StepTimeout = 50 * time.Millisecond
 	})
 
-	yas := h.jeton("yas", "yas2026")
+	yas := h.token("yas", "yas2026")
 	h.post("/api/gateway/v1/otp/send", yas, map[string]any{"numero": "771000001"})
-	_, corps := h.post("/api/gateway/v1/demandes/particulier", yas, corpsParticulier("771000001"))
-	id := corps["data"].(map[string]any)["id"].(string)
+	_, body := h.post("/api/gateway/v1/demandes/particulier", yas, individualBody("771000001"))
+	id := body["data"].(map[string]any)["id"].(string)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go h.moteur.Run(ctx)
+	go h.engine.Run(ctx)
 
 	require.Eventually(t, func() bool {
-		return h.statutDemande(id) == "TERMINE"
+		return h.requestStatus(id) == "TERMINE"
 	}, 5*time.Second, 20*time.Millisecond)
 
-	require.Equal(t, "EXPIRE", h.statutEtape(id))
-	require.Equal(t, seed.OperateurYAS, h.detenteur("771000001"),
-		"le numéro a changé d'opérateur alors qu'aucun HLR n'a été touché")
+	require.Equal(t, "EXPIRE", h.stepStatus(id))
+	require.Equal(t, seed.OperatorYASID, h.holder("771000001"),
+		"the number changed operator even though no HLR was ever touched")
 }
 
-// TestMemeScenarioEnModeContrat vérifie que seule la présentation change entre
-// les deux modes de fidélité : le rejeu du scénario nominal, en FIDELITY=contract,
-// doit atteindre le même état terminal que TestPortageCompletJusquATermine.
-// Aucune assertion sur les codes HTTP ou l'enveloppe ici — c'est le point : la
-// bascule de fidélité change le rendu, jamais le comportement métier.
-func TestMemeScenarioEnModeContrat(t *testing.T) {
-	h := nouveauHarnais(t, func(c *config.Config) { c.Fidelity = config.FidelityContract })
+// TestSameScenarioInContractMode checks that only the presentation changes
+// between the two fidelity modes: replaying the nominal scenario under
+// FIDELITY=contract must reach the same terminal state as
+// TestPortingCompleteUntilTermine. No assertion on HTTP codes or the envelope
+// here — that is the point: the fidelity switch changes the rendering, never
+// the business behaviour.
+func TestSameScenarioInContractMode(t *testing.T) {
+	h := newHarness(t, func(c *config.Config) { c.Fidelity = config.FidelityContract })
 
-	yas := h.jeton("yas", "yas2026")
-	orange := h.jeton("orange", "orange2026")
-	expresso := h.jeton("expresso", "expresso2026")
+	yas := h.token("yas", "yas2026")
+	orange := h.token("orange", "orange2026")
+	expresso := h.token("expresso", "expresso2026")
 
 	h.post("/api/gateway/v1/otp/send", yas, map[string]any{"numero": "771000001"})
-	_, corps := h.post("/api/gateway/v1/demandes/particulier", yas, corpsParticulier("771000001"))
-	id := corps["data"].(map[string]any)["id"].(string)
+	_, body := h.post("/api/gateway/v1/demandes/particulier", yas, individualBody("771000001"))
+	id := body["data"].(map[string]any)["id"].(string)
 
 	h.post("/api/gateway/v1/demandes/acceptation", orange,
 		map[string]any{"idDemande": id, "accepte": true})
-	h.converger()
+	h.converge()
 	h.post("/api/gateway/v1/demandes/traitement", orange, map[string]any{"idDemande": id})
-	h.converger()
+	h.converge()
 	h.post("/api/gateway/v1/demandes/traitement", yas, map[string]any{"idDemande": id})
-	h.converger()
+	h.converge()
 	h.post("/api/gateway/v1/demandes/a-confirmer", orange, map[string]any{"idDemande": id})
 	h.post("/api/gateway/v1/demandes/a-confirmer", expresso, map[string]any{"idDemande": id})
-	h.converger()
+	h.converge()
 	h.post("/api/gateway/v1/demandes/traitement", yas, map[string]any{"idDemande": id})
-	h.converger()
+	h.converge()
 
-	require.Equal(t, "TERMINE", h.statutDemande(id))
+	require.Equal(t, "TERMINE", h.requestStatus(id))
 }
 
-// TestAucuneErreurNePorteDeCodeEnModeReel — ANO-001, vérifié en volume. Chacun
-// des huit appels ci-dessous provoque une situation d'erreur différente ; aucune
-// des huit réponses ne doit porter de champ code ni être enveloppée.
-func TestAucuneErreurNePorteDeCodeEnModeReel(t *testing.T) {
-	h := nouveauHarnais(t)
-	yas := h.jeton("yas", "yas2026")
-	orange := h.jeton("orange", "orange2026")
+// TestNoErrorCarriesCodeInRealMode — ANO-001, verified at volume. Each of the
+// eight calls below triggers a different error situation; none of the eight
+// responses may carry a code field or be enveloped.
+func TestNoErrorCarriesCodeInRealMode(t *testing.T) {
+	h := newHarness(t)
+	yas := h.token("yas", "yas2026")
+	orange := h.token("orange", "orange2026")
 
-	inconnu := "6a0000000000000000000000"
-	appels := []struct {
-		chemin string
-		jeton  string
-		corps  any
+	unknown := "6a0000000000000000000000"
+	calls := []struct {
+		path  string
+		token string
+		body  any
 	}{
-		// Demande inconnue, sur chacun des quatre endpoints de traitement.
-		{"/api/gateway/v1/demandes/traitement", yas, map[string]any{"idDemande": inconnu}},
-		{"/api/gateway/v1/demandes/acceptation", orange, map[string]any{"idDemande": inconnu, "accepte": true}},
-		{"/api/gateway/v1/demandes/a-confirmer", orange, map[string]any{"idDemande": inconnu}},
-		{"/api/gateway/v1/demandes/" + inconnu + "/annuler", yas, nil},
-		// Restitution d'un numéro jamais porté (771000001 : ORANGE d'origine).
+		// Unknown request, on each of the four processing endpoints.
+		{"/api/gateway/v1/demandes/traitement", yas, map[string]any{"idDemande": unknown}},
+		{"/api/gateway/v1/demandes/acceptation", orange, map[string]any{"idDemande": unknown, "accepte": true}},
+		{"/api/gateway/v1/demandes/a-confirmer", orange, map[string]any{"idDemande": unknown}},
+		{"/api/gateway/v1/demandes/" + unknown + "/annuler", yas, nil},
+		// Restitution of a number never ported (771000001: ORANGE by origin).
 		{"/api/gateway/v1/demandes/restitution", orange, map[string]any{"numero": "771000001"}},
-		// Restitution d'un numéro porté depuis moins de 6 mois (774000001 : 2 mois).
+		// Restitution of a number ported less than 6 months ago (774000001: 2 months).
 		{"/api/gateway/v1/demandes/restitution", orange, map[string]any{"numero": "774000001"}},
-		// Reverse demandé par le destinataire (YAS) au lieu de la source (ORANGE).
+		// Reverse requested by the recipient (YAS) instead of the source (ORANGE).
 		{"/api/gateway/v1/reverse-requests", yas, map[string]any{"numero": "773000001"}},
-		// Vérification d'un OTP jamais envoyé.
+		// Verification of an OTP never sent.
 		{"/api/gateway/v1/otp/verify", yas, map[string]any{"numero": "779999999", "otpCode": "123456"}},
 	}
 
-	for _, a := range appels {
-		rep, corps := h.postBrut(a.chemin, a.jeton, a.corps)
-		require.GreaterOrEqualf(t, rep.StatusCode, 400, a.chemin)
-		require.NotContainsf(t, corps, "code", "%s ne doit porter aucun champ code", a.chemin)
-		require.NotContainsf(t, corps, "success", "%s ne doit pas être enveloppée", a.chemin)
-		require.Containsf(t, corps, "type", "%s doit être un problem+json", a.chemin)
+	for _, c := range calls {
+		resp, body := h.postRaw(c.path, c.token, c.body)
+		require.GreaterOrEqualf(t, resp.StatusCode, 400, c.path)
+		require.NotContainsf(t, body, "code", "%s must not carry a code field", c.path)
+		require.NotContainsf(t, body, "success", "%s must not be enveloped", c.path)
+		require.Containsf(t, body, "type", "%s must be a problem+json", c.path)
 	}
 }

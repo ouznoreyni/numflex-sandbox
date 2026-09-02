@@ -1,19 +1,19 @@
 # syntax=docker/dockerfile:1
 
-# ─────────────────────────────── compilation ────────────────────────────────
-# La version suit la directive `go` du go.mod — pgx v5.10 exige 1.25. Les
-# désaligner casse le build de l'image sans casser le build local.
+# ──────────────────────────────── build ─────────────────────────────────────
+# The version follows go.mod's `go` directive — pgx v5.10 requires 1.25.
+# Letting them drift breaks the image build without breaking the local one.
 ARG GO_VERSION=1.25
 
-# --platform=$BUILDPLATFORM : la compilation reste native, la cible est obtenue
-# par GOOS/GOARCH. Construire une image arm64 depuis amd64 ne passe donc pas
-# par l'émulation QEMU, qui coûte dix fois le temps de build.
+# --platform=$BUILDPLATFORM: compilation stays native, the target comes from
+# GOOS/GOARCH. Building an arm64 image from amd64 therefore does not go
+# through QEMU emulation, which costs ten times the build time.
 FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine AS build
 
 WORKDIR /src
 
-# Les dépendances sont copiées seules : tant que go.mod et go.sum ne bougent
-# pas, cette couche est réutilisée telle quelle.
+# Dependencies are copied on their own: as long as go.mod and go.sum do not
+# move, this layer is reused as is.
 COPY go.mod go.sum ./
 RUN --mount=type=cache,target=/go/pkg/mod \
     go mod download
@@ -22,58 +22,115 @@ COPY . .
 
 ARG TARGETOS
 ARG TARGETARCH
-# CGO_ENABLED=0    : aucune dépendance C — pgx est en Go pur — donc un binaire
-#                    statique, exécutable depuis une image `scratch`.
-# -trimpath        : retire les chemins de la machine de build, le binaire
-#                    devient reproductible.
-# -ldflags='-s -w' : retire la table des symboles et les infos DWARF, ~25 % de
-#                    moins. Le prix : plus de trace de pile symbolisée — le
-#                    sandbox n'est pas un service de production.
-# -tags timetzdata : embarque la base des fuseaux (~450 Ko). Sans elle, sur une
-#                    image sans /usr/share/zoneinfo, un TZ=Africa/Dakar serait
-#                    ignoré en silence et les horodatages sortiraient en UTC.
+# CGO_ENABLED=0    : no C dependency — pgx is pure Go — hence a static
+#                    binary, runnable from a `scratch` image.
+# -trimpath        : strips the build machine's paths, the binary becomes
+#                    reproducible.
+# -ldflags='-s -w' : strips the symbol table and the DWARF info, ~25 % less.
+#                    The price: no symbolised stack trace any more — the
+#                    sandbox is not a production service.
+# -tags timetzdata : embeds the timezone database (~450 KB). Without it, on an
+#                    image with no /usr/share/zoneinfo, a TZ=Africa/Dakar
+#                    would be silently ignored and timestamps would come out
+#                    in UTC.
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     mkdir -p /out && \
     CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
     go build -trimpath -tags timetzdata -ldflags='-s -w' -o /out/ ./cmd/...
 
-# Un utilisateur non privilégié : `scratch` n'a pas de /etc/passwd, et certains
-# chemins de pgx interrogent l'utilisateur courant quand l'URL n'en porte pas.
+# An unprivileged user: `scratch` has no /etc/passwd, and some pgx paths query
+# the current user when the URL carries none.
 RUN printf 'numflex:x:10001:10001::/app:/sbin/nologin\n' > /out/passwd && \
     printf 'numflex:x:10001:\n'                          > /out/group
 
-# ──────────────────────────────── exécution ─────────────────────────────────
-# `scratch` plutôt qu'alpine : rien à part ce qui est listé ci-dessous n'entre
-# dans l'image — pas de busybox, pas de gestionnaire de paquets, donc aucune
-# CVE de base à suivre et rien à exécuter pour qui obtiendrait le conteneur.
+# ─────────────────────────── runtime, all-in-one ────────────────────────────
+# Optional target: PostgreSQL and the server in the same image — the
+# repository's docker-compose reduced to a single container, for whoever wants
+# to run the sandbox without orchestrating anything. It is NOT the default
+# target: `runtime`, further down, is, and stays what `docker compose`,
+# `make image` and `make push` produce. This one is asked for explicitly:
+#
+#   docker build --target standalone -t numflex-sandbox:standalone .
+#   docker run -p 8080:8080 -v "$PWD/data:/data" numflex-sandbox:standalone PGDATA=/data
+#
+# The database's data directory is set like anything else — argument,
+# environment variable or .env — following the precedence described in
+# internal/framework/config/env.go, which scripts/standalone-entrypoint.sh
+# reproduces identically rather than inventing a second convention.
+#
+# What it costs, and what must be accepted: ~456 MB instead of ~46, a shell
+# and a package manager in the image, a start as root for the duration of
+# initdb. In other words everything `runtime` refuses. It is a demonstration
+# convenience, not a hardening — not to be exposed on an open network.
+FROM postgres:16-alpine AS standalone
+
+COPY --from=build /out/server /out/artp /usr/local/bin/
+COPY migrations /app/migrations
+COPY scripts/standalone-entrypoint.sh /usr/local/bin/standalone-entrypoint.sh
+
+# The documentation, served by the entrypoint on its own port — never by the Go
+# server, which must keep exactly the contract's route table. busybox-extras
+# carries httpd, 135 KB, the smallest static file server this base image can
+# get. `runtime` gets neither: it has no shell to run one, and no business
+# serving a page.
+RUN apk add --no-cache busybox-extras
+COPY docs/swagger.html docs/openapi.yaml docs/openapi.json /app/docs/
+
+# The postgres image sets ENV PGDATA=/var/lib/postgresql/data. We empty it: an
+# environment value wins over the file, so a PGDATA written in a .env would
+# never be used. Empty counts as absent, as everywhere else in the sandbox's
+# configuration; the entrypoint falls back on the same default when nobody
+# decides.
+ENV PGDATA=""
+
+# The server looks for migrations/ and .env by walking up from the current
+# directory: /app/.env is therefore the file read by default, on the entrypoint
+# side as on the server side.
+WORKDIR /app
+
+# 8080 is the API, 8081 the documentation — two ports, because the gateway must
+# not serve a doc route. 5432 is not published, and the database listens on
+# 127.0.0.1 only anyway.
+EXPOSE 8080 8081
+
+ENTRYPOINT ["/usr/local/bin/standalone-entrypoint.sh"]
+
+LABEL org.opencontainers.image.title="numflex-sandbox (all-in-one)" \
+      org.opencontainers.image.description="The NumFlex sandbox and its PostgreSQL database in a single image" \
+      org.opencontainers.image.source="https://github.com/ouznoreyni/numflex-sandbox"
+
+# ─────────────────────────────── runtime ────────────────────────────────────
+# `scratch` rather than alpine: nothing but what is listed below enters the
+# image — no busybox, no package manager, hence no base CVE to track and
+# nothing to run for whoever would get hold of the container.
 FROM scratch AS runtime
 
-# Les racines de confiance, sans lesquelles un DATABASE_URL en
-# `sslmode=verify-full` échouerait. ~250 Ko, le seul poids non négociable.
+# The trust roots, without which a DATABASE_URL in `sslmode=verify-full`
+# would fail. ~250 KB, the only non-negotiable weight.
 COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 COPY --from=build /out/passwd /out/group /etc/
 
 COPY --from=build /out/server /out/artp /usr/local/bin/
-# Le serveur est seul propriétaire du schéma : il joue les migrations au
-# démarrage et les cherche en remontant depuis le répertoire courant, d'où le
-# WORKDIR ci-dessous.
+# The server is the schema's sole owner: it runs the migrations at startup and
+# looks for them by walking up from the current directory, hence the WORKDIR
+# below.
 COPY migrations /app/migrations
 
 WORKDIR /app
 USER 10001:10001
 EXPOSE 8080
 
-# Aucune variable de configuration n'est posée ici, volontairement : un `ENV
-# PORT=8080` masquerait la valeur d'un .env monté, puisque l'environnement
-# l'emporte sur le fichier.
+# No configuration variable is set here, deliberately: an `ENV PORT=8080`
+# would mask the value of a mounted .env, since the environment wins over the
+# file.
 #
-# Aucun HEALTHCHECK non plus : le sandbox n'expose aucune route de santé — la
-# plateforme réelle n'en a pas, et la surface doit rester identique — et
-# `scratch` n'offre aucun shell pour en éprouver une. À sonder de l'extérieur,
-# par POST /api/authenticate.
+# No HEALTHCHECK either: the sandbox exposes no health route — the real
+# platform has none, and the surface must stay identical — and `scratch`
+# offers no shell to exercise one. Probe it from the outside, through
+# POST /api/authenticate.
 ENTRYPOINT ["/usr/local/bin/server"]
 
 LABEL org.opencontainers.image.title="numflex-sandbox" \
-      org.opencontainers.image.description="Double local de l'API Gateway NumFlex de l'ARTP (guide v2)" \
+      org.opencontainers.image.description="Local double of the ARTP NumFlex API Gateway (guide v2)" \
       org.opencontainers.image.source="https://github.com/ouznoreyni/numflex-sandbox"

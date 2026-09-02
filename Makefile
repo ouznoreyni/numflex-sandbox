@@ -1,35 +1,43 @@
 DB_TEST := postgres://numflex:numflex@localhost:5433/numflex_test?sslmode=disable
 
+# --wait blocks until the healthchecks go green. Without it,
+# `docker compose up -d` returns as soon as the containers are *started*,
+# not as soon as they accept a connection: on a cold start, go test hits
+# 5433 before Postgres and the suite fails with "connection refused".
 up:
-	docker compose up -d postgres postgres-test
+	docker compose up -d --wait postgres postgres-test
 
 test: up
 	DATABASE_URL="$(DB_TEST)" \
-	ETAPE_TIMEOUT_SECONDS=0 CONVERGENCE_MIN_SECONDS=0 CONVERGENCE_MAX_SECONDS=0 \
+	STEP_TIMEOUT_SECONDS=0 CONVERGENCE_MIN_SECONDS=0 CONVERGENCE_MAX_SECONDS=0 \
 	COMPLETION_LATENCY_MS=0 CLOCK_SKEW_SECONDS=0 \
-	go test ./... -p 1 -count=1
+	go test -tags=integration ./... -p 1 -count=1
 
-# Le CORS est ouvert a toute origine par defaut, pour que la page Swagger
-# (port 8081) puisse appeler l'API depuis un navigateur. La plateforme reelle
-# n'en envoie pas : CORS_ALLOWED_ORIGINS="" retrouve son comportement exact.
+# Unit tests only — no database, no Docker, a few seconds.
+test-unit:
+	go test ./... -count=1
+
+# CORS is open to every origin by default, so that the Swagger page
+# (port 8081) can call the API from a browser. The real platform sends none:
+# CORS_ALLOWED_ORIGINS="" restores its exact behaviour.
 run: up
 	DATABASE_URL="postgres://numflex:numflex@localhost:5432/numflex?sslmode=disable" \
 	go run ./cmd/server
 
-# Documentation servie hors de la gateway, sur un port distinct : le sandbox ne
-# doit exposer que les 33 routes du contrat (aucune route de doc, de santé ni de
-# metrics). http://localhost:8081/swagger.html
+# Documentation served outside the gateway, on a separate port: the sandbox
+# must expose only the contract's 33 routes (no doc, health or metrics route).
+# http://localhost:8081/swagger.html
 swagger:
 	@echo "Swagger UI → http://localhost:8081/swagger.html"
 	cd docs && python3 -m http.server 8081 --bind 127.0.0.1
 
-# Régénère openapi.json et swagger.html depuis openapi.yaml, seule source.
+# Regenerates openapi.json and swagger.html from openapi.yaml, the only source.
 swagger-build:
 	python3 scripts/build_swagger.py
 
 # ─── Image ──────────────────────────────────────────────────────────────────
-# `latest` est toujours produit et toujours publié. VERSION=... ajoute un second
-# tag, figé sur cette version :
+# `latest` is always built and always published. VERSION=... adds a second
+# tag, frozen on that version:
 #   make image                                   → numflex-sandbox:latest
 #   make push                                    → …/numflex-sandbox:latest
 #   make push VERSION=v0.4.0                     → :latest + :v0.4.0
@@ -40,30 +48,88 @@ REGISTRY  ?= docker.io/ouzdiop268
 PLATFORMS ?= linux/amd64,linux/arm64
 BUILDER   ?= numflex-builder
 
-# Construit pour l'architecture locale et charge l'image dans le démon.
+# Builds for the local architecture and loads the image into the daemon.
+# --target runtime is explicit: the Dockerfile carries a second `standalone`
+# target, and the slim image must stay what `make image` produces even if the
+# order of the Dockerfile's stages ever changes.
 image:
-	docker build -t $(IMAGE):latest $(if $(VERSION),-t $(IMAGE):$(VERSION),) .
+	docker build --target runtime -t $(IMAGE):latest $(if $(VERSION),-t $(IMAGE):$(VERSION),) .
 	@docker images $(IMAGE):latest --format '  {{.Repository}}:{{.Tag}}  {{.Size}}'
 
-# Construit et publie en une passe. buildx est obligatoire ici : un manifeste
-# multi-architecture ne peut pas être chargé dans le démon local, donc il n'y a
-# pas de `make image` préalable — seul le cache de build est partagé. Le pilote
-# `docker` par défaut ne sait pas produire de multi-arch, d'où le constructeur
-# dédié, créé au premier appel. `docker login $(REGISTRY)` d'abord.
+# Builds and publishes in one pass. buildx is mandatory here: a multi-arch
+# manifest cannot be loaded into the local daemon, so there is no prior
+# `make image` — only the build cache is shared. The default `docker` driver
+# cannot produce multi-arch, hence the dedicated builder, created on first
+# call. Run `docker login $(REGISTRY)` first.
 #
-# Le garde d'arbre propre ne vaut que pour un tag de version : celui-ci doit
-# rester reproductible, donc correspondre à un commit. `latest` est par nature
-# un pointeur mouvant, et se publie depuis un arbre modifié. ALLOW_DIRTY=1 lève
-# le garde — la version porte alors le suffixe `-dirty`.
+# The clean-tree guard only applies to a version tag: that one must stay
+# reproducible, hence match a commit. `latest` is by nature a moving pointer,
+# and is published from a modified tree. ALLOW_DIRTY=1 lifts the guard — the
+# tag is then published as is, from a tree that matches no commit.
 push:
 	@test -z "$(VERSION)" || git diff --quiet HEAD 2>/dev/null || test -n "$(ALLOW_DIRTY)" || \
-	  { echo "arbre modifié : un tag de version doit correspondre à un commit (ALLOW_DIRTY=1 pour passer outre)"; exit 1; }
+	  { echo "modified tree: a version tag must match a commit (ALLOW_DIRTY=1 to override)"; exit 1; }
 	@docker buildx inspect $(BUILDER) >/dev/null 2>&1 || \
 	  docker buildx create --name $(BUILDER) --driver docker-container >/dev/null
 	docker buildx build --builder $(BUILDER) --platform $(PLATFORMS) \
+	  --target runtime \
 	  --tag $(REGISTRY)/$(IMAGE):latest \
 	  $(if $(VERSION),--tag $(REGISTRY)/$(IMAGE):$(VERSION),) \
 	  --push .
-	@echo "publié : $(REGISTRY)/$(IMAGE):latest$(if $(VERSION), et :$(VERSION),)"
+	@echo "published: $(REGISTRY)/$(IMAGE):latest$(if $(VERSION), and :$(VERSION),)"
 
-.PHONY: up test run swagger swagger-build image push
+# ─── All-in-one image ───────────────────────────────────────────────────────
+# The repository's docker-compose reduced to a single image: PostgreSQL and the
+# server in the same container. Nothing to orchestrate, nothing to network.
+#
+#   make image-standalone                    → numflex-sandbox:standalone, locally
+#   make run-standalone                      → runs it, data in ./data
+#   make run-standalone DATA=/srv/pg PORT=9000
+#   make run-standalone ENV_FILE=./prod.env  → mounts that file on /app/.env
+#   make push-standalone                     → builds AND publishes, multi-arch
+#   make push-standalone VERSION=v0.5.0      → adds the :standalone-v0.5.0 tag
+#
+# Configuration follows the server's precedence — arguments > environment >
+# .env > defaults — and the database's data directory is no exception:
+#
+#   docker run IMAGE PGDATA=/data                        (argument)
+#   docker run -e PGDATA=/data IMAGE                     (environment)
+#   docker run -v ./.env:/app/.env IMAGE                 (file, PGDATA= inside)
+#   docker run -v ./x.env:/c.env IMAGE --env-file /c.env (file, elsewhere)
+#
+# This image is not a hardening: it ships a shell and a package manager, and
+# starts as root for the duration of initdb. For a deployment, use `make push`
+# and a separate database.
+DATA      ?= $(PWD)/data
+PORT      ?= 8080
+DOCS_PORT ?= 8081
+ENV_FILE  ?=
+
+image-standalone:
+	docker build --target standalone -t $(IMAGE):standalone .
+	@docker images $(IMAGE):standalone --format '  {{.Repository}}:{{.Tag}}  {{.Size}}'
+
+run-standalone: image-standalone
+	@mkdir -p "$(DATA)"
+	@echo "sandbox → http://localhost:$(PORT)   docs → http://localhost:$(DOCS_PORT)/swagger.html   data → $(DATA)$(if $(ENV_FILE),   env → $(ENV_FILE),)"
+	docker run --rm -p $(PORT):$(PORT) -p $(DOCS_PORT):$(DOCS_PORT) \
+	  -v "$(DATA):/data" \
+	  $(if $(ENV_FILE),-v "$(abspath $(ENV_FILE)):/app/.env:ro",) \
+	  $(IMAGE):standalone PGDATA=/data PORT=$(PORT) DOCS_PORT=$(DOCS_PORT)
+
+# Builds and publishes in one pass, like `push`: buildx cannot load a
+# multi-arch manifest into the local daemon, so there is no prior
+# `make image-standalone` — only the build cache is shared.
+push-standalone:
+	@test -z "$(VERSION)" || git diff --quiet HEAD 2>/dev/null || test -n "$(ALLOW_DIRTY)" || \
+	  { echo "modified tree: a version tag must match a commit (ALLOW_DIRTY=1 to override)"; exit 1; }
+	@docker buildx inspect $(BUILDER) >/dev/null 2>&1 || \
+	  docker buildx create --name $(BUILDER) --driver docker-container >/dev/null
+	docker buildx build --builder $(BUILDER) --platform $(PLATFORMS) \
+	  --target standalone \
+	  --tag $(REGISTRY)/$(IMAGE):standalone \
+	  $(if $(VERSION),--tag $(REGISTRY)/$(IMAGE):standalone-$(VERSION),) \
+	  --push .
+	@echo "published: $(REGISTRY)/$(IMAGE):standalone$(if $(VERSION), and :standalone-$(VERSION),)"
+
+.PHONY: up test test-unit run swagger swagger-build image push image-standalone run-standalone push-standalone

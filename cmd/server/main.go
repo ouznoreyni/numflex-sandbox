@@ -5,54 +5,60 @@ import (
 	"log"
 	"os"
 
-	"github.com/ouznoreyni/numflex-sandbox/internal/api"
-	"github.com/ouznoreyni/numflex-sandbox/internal/config"
-	"github.com/ouznoreyni/numflex-sandbox/internal/engine"
-	"github.com/ouznoreyni/numflex-sandbox/internal/httpx"
-	"github.com/ouznoreyni/numflex-sandbox/internal/seed"
-	"github.com/ouznoreyni/numflex-sandbox/internal/store"
+	"github.com/ouznoreyni/numflex-sandbox/internal/framework/config"
+	"github.com/ouznoreyni/numflex-sandbox/internal/framework/engine"
+	"github.com/ouznoreyni/numflex-sandbox/internal/framework/persistence"
+	"github.com/ouznoreyni/numflex-sandbox/internal/framework/seed"
+	"github.com/ouznoreyni/numflex-sandbox/internal/framework/web"
 )
 
 func main() {
-	// Les arguments l'emportent sur l'environnement, qui l'emporte sur le
-	// fichier .env : un conteneur se règle indifféremment par `-e`, par un
-	// `.env` monté, ou par des arguments `CLEF=valeur`.
-	if err := config.AppliquerArguments(os.Args[1:]); err != nil {
-		log.Fatalf("arguments : %v", err)
+	// Arguments take precedence over the environment, which takes precedence
+	// over the .env file: a container can be configured indifferently via
+	// `-e`, via a mounted `.env`, or via `KEY=value` arguments.
+	if err := config.ApplyArguments(os.Args[1:]); err != nil {
+		log.Fatalf("arguments: %v", err)
 	}
-	if err := config.ChargerFichierEnv(); err != nil {
-		log.Fatalf("configuration : %v", err)
+	if err := config.LoadEnvFile(); err != nil {
+		log.Fatalf("configuration: %v", err)
 	}
 
 	c, err := config.Load()
 	if err != nil {
-		log.Fatalf("configuration : %v", err)
+		log.Fatalf("configuration: %v", err)
 	}
-	log.Printf("numflex-sandbox — fidélité=%s expiration=%s port=%s",
-		c.Fidelity, c.EtapeTimeout, c.Port)
+	log.Printf("numflex-sandbox — fidelity=%s timeout=%s port=%s",
+		c.Fidelity, c.StepTimeout, c.Port)
 
-	if err := store.Migrate(c.DatabaseURL); err != nil {
-		log.Fatalf("migrations : %v", err)
+	if err := persistence.Migrate(c.DatabaseURL); err != nil {
+		log.Fatalf("migrations: %v", err)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	db, err := store.Open(ctx, c.DatabaseURL)
+	db, err := persistence.Open(ctx, c.DatabaseURL)
 	if err != nil {
-		log.Fatalf("ouverture de la base : %v", err)
+		log.Fatalf("opening the database: %v", err)
 	}
 	defer db.Close()
 
 	if err := seed.Run(ctx, db); err != nil {
-		log.Fatalf("seed : %v", err)
+		log.Fatalf("seed: %v", err)
 	}
 
-	moteur := engine.New(c, db)
-	go moteur.Run(ctx)
+	eng := engine.New(c, db)
+	go eng.Run(ctx)
 
-	d := &api.Deps{Cfg: c, DB: db, R: httpx.NewRenderer(c.Fidelity, c.ClockSkew), Moteur: moteur}
-	r := api.NewRouter(d)
+	// cmd/server/main.go is the composition root: config, database,
+	// migrations and seed are already built above; web.Deps carries the rest
+	// (fidelity, the opened database, the running engine) into
+	// web.NewRouter, which builds every gateway, unit of work, interactor,
+	// presenter and controller exactly once, then wires the whole route
+	// table (Task 18 — internal/api is gone, this package is now the router
+	// actually served).
+	d := &web.Deps{Cfg: c, DB: db, Engine: eng}
+	r := web.NewRouter(d)
 
 	if err := r.Run(":" + c.Port); err != nil {
 		log.Fatalf("serveur HTTP : %v", err)

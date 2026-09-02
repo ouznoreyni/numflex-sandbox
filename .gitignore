@@ -3,3 +3,9 @@ bin/
 *.log
 .idea/
 .superpowers/
+
+# The database's data directories, when the sandbox runs all-in-one (the
+# `standalone` image). A PGDATA has no business in a repository.
+db/
+data/
+pgdata/

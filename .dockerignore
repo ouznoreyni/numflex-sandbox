@@ -1,12 +1,21 @@
-# Le contexte est envoyé au démon à chaque build : n'y laisser que ce qui entre
-# dans la compilation.
+# The context is sent to the daemon on every build: leave in it only what goes
+# into the compilation.
 .git
 .gitignore
 .idea
 .superpowers
 docs
+# … sauf la page Swagger et sa spec, servies par l'image tout-en-un sur son
+# port de documentation. Elles n'entrent que dans la cible `standalone` ;
+# `runtime` n'en copie aucune.
+!docs/swagger.html
+!docs/openapi.yaml
+!docs/openapi.json
 postman
 scripts
+# … except the all-in-one image's entrypoint, which must enter the context:
+# it is the only file of scripts/ that ends up in an image.
+!scripts/standalone-entrypoint.sh
 test
 bin
 *.log
@@ -17,7 +26,7 @@ Dockerfile
 .dockerignore
 **/*_test.go
 
-# Jamais dans l'image : un .env se monte ou se passe au démarrage, il ne se
-# cuit pas dans une couche que tout porteur de l'image peut lire.
+# Never in the image: a .env is mounted or passed at startup, it is not baked
+# into a layer that every holder of the image can read.
 .env
 .env.*

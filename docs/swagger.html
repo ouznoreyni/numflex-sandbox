@@ -7,20 +7,23 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.17.14/swagger-ui.min.css">
 <style>
   body { margin: 0; background: #fafafa; }
-  .rappel { font: 14px/1.5 system-ui, -apple-system, sans-serif; background: #1b1b1f; color: #e8e8ea;
+  .notice { font: 14px/1.5 system-ui, -apple-system, sans-serif; background: #1b1b1f; color: #e8e8ea;
             padding: 14px 20px; }
-  .rappel code { background: rgba(255,255,255,.12); padding: 1px 5px; border-radius: 3px; }
+  .notice code { background: rgba(255,255,255,.12); padding: 1px 5px; border-radius: 3px; }
 </style>
 </head>
 <body>
-<div class="rappel">
+<div class="notice">
   Sandbox sur <code>http://localhost:8080</code> — comptes <code>yas/yas2026</code>,
-  <code>orange/orange2026</code>, <code>expresso/expresso2026</code>. Cette page est servie hors
-  de la gateway : le sandbox n'expose que les 33 routes du contrat.
-  <strong>« Try it out »</strong> fonctionne si le sandbox tourne avec
-  <code>CORS_ALLOWED_ORIGINS=http://localhost:8081</code> — c'est le cas via <code>make run</code>
-  et via <code>docker compose up</code>. Sans cette variable, le sandbox n'envoie aucun en-tête CORS,
-  comme la plateforme réelle, et le navigateur bloque l'appel : utilisez alors Postman ou <code>curl</code>.
+  <code>orange/orange2026</code>, <code>expresso/expresso2026</code>.
+  <strong>Cette page est servie hors de la gateway</strong>, sur un port distinct : le sandbox
+  n'expose que les 33 routes du contrat, et une route de documentation le rendrait discernable de
+  la plateforme réelle. C'est pourquoi <code>http://localhost:8080/swagger.html</code> répond
+  <code>404</code>.
+  <strong>« Try it out »</strong> fonctionne sans rien configurer : le CORS est ouvert à
+  <code>*</code> par défaut. Poser <code>CORS_ALLOWED_ORIGINS=</code> — vide — rend au sandbox le
+  silence de la plateforme réelle, et le navigateur bloquera alors l'appel : utilisez Postman ou
+  <code>curl</code>.
 </div>
 <div id="swagger-ui"></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.17.14/swagger-ui-bundle.min.js"></script>
@@ -526,7 +529,7 @@ const spec = {
      "Création de demande"
     ],
     "summary": "Soumettre une demande de validation de reverse (§7.6)",
-    "description": "Un reverse restitue un numéro à son opérateur d'origine **sur décision de l'ARTP**.\nContrairement au portage et à la restitution, la demande passe d'abord par une étape de\n**validation administrative** hors de cette API.\n\n**Seul l'opérateur source** (opérateur d'origine du numéro) peut soumettre.\n**Pas d'annulation** : une fois soumise, elle reste `EN_ATTENTE` jusqu'à décision de l'ARTP.\n\nDans le sandbox, cette décision se prend avec le CLI compagnon :\n`artp reverse valider <id>` ou `artp reverse rejeter <id>`.\n",
+    "description": "Un reverse restitue un numéro à son opérateur d'origine **sur décision de l'ARTP**.\nContrairement au portage et à la restitution, la demande passe d'abord par une étape de\n**validation administrative** hors de cette API.\n\n**Seul l'opérateur source** (opérateur d'origine du numéro) peut soumettre.\n**Pas d'annulation** : une fois soumise, elle reste `EN_ATTENTE` jusqu'à décision de l'ARTP.\n\nDans le sandbox, cette décision se prend avec le CLI compagnon :\n`artp reverse validate <id>` ou `artp reverse reject <id>`.\n",
     "requestBody": {
      "$ref": "#/components/requestBodies/Numero"
     },
