@@ -40,8 +40,8 @@ type RouterHarness struct {
 }
 
 // ContractFidelity switches the harness's fidelity mode to "contract" — the
-// adjustment TestCreationParticulierEnModeContratRendUnCodeMetier and
-// TestFlotteVideRenvoieFlotteVide need. It exists here, rather than being
+// adjustment TestCreateIndividualInContractModeReturnsABusinessCode and
+// TestEmptyFleetReturnsFlotteVideCode need. It exists here, rather than being
 // written inline as func(c *config.Config) { c.Fidelity = ... } at the call
 // site, because a controller's own test package cannot import
 // internal/framework/config directly (test/architecture_test.go's

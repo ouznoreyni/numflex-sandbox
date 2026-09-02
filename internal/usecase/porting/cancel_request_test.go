@@ -30,9 +30,10 @@ func TestCancelRequestNominal(t *testing.T) {
 	require.Equal(t, entity.RequestCancelled, f.requests.Status("d1"))
 }
 
-// TestCancelRequestDelegatesAuthorizationToEntityCanCancel documents that
-// CancelRequestInteractor reimplements neither of entity.CanCancel's two
-// rules: only the creator may cancel, only ACCEPTATION may be cancelled.
+// TestCancelRequestBySourceRefused and TestCancelRequestAfterAcceptanceRefused,
+// just below, document that CancelRequestInteractor reimplements neither of
+// entity.CanCancel's two rules: only the creator may cancel, only ACCEPTATION
+// may be cancelled — one test per rule.
 func TestCancelRequestBySourceRefused(t *testing.T) {
 	f := newFixture()
 	seedCancellableRequest(f)

@@ -84,7 +84,7 @@ func TestAcceptRequestNominal(t *testing.T) {
 // check moved to: it is no longer Execute's business — AcceptanceController
 // must make it BEFORE decoding the request body, so that the "frozen market +
 // invalid body" case answers "frozen market" rather than a JSON format error
-// (see TestAcceptationPlaceGeleePrimeSurCorpsInvalide at the HTTP level). An
+// (see TestAcceptFrozenMarketBeatsInvalidBody at the HTTP level). An
 // Execute still checking the freeze after that move would reproduce exactly
 // the ordering bug the move fixes: this test guards against that by proving a
 // frozen market no longer keeps Execute from succeeding.

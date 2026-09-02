@@ -9,7 +9,7 @@ package controller_test
 // two acceptance interactors and port.UnitOfWork, not through any leftover
 // handler.
 //
-// TestAcceptationPlaceGeleePrimeSurCorpsInvalide, at the end of this file,
+// TestAcceptFrozenMarketBeatsInvalidBody, at the end of this file,
 // is new — fix round 1 on this task: it pins the frozen-market gate's
 // position relative to JSON binding, which no test caught the first time
 // around.
@@ -193,7 +193,7 @@ func TestAcceptWithUnknownRejectionReasonRefused(t *testing.T) {
 	require.Equal(t, "Motif de rejet inconnu", body["detail"])
 }
 
-// TestAcceptationPlaceGeleePrimeSurCorpsInvalide pins fix round 1's
+// TestAcceptFrozenMarketBeatsInvalidBody pins fix round 1's
 // correction: the frozen-market gate must run BEFORE the request body is
 // even decoded, so a request that carries both a frozen market and a
 // malformed body gets the frozen-market response, not a JSON-format error.
