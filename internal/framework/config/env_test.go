@@ -68,7 +68,7 @@ func TestLoadEnvFileImplicitAbsent(t *testing.T) {
 }
 
 func TestLoadEnvFileExplicitAbsent(t *testing.T) {
-	t.Setenv("ENV_FILE", filepath.Join(t.TempDir(), "introuvable.env"))
+	t.Setenv("ENV_FILE", filepath.Join(t.TempDir(), "missing.env"))
 
 	if err := LoadEnvFile(); err == nil {
 		t.Fatal("a requested but missing ENV_FILE must be an error")

@@ -15,11 +15,11 @@ func Migrate(url string) error {
 	}
 	m, err := migrate.New("file://"+dir, url)
 	if err != nil {
-		return fmt.Errorf("initialisation des migrations : %w", err)
+		return fmt.Errorf("initialising the migrations: %w", err)
 	}
 	defer m.Close()
 	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
-		return fmt.Errorf("application des migrations : %w", err)
+		return fmt.Errorf("applying the migrations: %w", err)
 	}
 	return nil
 }
@@ -42,5 +42,5 @@ func MigrationsDir() (string, error) {
 		}
 		dir = parent
 	}
-	return "", fmt.Errorf("répertoire migrations introuvable")
+	return "", fmt.Errorf("migrations directory not found")
 }

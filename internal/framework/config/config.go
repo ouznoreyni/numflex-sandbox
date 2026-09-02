@@ -102,17 +102,17 @@ func Load() (*Config, error) {
 	}
 
 	if c.DatabaseURL == "" {
-		return nil, fmt.Errorf("DATABASE_URL est obligatoire")
+		return nil, fmt.Errorf("DATABASE_URL is required")
 	}
 	if c.Fidelity != FidelityReal && c.Fidelity != FidelityContract {
-		return nil, fmt.Errorf("FIDELITY doit valoir %q ou %q, reçu %q",
+		return nil, fmt.Errorf("FIDELITY must be %q or %q, got %q",
 			FidelityReal, FidelityContract, c.Fidelity)
 	}
 	if c.ConvergenceMax < c.ConvergenceMin {
 		return nil, fmt.Errorf("CONVERGENCE_MAX_SECONDS ne peut être inférieur à CONVERGENCE_MIN_SECONDS")
 	}
 	if c.EngineTick <= 0 {
-		return nil, fmt.Errorf("ENGINE_TICK_SECONDS doit être strictement positif")
+		return nil, fmt.Errorf("ENGINE_TICK_SECONDS must be strictly positive")
 	}
 	return c, nil
 }
@@ -143,7 +143,7 @@ func num(key string, def int) (int, error) {
 	}
 	n, err := strconv.Atoi(v)
 	if err != nil {
-		return 0, fmt.Errorf("%s : entier attendu, reçu %q", key, v)
+		return 0, fmt.Errorf("%s: integer expected, got %q", key, v)
 	}
 	return n, nil
 }
@@ -155,7 +155,7 @@ func boolean(key string, def bool) (bool, error) {
 	}
 	b, err := strconv.ParseBool(v)
 	if err != nil {
-		return false, fmt.Errorf("%s : booléen attendu, reçu %q", key, v)
+		return false, fmt.Errorf("%s: boolean expected, got %q", key, v)
 	}
 	return b, nil
 }

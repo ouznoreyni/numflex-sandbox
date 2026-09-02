@@ -26,7 +26,7 @@ func NewUnitOfWork(db *DB) port.UnitOfWork {
 func (u *unitOfWork) Do(ctx context.Context, fn func(port.Repositories) error) (err error) {
 	tx, err := u.db.Pool.Begin(ctx)
 	if err != nil {
-		return fmt.Errorf("ouverture de la transaction : %w", err)
+		return fmt.Errorf("opening the transaction: %w", err)
 	}
 
 	defer func() {
