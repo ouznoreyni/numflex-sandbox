@@ -5,6 +5,12 @@
 .idea
 .superpowers
 docs
+# … sauf la page Swagger et sa spec, servies par l'image tout-en-un sur son
+# port de documentation. Elles n'entrent que dans la cible `standalone` ;
+# `runtime` n'en copie aucune.
+!docs/swagger.html
+!docs/openapi.yaml
+!docs/openapi.json
 postman
 scripts
 # … except the all-in-one image's entrypoint, which must enter the context:
