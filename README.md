@@ -358,6 +358,41 @@ rejoué. La règle est **« le numéro rentre chez lui »**, pas « le numéro r
 seed » : pour une tranche ensemencée déjà portée — `77200`, détenue par ORANGE mais d'origine YAS —
 la purge la ramène chez YAS, pas chez ORANGE.
 
+## Structure
+
+Le dépôt suit la Clean Architecture canonique : quatre couches, une seule règle de dépendance —
+un paquet n'importe qu'un paquet de couche inférieure ou égale — et `test/architecture_test.go`
+qui la vérifie sur le graphe d'imports réel, à chaque `make test`.
+
+```
+cmd/
+  server/            le serveur HTTP : racine de composition
+  artp/              le CLI régulateur
+internal/
+  entity/            couche 0 — règles métier pures, n'importe rien de ce module
+  usecase/
+    port/            couche 1 — les interfaces dont les interactors ont besoin
+    <capacité>/      couche 1 — un interactor par cas d'usage (otp, creation, acceptance…)
+  adapter/
+    controller/      couche 2 — HTTP → modèle d'entrée, résultat → view model
+    presenter/       couche 2 — view model, dans l'un des deux modes de fidélité
+    gateway/postgres/ couche 2 — les gateways. Seul endroit qui nomme une colonne française
+  framework/
+    web/             couche 3 — moteur Gin, middlewares, câblage des 36 routes
+    persistence/     couche 3 — pool pgx, migrations, unité de travail
+    engine/          couche 3 — le ticker : expiration, convergence, cycle du reverse
+    clock/ config/ identifier/ seed/ token/
+  testsupport/       base de test, doubles en mémoire, harnais de routeur
+test/                scénarios de bout en bout, captures de conformité, garde d'architecture
+migrations/          le schéma, en français — voir ADR 0001
+```
+
+Le détail — le diagramme des couches, le trajet complet d'une requête de Gin à pgx et retour, et
+la table des trois vocabulaires qui restent français parce qu'ils *sont* le contrat — est dans
+[`docs/architecture.md`](docs/architecture.md). Les quatre décisions structurantes sont dans
+[`docs/adr/`](docs/adr/) : colonnes SQL françaises, unité de travail, fidélité portée par les
+presenters, tag de build des tests d'intégration.
+
 ## Tests
 
 ```bash
