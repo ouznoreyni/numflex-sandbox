@@ -16,10 +16,10 @@
 <div class="notice">
   Sandbox sur <code>http://localhost:8080</code> — comptes <code>yas/yas2026</code>,
   <code>orange/orange2026</code>, <code>expresso/expresso2026</code>.
-  <strong>Cette page est servie hors de la gateway</strong>, sur un port distinct : le sandbox
-  n'expose que les 33 routes du contrat, et une route de documentation le rendrait discernable de
-  la plateforme réelle. C'est pourquoi <code>http://localhost:8080/swagger.html</code> répond
-  <code>404</code>.
+  <strong>Cette page vit à la racine, hors de la gateway</strong> : <code>/api/gateway/v1</code>
+  garde exactement les 33 routes du contrat, et n'en a gagné aucune. L'image
+  <code>standalone</code> la sert sur le port de l'API ; l'image mince <code>:latest</code>
+  n'embarque aucune page et répond <code>404</code> ici.
   <strong>« Try it out »</strong> fonctionne sans rien configurer : le CORS est ouvert à
   <code>*</code> par défaut. Poser <code>CORS_ALLOWED_ORIGINS=</code> — vide — rend au sandbox le
   silence de la plateforme réelle, et le navigateur bloquera alors l'appel : utilisez Postman ou

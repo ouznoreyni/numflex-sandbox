@@ -69,12 +69,12 @@ COPY --from=build /out/server /out/artp /usr/local/bin/
 COPY migrations /app/migrations
 COPY scripts/standalone-entrypoint.sh /usr/local/bin/standalone-entrypoint.sh
 
-# The documentation, served by the entrypoint on its own port — never by the Go
-# server, which must keep exactly the contract's route table. busybox-extras
-# carries httpd, 135 KB, the smallest static file server this base image can
-# get. `runtime` gets neither: it has no shell to run one, and no business
-# serving a page.
-RUN apk add --no-cache busybox-extras
+# The documentation, served by the server itself on the API's own port. No
+# extra package, no second process, no reverse proxy: a proxy in front would
+# stamp Server and Connection on all 33 contract responses, which carry
+# exactly three headers today. The server registers these three root paths
+# only because this folder is here — `runtime` ships none, so the same binary
+# answers 404 there, which is the platform's exact surface.
 COPY docs/swagger.html docs/openapi.yaml docs/openapi.json /app/docs/
 
 # The postgres image sets ENV PGDATA=/var/lib/postgresql/data. We empty it: an
@@ -89,10 +89,9 @@ ENV PGDATA=""
 # side as on the server side.
 WORKDIR /app
 
-# 8080 is the API, 8081 the documentation — two ports, because the gateway must
-# not serve a doc route. 5432 is not published, and the database listens on
-# 127.0.0.1 only anyway.
-EXPOSE 8080 8081
+# One port. 5432 is not published, and the database listens on 127.0.0.1 only
+# anyway: the API is the container's single door.
+EXPOSE 8080
 
 ENTRYPOINT ["/usr/local/bin/standalone-entrypoint.sh"]
 
