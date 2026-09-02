@@ -16,7 +16,7 @@ const (
 	expressoID = "operateur-expresso"
 )
 
-var errBoom = errors.New("échec simulé de la couche gateway")
+var errBoom = errors.New("simulated gateway-layer failure")
 
 func ctxCaller(operatorID string) context.Context {
 	return port.WithCaller(context.Background(), entity.Caller{OperatorID: operatorID})

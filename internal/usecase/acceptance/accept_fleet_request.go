@@ -83,7 +83,7 @@ func (i *AcceptFleetRequestInteractor) Execute(
 	caller := port.CallerFromContext(ctx)
 	dm, found, err := i.requests.ByID(ctx, in.RequestID)
 	if err != nil {
-		return port.RequestView{}, entity.InternalError("lecture de la demande")
+		return port.RequestView{}, entity.InternalError("reading the request")
 	}
 	if !found {
 		return port.RequestView{}, entity.RequestNotFound()
@@ -103,7 +103,7 @@ func (i *AcceptFleetRequestInteractor) Execute(
 		err := i.uow.Do(ctx, func(repos port.Repositories) error {
 			if err := repos.Requests.Reject(ctx, dm.ID, caller.OperatorID,
 				in.RejectionReasonID, in.Comment, i.clock.Now()); err != nil {
-				return entity.InternalError("rejet de la demande")
+				return entity.InternalError("rejecting the request")
 			}
 			return nil
 		})
@@ -120,7 +120,7 @@ func (i *AcceptFleetRequestInteractor) Execute(
 	for _, nr := range in.RejectedNumbers {
 		belongs, err := i.requests.NumberBelongs(ctx, dm.ID, nr.MSISDN)
 		if err != nil {
-			return port.RequestView{}, entity.InternalError("vérification du numéro")
+			return port.RequestView{}, entity.InternalError("checking the number")
 		}
 		if !belongs {
 			return port.RequestView{}, entity.ValidationFailed(
@@ -135,25 +135,25 @@ func (i *AcceptFleetRequestInteractor) Execute(
 	err = i.uow.Do(ctx, func(repos port.Repositories) error {
 		for _, nr := range in.RejectedNumbers {
 			if err := repos.Requests.RejectNumber(ctx, dm.ID, nr.MSISDN, nr.RejectionReasonID); err != nil {
-				return entity.InternalError("rejet du numéro")
+				return entity.InternalError("rejecting the number")
 			}
 		}
 
 		active, err := repos.Requests.HasActiveNumber(ctx, dm.ID)
 		if err != nil {
-			return entity.InternalError("vérification de la flotte")
+			return entity.InternalError("checking the fleet")
 		}
 		if !active {
 			fleetExhausted = true
 			if err := repos.Requests.Reject(ctx, dm.ID, caller.OperatorID, "",
 				in.Comment, i.clock.Now()); err != nil {
-				return entity.InternalError("rejet de la demande")
+				return entity.InternalError("rejecting the request")
 			}
 			return nil
 		}
 
 		if err := repos.Requests.SetComment(ctx, dm.ID, in.Comment); err != nil {
-			return entity.InternalError("enregistrement du commentaire")
+			return entity.InternalError("saving the comment")
 		}
 		return nil
 	})
@@ -163,7 +163,7 @@ func (i *AcceptFleetRequestInteractor) Execute(
 
 	if !fleetExhausted {
 		if err := i.engine.ScheduleTransition(ctx, dm.ID); err != nil {
-			return port.RequestView{}, entity.InternalError("planification de la transition")
+			return port.RequestView{}, entity.InternalError("scheduling the transition")
 		}
 	}
 	return i.readBack(ctx, dm.ID)
@@ -172,7 +172,7 @@ func (i *AcceptFleetRequestInteractor) Execute(
 func (i *AcceptFleetRequestInteractor) readBack(ctx context.Context, id string) (port.RequestView, *entity.Fault) {
 	view, found, err := i.requests.Get(ctx, id)
 	if err != nil || !found {
-		return port.RequestView{}, entity.InternalError("relecture de la demande")
+		return port.RequestView{}, entity.InternalError("re-reading the request")
 	}
 	return view, nil
 }

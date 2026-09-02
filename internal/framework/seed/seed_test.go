@@ -24,7 +24,7 @@ func TestOperatorsExactIdentifiers(t *testing.T) {
 		var got string
 		require.NoErrorf(t, db.Pool.QueryRow(ctx,
 			"SELECT nom FROM operateur WHERE id = $1", id).Scan(&got),
-			"opérateur %s absent", id)
+			"operator %s missing", id)
 		require.Equal(t, name, got)
 	}
 
@@ -105,15 +105,15 @@ func TestNumberPool(t *testing.T) {
 		require.NoErrorf(t, db.Pool.QueryRow(ctx,
 			`SELECT operateur_actuel_id, date_dernier_portage, deja_restitue
 			 FROM numero WHERE msisdn = $1`, c.msisdn).Scan(&current, &date, &returned),
-			"numéro %s absent du vivier", c.msisdn)
+			"number %s missing from the pool", c.msisdn)
 
 		require.Equal(t, c.currentOperator, current, c.msisdn)
 		require.Equal(t, c.alreadyReturned, returned, c.msisdn)
 		if !c.porting {
-			require.Nilf(t, date, "%s ne doit pas porter de date de portage", c.msisdn)
+			require.Nilf(t, date, "%s must not carry a porting date", c.msisdn)
 			continue
 		}
-		require.NotNilf(t, date, "%s doit porter une date de portage", c.msisdn)
+		require.NotNilf(t, date, "%s must carry a porting date", c.msisdn)
 		age := int(time.Since(*date).Hours() / 24)
 		require.GreaterOrEqual(t, age, c.portingAgeMinD, c.msisdn)
 		require.LessOrEqual(t, age, c.portingAgeMaxD, c.msisdn)

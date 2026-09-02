@@ -498,7 +498,7 @@
      "Création de demande"
     ],
     "summary": "Soumettre une demande de validation de reverse (§7.6)",
-    "description": "Un reverse restitue un numéro à son opérateur d'origine **sur décision de l'ARTP**.\nContrairement au portage et à la restitution, la demande passe d'abord par une étape de\n**validation administrative** hors de cette API.\n\n**Seul l'opérateur source** (opérateur d'origine du numéro) peut soumettre.\n**Pas d'annulation** : une fois soumise, elle reste `EN_ATTENTE` jusqu'à décision de l'ARTP.\n\nDans le sandbox, cette décision se prend avec le CLI compagnon :\n`artp reverse valider <id>` ou `artp reverse rejeter <id>`.\n",
+    "description": "Un reverse restitue un numéro à son opérateur d'origine **sur décision de l'ARTP**.\nContrairement au portage et à la restitution, la demande passe d'abord par une étape de\n**validation administrative** hors de cette API.\n\n**Seul l'opérateur source** (opérateur d'origine du numéro) peut soumettre.\n**Pas d'annulation** : une fois soumise, elle reste `EN_ATTENTE` jusqu'à décision de l'ARTP.\n\nDans le sandbox, cette décision se prend avec le CLI compagnon :\n`artp reverse validate <id>` ou `artp reverse reject <id>`.\n",
     "requestBody": {
      "$ref": "#/components/requestBodies/Numero"
     },

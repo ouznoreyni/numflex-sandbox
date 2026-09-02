@@ -83,7 +83,7 @@ func TestAcceptanceRejectionRollsBack(t *testing.T) {
 		t.Fatal(err)
 	}
 	if status != "EN_COURS" {
-		t.Fatalf("le numéro 771000001 a survécu REJETE malgré le rollback (statut = %s)", status)
+		t.Fatalf("number 771000001 survived REJETE despite the rollback (status = %s)", status)
 	}
 }
 
@@ -116,7 +116,7 @@ func TestAcceptanceRejectRollsBack(t *testing.T) {
 		t.Fatal(err)
 	}
 	if status != "EN_COURS" {
-		t.Fatalf("la demande a survécu REJETE malgré le rollback (statut = %s)", status)
+		t.Fatalf("the request survived REJETE despite the rollback (status = %s)", status)
 	}
 
 	var n int
@@ -125,6 +125,6 @@ func TestAcceptanceRejectRollsBack(t *testing.T) {
 		t.Fatal(err)
 	}
 	if n != 0 {
-		t.Fatalf("la ligne etape_historique a survécu au rollback (%d ligne(s))", n)
+		t.Fatalf("the etape_historique row survived the rollback (%d row(s))", n)
 	}
 }

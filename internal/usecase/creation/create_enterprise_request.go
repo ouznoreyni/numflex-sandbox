@@ -98,7 +98,7 @@ func (i *CreateEnterpriseRequestInteractor) Execute(
 	for _, number := range in.FleetNumbers {
 		state, found, err := i.numbers.State(ctx, number)
 		if err != nil {
-			return CreateEnterpriseRequestOutput{}, entity.InternalError("lecture du numéro")
+			return CreateEnterpriseRequestOutput{}, entity.InternalError("reading the number")
 		}
 		if !found {
 			return CreateEnterpriseRequestOutput{}, entity.IncorrectSourceOperator()
@@ -151,20 +151,20 @@ func (i *CreateEnterpriseRequestInteractor) Execute(
 			RoutingInfo:       &prefix,
 			RequestDate:       now,
 		}); err != nil {
-			return entity.InternalError("création de la demande")
+			return entity.InternalError("creating the request")
 		}
 		for _, number := range retained {
 			if err := repos.Requests.AddNumber(ctx, port.RequestNumberInput{
 				RequestID: id, MSISDN: number, RoutingInfo: &prefix,
 			}); err != nil {
-				return entity.InternalError("enregistrement du numéro")
+				return entity.InternalError("saving the number")
 			}
 		}
 		for _, ex := range excluded {
 			if err := repos.Requests.AddExcludedNumber(ctx, port.ExcludedNumberInput{
 				RequestID: id, MSISDN: ex.MSISDN, Reason: ex.Reason, ErrorCode: ex.ErrorCode,
 			}); err != nil {
-				return entity.InternalError("enregistrement du numéro exclu")
+				return entity.InternalError("saving the excluded number")
 			}
 		}
 		if err := repos.Requests.AddClient(ctx, port.ClientInput{
@@ -173,10 +173,10 @@ func (i *CreateEnterpriseRequestInteractor) Execute(
 			IDType: in.Client.IDType, IDNumber: in.Client.IDNumber,
 			CompanyName: companyName, RCNumber: rcNumber,
 		}); err != nil {
-			return entity.InternalError("enregistrement du client")
+			return entity.InternalError("saving the customer")
 		}
 		if err := repos.OTP.Consume(ctx, in.FleetMSISDN); err != nil {
-			return entity.InternalError("consommation de l'OTP")
+			return entity.InternalError("consuming the OTP")
 		}
 		return nil
 	})

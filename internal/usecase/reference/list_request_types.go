@@ -25,7 +25,7 @@ func NewListRequestTypes(g port.ReferenceGateway) *ListRequestTypesInteractor {
 func (i *ListRequestTypesInteractor) Execute(ctx context.Context) ([]entity.RequestTypeRef, *entity.Fault) {
 	out, err := i.gateway.RequestTypes(ctx)
 	if err != nil {
-		return nil, entity.InternalError("lecture des types de demande")
+		return nil, entity.InternalError("reading the request types")
 	}
 	return out, nil
 }

@@ -20,7 +20,7 @@ func TestNewUniqueness(t *testing.T) {
 	seen := make(map[string]bool, 10000)
 	for i := 0; i < 10000; i++ {
 		id := New()
-		require.Falsef(t, seen[id], "collision sur %q", id)
+		require.Falsef(t, seen[id], "collision on %q", id)
 		seen[id] = true
 	}
 }

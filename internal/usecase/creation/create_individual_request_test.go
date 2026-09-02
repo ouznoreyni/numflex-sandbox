@@ -17,7 +17,7 @@ import (
 
 // errFake stands in for a gateway-level failure (e.g. a real FK violation)
 // without depending on any concrete error type.
-var errFake = errors.New("échec simulé de la couche gateway")
+var errFake = errors.New("simulated gateway-layer failure")
 
 const (
 	orangeID = "operateur-orange"

@@ -122,8 +122,8 @@ func TestAcceptByMSISDNRefusedBecauseV2IdentifiesByRequestID(t *testing.T) {
 		map[string]any{"numero": "771000001", "accepte": true})
 
 	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
-	champs := body["fieldErrors"].([]any)
-	require.Equal(t, "idDemande", champs[0].(map[string]any)["field"])
+	fields := body["fieldErrors"].([]any)
+	require.Equal(t, "idDemande", fields[0].(map[string]any)["field"])
 }
 
 func TestAcceptFleetWithPartialRejection(t *testing.T) {

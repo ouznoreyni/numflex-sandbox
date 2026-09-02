@@ -28,13 +28,13 @@ import (
 func requireClient(t *testing.T, dto map[string]any) {
 	t.Helper()
 	client, ok := dto["client"].(map[string]any)
-	require.Truef(t, ok, "le DTO ne porte pas de client : %v", dto)
+	require.Truef(t, ok, "the DTO carries no client: %v", dto)
 	for _, field := range []string{
 		"nom", "prenom", "dateNaissance", "lieuNaissance", "typePiece", "numeroPiece",
 	} {
-		require.Containsf(t, client, field, "client.%s manquant", field)
+		require.Containsf(t, client, field, "client.%s missing", field)
 	}
-	require.Len(t, client, 6, "le client ne doit porter que les six champs mesurés")
+	require.Len(t, client, 6, "the client must carry only the six measured fields")
 }
 
 // Capture « yas-1 Créer une demande de portage — abonné particulier », 201.
@@ -142,7 +142,7 @@ func TestCaptureTimestampsInMilliseconds(t *testing.T) {
 
 	date := body["data"].(map[string]any)["dateDemande"].(string)
 	require.Regexp(t, `^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?Z$`, date,
-		"la plateforme rend des horodatages à la milliseconde")
+		"the platform renders millisecond timestamps")
 }
 
 // Captures « 1.orange_3_DESACTIVATION…_next_ACTIVATION » and
@@ -187,6 +187,6 @@ func TestNonZeroConvergenceRestoresSITBehaviour(t *testing.T) {
 
 	require.Equal(t, "DESACTIVATION",
 		body["data"].(map[string]any)["etapeActuelle"],
-		"fenêtre de convergence non nulle : la réponse porte l'étape précédente (R-10)")
+		"non-zero convergence window: the response carries the previous step (R-10)")
 	require.Equal(t, "DESACTIVATION", h.step(id))
 }

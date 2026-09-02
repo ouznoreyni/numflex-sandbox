@@ -27,7 +27,7 @@ func NewIncoming(q port.QueryGateway, r port.RequestGateway) *IncomingInteractor
 func (i *IncomingInteractor) Execute(ctx context.Context, operatorID string) ([]port.RequestView, *entity.Fault) {
 	ids, err := i.queries.Incoming(ctx, operatorID)
 	if err != nil {
-		return nil, entity.InternalError("lecture des demandes IN")
+		return nil, entity.InternalError("reading the IN requests")
 	}
 	return resolveViews(ctx, i.requests, ids)
 }

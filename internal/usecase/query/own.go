@@ -17,7 +17,7 @@ func resolveViews(ctx context.Context, requests port.RequestGateway, ids []strin
 	for _, id := range ids {
 		view, found, err := requests.Get(ctx, id)
 		if err != nil || !found {
-			return nil, entity.InternalError("lecture de la demande")
+			return nil, entity.InternalError("reading the request")
 		}
 		out = append(out, view)
 	}
@@ -68,7 +68,7 @@ func NewOwn(q port.QueryGateway, r port.RequestGateway) *OwnInteractor {
 func (i *OwnInteractor) Execute(ctx context.Context, operatorID string) ([]port.RequestView, *entity.Fault) {
 	ids, err := i.queries.Own(ctx, operatorID)
 	if err != nil {
-		return nil, entity.InternalError("lecture des demandes")
+		return nil, entity.InternalError("reading the requests")
 	}
 	return resolveViews(ctx, i.requests, ids)
 }

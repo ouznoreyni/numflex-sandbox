@@ -25,7 +25,7 @@ func NewListProcesses(g port.ReferenceGateway) *ListProcessesInteractor {
 func (i *ListProcessesInteractor) Execute(ctx context.Context) ([]entity.Process, *entity.Fault) {
 	out, err := i.gateway.Processes(ctx)
 	if err != nil {
-		return nil, entity.InternalError("lecture des processus")
+		return nil, entity.InternalError("reading the processes")
 	}
 	return out, nil
 }

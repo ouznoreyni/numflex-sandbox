@@ -50,7 +50,7 @@ func (i *CancelRequestInteractor) Execute(
 	caller := port.CallerFromContext(ctx)
 	dm, found, err := i.requests.ByID(ctx, requestID)
 	if err != nil {
-		return port.RequestView{}, entity.InternalError("lecture de la demande")
+		return port.RequestView{}, entity.InternalError("reading the request")
 	}
 	if !found {
 		return port.RequestView{}, entity.RequestNotFound()
@@ -66,7 +66,7 @@ func (i *CancelRequestInteractor) Execute(
 				"Cette demande ne peut plus être annulée : son étape a changé depuis l'autorisation.")
 		}
 		if err != nil {
-			return entity.InternalError("annulation de la demande")
+			return entity.InternalError("cancelling the request")
 		}
 		return nil
 	})
@@ -76,7 +76,7 @@ func (i *CancelRequestInteractor) Execute(
 
 	view, found, err := i.requests.Get(ctx, dm.ID)
 	if err != nil || !found {
-		return port.RequestView{}, entity.InternalError("relecture de la demande")
+		return port.RequestView{}, entity.InternalError("re-reading the request")
 	}
 	return view, nil
 }

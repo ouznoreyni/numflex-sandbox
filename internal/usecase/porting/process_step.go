@@ -9,7 +9,7 @@ import (
 )
 
 // ProcessStepInput carries POST /demandes/traitement's body, already bound
-// by the controller. It carries no étape field — v2 dropped it, and a v1
+// by the controller. It carries no etape field — v2 dropped it, and a v1
 // client that still sends one is silently ignored rather than rejected
 // (ANO-018): the current step is executed regardless of what the caller
 // believes it is treating.
@@ -64,7 +64,7 @@ func (i *ProcessStepInteractor) Execute(
 	caller := port.CallerFromContext(ctx)
 	dm, found, err := i.requests.ByID(ctx, in.RequestID)
 	if err != nil {
-		return port.RequestView{}, entity.InternalError("lecture de la demande")
+		return port.RequestView{}, entity.InternalError("reading the request")
 	}
 	if !found {
 		return port.RequestView{}, entity.RequestNotFound()
@@ -80,7 +80,7 @@ func (i *ProcessStepInteractor) Execute(
 	if in.Comment != "" {
 		err := i.uow.Do(ctx, func(repos port.Repositories) error {
 			if err := repos.Requests.SetComment(ctx, dm.ID, in.Comment); err != nil {
-				return entity.InternalError("enregistrement du commentaire")
+				return entity.InternalError("saving the comment")
 			}
 			return nil
 		})
@@ -90,7 +90,7 @@ func (i *ProcessStepInteractor) Execute(
 	}
 
 	if err := i.engine.ScheduleTransition(ctx, dm.ID); err != nil {
-		return port.RequestView{}, entity.InternalError("planification de la transition")
+		return port.RequestView{}, entity.InternalError("scheduling the transition")
 	}
 
 	// The request is read back AFTER requesting the transition, never after
@@ -100,7 +100,7 @@ func (i *ProcessStepInteractor) Execute(
 	// decides.
 	view, found, err := i.requests.Get(ctx, dm.ID)
 	if err != nil || !found {
-		return port.RequestView{}, entity.InternalError("relecture de la demande")
+		return port.RequestView{}, entity.InternalError("re-reading the request")
 	}
 	return view, nil
 }

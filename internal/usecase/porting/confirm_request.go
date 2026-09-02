@@ -68,7 +68,7 @@ func (i *ConfirmRequestInteractor) Execute(
 	caller := port.CallerFromContext(ctx)
 	dm, found, err := i.requests.ByID(ctx, in.RequestID)
 	if err != nil {
-		return port.RequestView{}, entity.InternalError("lecture de la demande")
+		return port.RequestView{}, entity.InternalError("reading the request")
 	}
 	if !found {
 		return port.RequestView{}, entity.RequestNotFound()
@@ -84,7 +84,7 @@ func (i *ConfirmRequestInteractor) Execute(
 
 	allOperators, err := i.operators.Operators(ctx)
 	if err != nil {
-		return port.RequestView{}, entity.InternalError("lecture des opérateurs")
+		return port.RequestView{}, entity.InternalError("reading the operators")
 	}
 	ids := make([]string, 0, len(allOperators))
 	for _, op := range allOperators {
@@ -110,7 +110,7 @@ func (i *ConfirmRequestInteractor) Execute(
 			return entity.RequestAccessDenied("Votre opérateur a déjà confirmé cette demande.")
 		}
 		if err != nil {
-			return entity.InternalError("enregistrement de la confirmation")
+			return entity.InternalError("saving the confirmation")
 		}
 		return nil
 	})
@@ -120,17 +120,17 @@ func (i *ConfirmRequestInteractor) Execute(
 
 	count, err := i.confirmations.Count(ctx, dm.ID)
 	if err != nil {
-		return port.RequestView{}, entity.InternalError("comptage des confirmations")
+		return port.RequestView{}, entity.InternalError("counting the confirmations")
 	}
 	if count >= len(expected) {
 		if err := i.engine.ScheduleTransition(ctx, dm.ID); err != nil {
-			return port.RequestView{}, entity.InternalError("planification de la transition")
+			return port.RequestView{}, entity.InternalError("scheduling the transition")
 		}
 	}
 
 	view, found, err := i.requests.Get(ctx, dm.ID)
 	if err != nil || !found {
-		return port.RequestView{}, entity.InternalError("relecture de la demande")
+		return port.RequestView{}, entity.InternalError("re-reading the request")
 	}
 	return view, nil
 }

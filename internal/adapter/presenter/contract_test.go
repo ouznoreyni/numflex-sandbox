@@ -36,9 +36,9 @@ func TestContractKindStatusMapping(t *testing.T) {
 	}{
 		{entity.Validation(entity.FieldFault{Field: "numero", Message: "obligatoire"}), 400, "VALIDATION_ECHOUEE"},
 		{entity.RequestNotFound(), 404, "DEMANDE_NON_TROUVEE"},
-		{entity.RequestAccessDenied("refusé"), 403, "DEMANDE_ACCES_REFUSE"},
-		{entity.InvalidStep("mauvaise étape"), 409, "ETAPE_INVALIDE"},
-		{entity.InternalError("boum"), 500, "ERREUR_INTERNE"},
+		{entity.RequestAccessDenied("denied"), 403, "DEMANDE_ACCES_REFUSE"},
+		{entity.InvalidStep("wrong step"), 409, "ETAPE_INVALIDE"},
+		{entity.InternalError("boom"), 500, "ERREUR_INTERNE"},
 	}
 	for _, x := range cases {
 		c := NewContract(inmemory.FixedClock{})

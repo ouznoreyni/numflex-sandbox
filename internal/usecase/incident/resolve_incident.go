@@ -47,7 +47,7 @@ func (i *ResolveIncidentInteractor) Execute(
 ) (port.IncidentView, *entity.Fault) {
 	inc, found, err := i.incidents.ByID(ctx, in.IncidentID)
 	if err != nil {
-		return port.IncidentView{}, entity.InternalError("lecture de l'incident")
+		return port.IncidentView{}, entity.InternalError("reading the incident")
 	}
 	if !found {
 		return port.IncidentView{}, entity.IncidentNotFound()
@@ -60,7 +60,7 @@ func (i *ResolveIncidentInteractor) Execute(
 
 	err = i.uow.Do(ctx, func(repos port.Repositories) error {
 		if err := repos.Incidents.Resolve(ctx, in.IncidentID, in.Comment, i.clock.Now()); err != nil {
-			return entity.InternalError("résolution de l'incident")
+			return entity.InternalError("resolving the incident")
 		}
 		return nil
 	})
@@ -70,7 +70,7 @@ func (i *ResolveIncidentInteractor) Execute(
 
 	view, found, err := i.incidents.Get(ctx, in.IncidentID)
 	if err != nil || !found {
-		return port.IncidentView{}, entity.InternalError("relecture de l'incident")
+		return port.IncidentView{}, entity.InternalError("re-reading the incident")
 	}
 	return view, nil
 }

@@ -63,7 +63,7 @@ func Validation(fields ...FieldFault) *Fault {
 //     that Fault, unwrapped, is returned as-is.
 //   - err nil, or errors.As succeeds on a *Fault that is itself a typed nil
 //     (a nil *Fault wrapped in a non-nil error — calling Error() on that
-//     receiver would panic): InternalError("erreur interne").
+//     receiver would panic): InternalError("internal error").
 //   - any other error: InternalError(err.Error()), its text becoming the
 //     business message of the resulting 500.
 func FaultFrom(err error) *Fault {
@@ -73,12 +73,12 @@ func FaultFrom(err error) *Fault {
 	case found && f != nil:
 		return f
 	case err == nil:
-		return InternalError("erreur interne")
+		return InternalError("internal error")
 	case found:
 		// errors.As succeeded on a *Fault typed nil wrapped in err:
 		// err.Error() would call the method on this nil receiver and
 		// would panic.
-		return InternalError("erreur interne")
+		return InternalError("internal error")
 	default:
 		return InternalError(err.Error())
 	}

@@ -33,9 +33,9 @@ CREATE TABLE type_incident (
     fige_systeme BOOLEAN NOT NULL
 );
 
--- Registre national des numéros. C'est lui qui rend calculables
--- DELAI_PORTAGE_NON_RESPECTE, NUMERO_NON_PORTE, OPERATEUR_SOURCE_INCORRECT
--- et NUMERO_DEJA_CHEZ_DESTINATAIRE.
+-- National registry of numbers. It is what makes DELAI_PORTAGE_NON_RESPECTE,
+-- NUMERO_NON_PORTE, OPERATEUR_SOURCE_INCORRECT and
+-- NUMERO_DEJA_CHEZ_DESTINATAIRE computable.
 CREATE TABLE numero (
     msisdn               TEXT PRIMARY KEY,
     operateur_actuel_id  TEXT NOT NULL REFERENCES operateur(id),
@@ -136,8 +136,8 @@ CREATE TABLE incident (
     id                    TEXT PRIMARY KEY,
     operateur_id          TEXT NOT NULL REFERENCES operateur(id),
     type_incident_id      TEXT NOT NULL REFERENCES type_incident(id),
-    -- Dénormalisé depuis type_incident : un index partiel ne peut pas suivre
-    -- une jointure, et la contrainte du §7.12 ne vise que les incidents internes.
+    -- Denormalised from type_incident: a partial index cannot follow a join,
+    -- and the §7.12 constraint only targets internal incidents.
     fige_systeme          BOOLEAN NOT NULL,
     description           TEXT NOT NULL,
     statut                TEXT NOT NULL,
@@ -146,8 +146,8 @@ CREATE TABLE incident (
     commentaire_resolution TEXT
 );
 
--- Un seul incident INTERNE ouvert à la fois par opérateur — §7.12. Les incidents
--- gateway ne sont pas limités.
+-- One INTERNE incident open at a time per operator — §7.12. Gateway incidents
+-- are not limited.
 CREATE UNIQUE INDEX incident_interne_unique_ouvert
     ON incident (operateur_id)
     WHERE statut = 'EN_COURS' AND fige_systeme;

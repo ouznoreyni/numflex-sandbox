@@ -71,7 +71,7 @@ func TestPortingConfirmRollsBack(t *testing.T) {
 		t.Fatal(err)
 	}
 	if n != 0 {
-		t.Fatalf("la confirmation a survécu au rollback (%d ligne(s))", n)
+		t.Fatalf("the confirmation survived the rollback (%d row(s))", n)
 	}
 }
 
@@ -105,7 +105,7 @@ func TestPortingProcessStepCommentRollsBack(t *testing.T) {
 		t.Fatal(err)
 	}
 	if comment != nil {
-		t.Fatalf("le commentaire a survécu au rollback (%q)", *comment)
+		t.Fatalf("the comment survived the rollback (%q)", *comment)
 	}
 }
 
@@ -138,7 +138,7 @@ func TestPortingCancelRollsBack(t *testing.T) {
 		t.Fatal(err)
 	}
 	if status != "EN_COURS" {
-		t.Fatalf("la demande a survécu ANNULE malgré le rollback (statut = %s)", status)
+		t.Fatalf("the request survived ANNULE despite the rollback (status = %s)", status)
 	}
 
 	var n int
@@ -147,6 +147,6 @@ func TestPortingCancelRollsBack(t *testing.T) {
 		t.Fatal(err)
 	}
 	if n != 0 {
-		t.Fatalf("la ligne etape_historique a survécu au rollback (%d ligne(s))", n)
+		t.Fatalf("the etape_historique row survived the rollback (%d row(s))", n)
 	}
 }

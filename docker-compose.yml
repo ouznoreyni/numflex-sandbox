@@ -32,15 +32,15 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    # Le .env du dépôt, s'il existe, alimente le conteneur ; il n'est pas requis.
+    # The repository's .env, if it exists, feeds the container; it is not required.
     env_file:
       - path: .env
         required: false
-    # Ce bloc l'emporte sur le fichier — c'est voulu : cette valeur doit être
-    # vraie *dans le réseau compose*, où la base ne s'appelle pas localhost.
-    # Tout le reste de la configuration se règle par le .env.
+    # This block wins over the file — deliberately: this value must be true
+    # *inside the compose network*, where the database is not called localhost.
+    # All the rest of the configuration is set through the .env.
     environment:
       DATABASE_URL: postgres://numflex:numflex@postgres:5432/numflex?sslmode=disable
-    # PORT est lu depuis le même .env, côté hôte comme côté conteneur : les deux
-    # extrémités de la publication restent alignées si on le change.
+    # PORT is read from the same .env, host side as container side: both ends
+    # of the publication stay aligned if it is changed.
     ports: ["${PORT:-8080}:${PORT:-8080}"]

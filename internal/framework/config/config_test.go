@@ -12,7 +12,7 @@ func TestLoadDefaults(t *testing.T) {
 	// make test exports the CI profile for the whole suite; this test is
 	// about the default values, so it neutralizes those variables.
 	for _, key := range []string{
-		"ETAPE_TIMEOUT_SECONDS", "CONVERGENCE_MIN_SECONDS", "CONVERGENCE_MAX_SECONDS",
+		"STEP_TIMEOUT_SECONDS", "CONVERGENCE_MIN_SECONDS", "CONVERGENCE_MAX_SECONDS",
 		"COMPLETION_LATENCY_MS", "CLOCK_SKEW_SECONDS",
 	} {
 		t.Setenv(key, "")
@@ -71,7 +71,7 @@ func TestLoadCORSExplicitList(t *testing.T) {
 
 func TestLoadCIProfile(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgres://x")
-	t.Setenv("ETAPE_TIMEOUT_SECONDS", "0")
+	t.Setenv("STEP_TIMEOUT_SECONDS", "0")
 	t.Setenv("CONVERGENCE_MIN_SECONDS", "0")
 	t.Setenv("CONVERGENCE_MAX_SECONDS", "0")
 	t.Setenv("COMPLETION_LATENCY_MS", "0")

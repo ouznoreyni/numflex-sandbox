@@ -39,7 +39,7 @@ func (p *Contract) SuccessWithoutData(status int, message string) ViewModel {
 // c.Request.URL.Path).
 func (p *Contract) Failure(f *entity.Fault, _ string) ViewModel {
 	if f == nil {
-		f = entity.InternalError("erreur interne")
+		f = entity.InternalError("internal error")
 	}
 	return ViewModel{Status: contractStatus(f.Kind), Body: Envelope{
 		Success: false,

@@ -25,7 +25,7 @@ func NewListIncidentTypes(g port.ReferenceGateway) *ListIncidentTypesInteractor 
 func (i *ListIncidentTypesInteractor) Execute(ctx context.Context) ([]entity.IncidentType, *entity.Fault) {
 	out, err := i.gateway.IncidentTypes(ctx)
 	if err != nil {
-		return nil, entity.InternalError("lecture des types d'incident")
+		return nil, entity.InternalError("reading the incident types")
 	}
 	return out, nil
 }

@@ -54,34 +54,34 @@ func (i *PurgeTestDataInteractor) Execute(ctx context.Context) (PurgeTestDataRes
 	err := i.uow.Do(ctx, func(repos port.Repositories) error {
 		ids, err := repos.Sandbox.RequestIDsToPurge(ctx, caller.OperatorID)
 		if err != nil {
-			return entity.InternalError("lecture des demandes à purger")
+			return entity.InternalError("reading the requests to purge")
 		}
 
 		numbers, err := repos.Sandbox.NumbersToRestore(ctx, ids)
 		if err != nil {
-			return entity.InternalError("lecture des numéros à restaurer")
+			return entity.InternalError("reading the numbers to restore")
 		}
 
 		// Ahead of the demande DELETE: reverse_request's foreign key carries
 		// no ON DELETE CASCADE and would block it.
 		reverseCount, err := repos.Sandbox.DeleteReverseRequests(ctx, caller.OperatorID, ids)
 		if err != nil {
-			return entity.InternalError("purge des demandes de reverse")
+			return entity.InternalError("purging the reverse requests")
 		}
 
 		otpCount, err := repos.Sandbox.DeleteOTP(ctx, numbers)
 		if err != nil {
-			return entity.InternalError("purge des OTP")
+			return entity.InternalError("purging the OTPs")
 		}
 
 		requestCount, err := repos.Sandbox.DeleteRequests(ctx, ids)
 		if err != nil {
-			return entity.InternalError("purge des demandes")
+			return entity.InternalError("purging the requests")
 		}
 
 		numberCount, err := repos.Sandbox.RestoreNumbers(ctx, numbers)
 		if err != nil {
-			return entity.InternalError("restauration du registre")
+			return entity.InternalError("restoring the registry")
 		}
 
 		result = PurgeTestDataResult{

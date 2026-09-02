@@ -17,10 +17,10 @@ func writeEnv(t *testing.T, content string) string {
 
 func TestLoadEnvFileSetsValues(t *testing.T) {
 	t.Setenv("ENV_FILE", writeEnv(t, `
-# un commentaire
+# a comment
 PORT=9090
 export FIDELITY=contract
-JWT_SECRET="secret # avec dièse"
+JWT_SECRET="secret # with hash"
 OTP_STATIC_CODE='000000'
 `))
 	t.Setenv("PORT", "")
@@ -34,7 +34,7 @@ OTP_STATIC_CODE='000000'
 	for key, expected := range map[string]string{
 		"PORT":            "9090",
 		"FIDELITY":        "contract",
-		"JWT_SECRET":      "secret # avec dièse",
+		"JWT_SECRET":      "secret # with hash",
 		"OTP_STATIC_CODE": "000000",
 	} {
 		if got := os.Getenv(key); got != expected {
@@ -63,7 +63,7 @@ func TestLoadEnvFileImplicitAbsent(t *testing.T) {
 	t.Chdir(t.TempDir())
 
 	if err := LoadEnvFile(); err != nil {
-		t.Fatalf("un .env implicite absent n'est pas une erreur : %v", err)
+		t.Fatalf("a missing implicit .env is not an error: %v", err)
 	}
 }
 
@@ -71,7 +71,7 @@ func TestLoadEnvFileExplicitAbsent(t *testing.T) {
 	t.Setenv("ENV_FILE", filepath.Join(t.TempDir(), "introuvable.env"))
 
 	if err := LoadEnvFile(); err == nil {
-		t.Fatal("un ENV_FILE demandé et absent doit être une erreur")
+		t.Fatal("a requested but missing ENV_FILE must be an error")
 	}
 }
 
@@ -79,7 +79,7 @@ func TestLoadEnvFileInvalidLine(t *testing.T) {
 	t.Setenv("ENV_FILE", writeEnv(t, "PORT 9090\n"))
 
 	if err := LoadEnvFile(); err == nil {
-		t.Fatal("une ligne sans = doit être une erreur")
+		t.Fatal("a line without = must be an error")
 	}
 }
 
@@ -91,7 +91,7 @@ func TestApplyArguments(t *testing.T) {
 		t.Fatalf("arguments : %v", err)
 	}
 	if got := os.Getenv("PORT"); got != "9090" {
-		t.Errorf("un argument doit l'emporter sur l'environnement : PORT = %q", got)
+		t.Errorf("an argument must win over the environment: PORT = %q", got)
 	}
 	if got := os.Getenv("ENV_FILE"); got != "/config/recette.env" {
 		t.Errorf("ENV_FILE = %q", got)
@@ -106,7 +106,7 @@ func TestApplyArgumentsRejects(t *testing.T) {
 		{"1PORT=9090"},
 	} {
 		if err := ApplyArguments(args); err == nil {
-			t.Errorf("%v aurait dû être refusé", args)
+			t.Errorf("%v should have been rejected", args)
 		}
 	}
 }

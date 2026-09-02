@@ -30,12 +30,12 @@ func seedFleetRequest(f *fixture, numbers ...string) entity.PortingRequest {
 func TestAcceptFleetRequestWithPartialRejection(t *testing.T) {
 	f := newFixture()
 	seedFleetRequest(f, "771000001", "771000002", "771000003")
-	f.reasons.SeedRejectionReason(motifID, "Numéro Inactif")
+	f.reasons.SeedRejectionReason(reasonID, "Numéro Inactif")
 
 	view, fault := fleetInteractor(f).Execute(ctxCaller(orangeID), acceptance.AcceptFleetRequestInput{
 		RequestID: "flotte1", Accept: true,
 		RejectedNumbers: []acceptance.RejectedNumberInput{
-			{MSISDN: "771000002", RejectionReasonID: motifID},
+			{MSISDN: "771000002", RejectionReasonID: reasonID},
 		},
 		Comment: "Numéro 771000002 non conforme",
 	})
@@ -43,7 +43,7 @@ func TestAcceptFleetRequestWithPartialRejection(t *testing.T) {
 	require.Equal(t, "flotte1", view.ID)
 
 	require.Equal(t, "REJETE", f.requests.NumberStatus("flotte1", "771000002"))
-	require.Equal(t, motifID, f.requests.NumberRejectionReason("flotte1", "771000002"))
+	require.Equal(t, reasonID, f.requests.NumberRejectionReason("flotte1", "771000002"))
 	require.Equal(t, "EN_COURS", f.requests.NumberStatus("flotte1", "771000001"))
 	require.NotEqual(t, entity.RequestRejected, f.requests.Status("flotte1"))
 	require.Equal(t, []string{"flotte1"}, f.engine.Scheduled,
@@ -53,10 +53,10 @@ func TestAcceptFleetRequestWithPartialRejection(t *testing.T) {
 func TestAcceptFleetRequestTotalRejection(t *testing.T) {
 	f := newFixture()
 	seedFleetRequest(f, "771000001", "771000002")
-	f.reasons.SeedRejectionReason(motifID, "Données manquantes")
+	f.reasons.SeedRejectionReason(reasonID, "Données manquantes")
 
 	view, fault := fleetInteractor(f).Execute(ctxCaller(orangeID), acceptance.AcceptFleetRequestInput{
-		RequestID: "flotte1", Accept: false, RejectionReasonID: motifID,
+		RequestID: "flotte1", Accept: false, RejectionReasonID: reasonID,
 		Comment: "Dossier incomplet",
 	})
 	require.Nil(t, fault)
@@ -72,13 +72,13 @@ func TestAcceptFleetRequestTotalRejection(t *testing.T) {
 func TestAcceptFleetRequestExhaustedNumberByNumberFlips(t *testing.T) {
 	f := newFixture()
 	seedFleetRequest(f, "771000001", "771000002")
-	f.reasons.SeedRejectionReason(motifID, "Numéro Inactif")
+	f.reasons.SeedRejectionReason(reasonID, "Numéro Inactif")
 
 	view, fault := fleetInteractor(f).Execute(ctxCaller(orangeID), acceptance.AcceptFleetRequestInput{
 		RequestID: "flotte1", Accept: true,
 		RejectedNumbers: []acceptance.RejectedNumberInput{
-			{MSISDN: "771000001", RejectionReasonID: motifID},
-			{MSISDN: "771000002", RejectionReasonID: motifID},
+			{MSISDN: "771000001", RejectionReasonID: reasonID},
+			{MSISDN: "771000002", RejectionReasonID: reasonID},
 		},
 	})
 	require.Nil(t, fault)

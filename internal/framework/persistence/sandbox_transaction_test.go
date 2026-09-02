@@ -119,7 +119,7 @@ func TestSandboxPurgeRollsBack(t *testing.T) {
 		t.Fatal(err)
 	}
 	if requestCount != 1 {
-		t.Fatalf("la demande a survécu supprimée malgré le rollback (%d ligne(s))", requestCount)
+		t.Fatalf("the request survived deletion despite the rollback (%d row(s))", requestCount)
 	}
 
 	var nOTP int
@@ -128,7 +128,7 @@ func TestSandboxPurgeRollsBack(t *testing.T) {
 		t.Fatal(err)
 	}
 	if nOTP != 1 {
-		t.Fatalf("l'OTP a survécu supprimé malgré le rollback (%d ligne(s))", nOTP)
+		t.Fatalf("the OTP survived deletion despite the rollback (%d row(s))", nOTP)
 	}
 
 	var nReverse int
@@ -137,7 +137,7 @@ func TestSandboxPurgeRollsBack(t *testing.T) {
 		t.Fatal(err)
 	}
 	if nReverse != 1 {
-		t.Fatalf("la demande de reverse a survécu supprimée malgré le rollback (%d ligne(s))", nReverse)
+		t.Fatalf("the reverse request survived deletion despite the rollback (%d row(s))", nReverse)
 	}
 
 	var currentOperator string
@@ -146,6 +146,6 @@ func TestSandboxPurgeRollsBack(t *testing.T) {
 		t.Fatal(err)
 	}
 	if currentOperator != seed.OperatorOrangeID {
-		t.Fatalf("le registre a été restauré malgré le rollback (operateur_actuel_id = %s)", currentOperator)
+		t.Fatalf("the registry was restored despite the rollback (operateur_actuel_id = %s)", currentOperator)
 	}
 }

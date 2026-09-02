@@ -17,21 +17,21 @@ func main() {
 	// over the .env file: a container can be configured indifferently via
 	// `-e`, via a mounted `.env`, or via `KEY=value` arguments.
 	if err := config.ApplyArguments(os.Args[1:]); err != nil {
-		log.Fatalf("arguments : %v", err)
+		log.Fatalf("arguments: %v", err)
 	}
 	if err := config.LoadEnvFile(); err != nil {
-		log.Fatalf("configuration : %v", err)
+		log.Fatalf("configuration: %v", err)
 	}
 
 	c, err := config.Load()
 	if err != nil {
-		log.Fatalf("configuration : %v", err)
+		log.Fatalf("configuration: %v", err)
 	}
-	log.Printf("numflex-sandbox — fidélité=%s expiration=%s port=%s",
+	log.Printf("numflex-sandbox — fidelity=%s timeout=%s port=%s",
 		c.Fidelity, c.StepTimeout, c.Port)
 
 	if err := persistence.Migrate(c.DatabaseURL); err != nil {
-		log.Fatalf("migrations : %v", err)
+		log.Fatalf("migrations: %v", err)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -39,12 +39,12 @@ func main() {
 
 	db, err := persistence.Open(ctx, c.DatabaseURL)
 	if err != nil {
-		log.Fatalf("ouverture de la base : %v", err)
+		log.Fatalf("opening the database: %v", err)
 	}
 	defer db.Close()
 
 	if err := seed.Run(ctx, db); err != nil {
-		log.Fatalf("seed : %v", err)
+		log.Fatalf("seed: %v", err)
 	}
 
 	eng := engine.New(c, db)

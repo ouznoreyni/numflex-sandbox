@@ -48,7 +48,7 @@ func (i *SubmitReverseRequestInteractor) Execute(
 ) (port.ReverseView, *entity.Fault) {
 	state, found, err := i.numbers.State(ctx, in.MSISDN)
 	if err != nil {
-		return port.ReverseView{}, entity.InternalError("lecture du numéro")
+		return port.ReverseView{}, entity.InternalError("reading the number")
 	}
 	if !found {
 		return port.ReverseView{}, entity.IncorrectSourceOperator()
@@ -70,7 +70,7 @@ func (i *SubmitReverseRequestInteractor) Execute(
 		if err := repos.Reverse.Create(ctx, port.ReverseCreateInput{
 			ID: id, MSISDN: in.MSISDN, OperatorID: caller.OperatorID, RequestDate: now,
 		}); err != nil {
-			return entity.InternalError("création de la demande de reverse")
+			return entity.InternalError("creating the reverse request")
 		}
 		return nil
 	})
@@ -80,7 +80,7 @@ func (i *SubmitReverseRequestInteractor) Execute(
 
 	view, found, err := i.reverse.Get(ctx, id)
 	if err != nil || !found {
-		return port.ReverseView{}, entity.InternalError("relecture de la demande de reverse")
+		return port.ReverseView{}, entity.InternalError("re-reading the reverse request")
 	}
 	return view, nil
 }

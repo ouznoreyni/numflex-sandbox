@@ -26,7 +26,7 @@ type Deps struct {
 // Engine — the part of the platform's behaviour that calls do not drive.
 type Engine interface {
 	MarketFrozen(ctx context.Context) (bool, error)
-	ScheduleTransition(ctx context.Context, demandeID string) error
+	ScheduleTransition(ctx context.Context, requestID string) error
 }
 
 // presenter picks Real or Contract according to the configured fidelity
