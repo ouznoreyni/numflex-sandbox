@@ -80,7 +80,7 @@ revue : il casse la suite.
 3. **`internal/usecase/otp`** — `SendOTPInteractor.Execute` applique la règle
    (durée de validité, code statique du sandbox) et écrit via `port.OTPGateway`.
    Il ne sait pas qu'il y a une base derrière.
-4. **`internal/adapter/gateway/postgres`** — `OTPGateway.Save` traduit le modèle en
+4. **`internal/adapter/gateway/postgres`** — `OTPGateway.Upsert` traduit le modèle en
    `INSERT INTO otp (numero, code, expire_a, …)`. C'est ici, et uniquement ici,
    que le vocabulaire français des colonnes apparaît.
 5. **`internal/framework/persistence`** — le `*pgxpool.Pool` exécute. Quand

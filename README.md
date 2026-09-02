@@ -300,13 +300,13 @@ Toutes portent leur identifiant du rapport SIT.
 Trois comportements ne sont ni documentés au guide v2, ni mesurés en recette. Ils sont marqués
 `[HYP]` dans le code, à l'endroit exact où la décision est prise :
 
-1. **Préfixe de routage EXPRESSO** (`internal/seed/seed.go`) — `191` (ORANGE) et `192` (YAS) sont
-   documentés ; `193` pour EXPRESSO est déduit de la série.
-2. **Statut `REJETE`** (`internal/domain/demande.go`) — ni documenté au cycle de vie, ni observé.
+1. **Préfixe de routage EXPRESSO** (`internal/framework/seed/seed.go`) — `191` (ORANGE) et
+   `192` (YAS) sont documentés ; `193` pour EXPRESSO est déduit de la série.
+2. **Statut `REJETE`** (`internal/entity/porting_request.go`) — ni documenté au cycle de vie, ni observé.
    Une demande refusée doit bien porter un état terminal distinct de `TERMINE`.
-3. **Répartition des rôles en restitution** (`internal/api/demandes_creation.go`) — le guide ne
-   tranche pas qui est source et qui est destinataire ; le sandbox fait de l'opérateur d'origine le
-   destinataire.
+3. **Répartition des rôles en restitution**
+   (`internal/usecase/creation/create_restitution_request.go`) — le guide ne tranche pas qui est
+   source et qui est destinataire ; le sandbox fait de l'opérateur d'origine le destinataire.
 
 D'autres `[HYP]` plus locaux existent (flotte intégralement rejetée, absence de garde de gel sur
 l'annulation, messages d'erreur non mesurés) : `grep -rn '\[HYP\]' internal/`.
