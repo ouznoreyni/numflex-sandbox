@@ -85,7 +85,6 @@ for argument in "$@"; do
 	--env-file) expect_path=1 ;;
 	--env-file=*) arg_envfile="${argument#--env-file=}" ;;
 	PGDATA=*) arg_pgdata="${argument#PGDATA=}" ;;
-	DOCS_PORT=*) arg_docsport="${argument#DOCS_PORT=}" ;;
 	POSTGRES_USER=*) arg_user="${argument#POSTGRES_USER=}" ;;
 	POSTGRES_PASSWORD=*) arg_password="${argument#POSTGRES_PASSWORD=}" ;;
 	POSTGRES_DB=*) arg_db="${argument#POSTGRES_DB=}" ;;
@@ -117,17 +116,13 @@ POSTGRES_PASSWORD=$(resolve POSTGRES_PASSWORD numflex "${arg_password:-}")
 POSTGRES_DB=$(resolve POSTGRES_DB numflex "${arg_db:-}")
 export PGDATA POSTGRES_USER POSTGRES_PASSWORD POSTGRES_DB
 
-# The documentation port. 0 turns the doc server off, for whoever wants the
-# container to present strictly the platform's surface and nothing else.
-DOCS_PORT=$(resolve DOCS_PORT 8081 "${arg_docsport:-}")
-
 # DATABASE_URL is set, not read: the database lives in the container, and a
 # value coming from the .env or from an argument would point at a database this
 # image does not manage. It is the only server variable the image decides.
 DATABASE_URL="postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@127.0.0.1:5432/${POSTGRES_DB}?sslmode=disable"
 export DATABASE_URL
 
-echo "standalone — data: $PGDATA · database: $POSTGRES_DB · docs: ${DOCS_PORT:-off} · env: $env_file$([ -f "$env_file" ] || echo ' (absent)')"
+echo "standalone — data: $PGDATA · database: $POSTGRES_DB · env: $env_file$([ -f "$env_file" ] || echo ' (absent)')"
 
 # ── the database ────────────────────────────────────────────────────────────
 # The postgres image's official entrypoint does the whole bootstrap: initdb on
@@ -158,7 +153,6 @@ done
 # recover on the next start.
 shutdown() {
 	kill -TERM "$server_pid" 2>/dev/null || true
-	[ -n "${docs_pid:-}" ] && kill -TERM "$docs_pid" 2>/dev/null
 	wait "$server_pid" 2>/dev/null || true
 	su-exec postgres pg_ctl -D "$PGDATA" -m fast stop >/dev/null 2>&1 || true
 	exit 0
@@ -169,16 +163,4 @@ trap shutdown TERM INT
 # walking up from the current directory — hence the image's WORKDIR /app.
 su-exec postgres /usr/local/bin/server "$@" &
 server_pid=$!
-
-# The documentation, on its own port. It is deliberately NOT a route of the
-# gateway: the sandbox must expose exactly the contract's surface, and a doc
-# route would make it distinguishable from the real platform. Serving the page
-# from the same container is a convenience of the `standalone` image only —
-# `runtime` ships no page and no server for one.
-if [ "$DOCS_PORT" != "0" ]; then
-	su-exec postgres httpd -f -p "$DOCS_PORT" -h /app/docs &
-	docs_pid=$!
-	echo "docs        — http://localhost:$DOCS_PORT/swagger.html"
-fi
-
 wait "$server_pid"

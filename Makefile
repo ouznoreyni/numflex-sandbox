@@ -100,10 +100,9 @@ push:
 # This image is not a hardening: it ships a shell and a package manager, and
 # starts as root for the duration of initdb. For a deployment, use `make push`
 # and a separate database.
-DATA      ?= $(PWD)/data
-PORT      ?= 8080
-DOCS_PORT ?= 8081
-ENV_FILE  ?=
+DATA     ?= $(PWD)/data
+PORT     ?= 8080
+ENV_FILE ?=
 
 image-standalone:
 	docker build --target standalone -t $(IMAGE):standalone .
@@ -111,11 +110,11 @@ image-standalone:
 
 run-standalone: image-standalone
 	@mkdir -p "$(DATA)"
-	@echo "sandbox → http://localhost:$(PORT)   docs → http://localhost:$(DOCS_PORT)/swagger.html   data → $(DATA)$(if $(ENV_FILE),   env → $(ENV_FILE),)"
-	docker run --rm -p $(PORT):$(PORT) -p $(DOCS_PORT):$(DOCS_PORT) \
+	@echo "sandbox → http://localhost:$(PORT)   docs → http://localhost:$(PORT)/swagger.html   data → $(DATA)$(if $(ENV_FILE),   env → $(ENV_FILE),)"
+	docker run --rm -p $(PORT):$(PORT) \
 	  -v "$(DATA):/data" \
 	  $(if $(ENV_FILE),-v "$(abspath $(ENV_FILE)):/app/.env:ro",) \
-	  $(IMAGE):standalone PGDATA=/data PORT=$(PORT) DOCS_PORT=$(DOCS_PORT)
+	  $(IMAGE):standalone PGDATA=/data PORT=$(PORT)
 
 # Builds and publishes in one pass, like `push`: buildx cannot load a
 # multi-arch manifest into the local daemon, so there is no prior
