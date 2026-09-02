@@ -344,7 +344,7 @@ paths:
         **Pas d'annulation** : une fois soumise, elle reste `EN_ATTENTE` jusqu'à décision de l'ARTP.
 
         Dans le sandbox, cette décision se prend avec le CLI compagnon :
-        `artp reverse valider <id>` ou `artp reverse rejeter <id>`.
+        `artp reverse validate <id>` ou `artp reverse reject <id>`.
       requestBody:
         $ref: "#/components/requestBodies/Numero"
       responses:

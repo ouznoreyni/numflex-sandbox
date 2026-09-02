@@ -28,7 +28,192 @@ ARTP.
 - Aucune notification de l'abonné (ANO-022) — ce manque est **reproduit**, pas corrigé.
 - Pas de back-office, pas d'UI, pas d'API réseau aval.
 
-## Démarrer
+## Démarrer sans cloner le dépôt
+
+**C'est le chemin le plus court, et il ne demande que Docker** — ni le code, ni Go, ni `make`. Les
+images sont publiées sur Docker Hub.
+
+```bash
+docker run --rm -p 8080:8080 -p 8081:8081 ouzdiop268/numflex-sandbox:standalone
+```
+
+L'image `standalone` embarque son PostgreSQL : rien à installer à côté, rien à mettre en réseau. En
+quelques secondes la base est initialisée, les migrations jouées, le vivier de numéros ensemencé,
+l'API répond sur `http://localhost:8080` et la page Swagger sur
+**`http://localhost:8081/swagger.html`**. `--rm` jette tout à l'arrêt — ce qu'on veut pour un premier
+essai. Les images sont multi-architecture : `amd64` et `arm64`, Apple Silicon compris.
+
+### Le premier portage, en quatre appels
+
+À coller tel quel dans un autre terminal, le conteneur tournant (`jq` sert seulement à lire les
+réponses) :
+
+```bash
+# 1. s'authentifier — trois comptes existent : yas, orange, expresso
+TOKEN=$(curl -s localhost:8080/api/authenticate \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"yas","password":"yas2026"}' | jq -r .id_token)
+
+# 2. lire le référentiel des opérateurs et retenir deux identifiants
+ORANGE=$(curl -s localhost:8080/api/gateway/v1/operateurs -H "Authorization: Bearer $TOKEN" \
+  | jq -r '.data[] | select(.nom=="ORANGE") | .id')
+YAS=$(curl -s localhost:8080/api/gateway/v1/operateurs -H "Authorization: Bearer $TOKEN" \
+  | jq -r '.data[] | select(.nom=="YAS") | .id')
+
+# 3. déclencher l'OTP sur un numéro du vivier — 771000001 est chez ORANGE, jamais porté
+curl -s localhost:8080/api/gateway/v1/otp/send -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' -d '{"numero":"771000001"}'
+
+# 4. créer la demande de portage ORANGE → YAS
+curl -s localhost:8080/api/gateway/v1/demandes/particulier \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d "{
+    \"numero\": \"771000001\",
+    \"otpCode\": \"123456\",
+    \"operateurSourceId\": \"$ORANGE\",
+    \"operateurDestinataireId\": \"$YAS\",
+    \"typePortabilite\": \"PREPAID\",
+    \"client\": {
+      \"nom\": \"Diop\", \"prenom\": \"Awa\", \"dateNaissance\": \"1990-04-12\",
+      \"lieuNaissance\": \"Dakar\", \"typePiece\": \"CNI\", \"numeroPiece\": \"1234567890123\"
+    }
+  }" | jq '{message, id: .data.id, etape: .data.etapeActuelle}'
+```
+
+```json
+{ "message": "Demande particulier créée avec succès",
+  "id": "6a98197f513c174baed51cba", "etape": "ACCEPTATION" }
+```
+
+La suite du cycle appartient à ORANGE : réauthentifiez-vous en `orange` pour `/demandes/a-accepter`
+puis l'acceptation. **Le jeton n'est pas neutre, chaque étape est réservée à un opérateur précis** —
+c'est détaillé plus bas, à la section Postman.
+
+### Quatre pièges du premier essai
+
+- **Le champ de l'OTP s'appelle `otpCode`, pas `code`.** Le code est toujours `123456`
+  (`OTP_STATIC_CODE`) : aucun SMS n'est envoyé, et la réponse d'`otp/send` n'atteste rien
+  (ANO-021).
+- **Un refus métier sort en `500`, pas en `4xx`.** Demande introuvable, opérateur non habilité,
+  étape non atteinte : tous en `500` avec `RuntimeException: …` dans `detail`. Ce n'est pas une
+  panne, c'est ANO-003, reproduit exprès.
+- **La documentation est sur `8081`, pas sur `8080`.** `http://localhost:8080/swagger.html`
+  répond `404 page not found`, et c'est voulu : le port `8080` n'expose que les 33 routes du
+  contrat plus les deux d'authentification, et une route de doc rendrait le sandbox discernable de
+  la plateforme réelle. Le conteneur sert donc la page sur un **second port**,
+  `http://localhost:8081/swagger.html` — pensez à publier `-p 8081:8081`.
+- **Par défaut le sandbox est lent, et c'est voulu** : `COMPLETION` répond en ~30 s (ANO-005), une
+  étape expire seule au bout de ~349 s (ANO-006), les horodatages dérivent de 9 min (ANO-015). Pour
+  explorer sans subir ça, voir le profil calme ci-dessous.
+
+### Garder les données entre deux lancements
+
+```bash
+mkdir -p "$PWD/data"
+docker run -d --name numflex -p 8080:8080 -p 8081:8081 \
+  -v "$PWD/data:/data" \
+  ouzdiop268/numflex-sandbox:standalone PGDATA=/data
+```
+
+Le cluster PostgreSQL s'initialise dans `./data`. Détruire le conteneur et le relancer sur le même
+dossier retrouve les demandes créées. Le chemin doit être **absolu** — `$PWD/data`, pas `./data` —
+et sur macOS appartenir aux dossiers partagés avec la VM Docker (`/Users`, `/private`, `/tmp`).
+
+Pour repartir de zéro : `docker rm -f numflex && rm -rf ./data`.
+
+### Régler le sandbox sans fichier de configuration
+
+Tout se pose en `-e` ou en argument après le nom de l'image, l'argument l'emportant :
+
+```bash
+# écouter ailleurs que sur 8080
+docker run --rm -p 9000:9000 ouzdiop268/numflex-sandbox:standalone PORT=9000
+
+# profil calme : pas d'expiration, pas de latence, pas de dérive d'horloge
+docker run --rm -p 8080:8080 ouzdiop268/numflex-sandbox:standalone \
+  STEP_TIMEOUT_SECONDS=0 COMPLETION_LATENCY_MS=0 CLOCK_SKEW_SECONDS=0
+
+# servir le contrat tel qu'écrit plutôt que la recette telle que mesurée
+docker run --rm -p 8080:8080 ouzdiop268/numflex-sandbox:standalone FIDELITY=contract
+```
+
+Le tableau complet des variables est à la section [Configuration](#configuration). Les quatre qui
+comptent pour un premier contact : `PORT`, `FIDELITY`, `STEP_TIMEOUT_SECONDS`,
+`COMPLETION_LATENCY_MS`.
+
+### L'image mince, avec votre propre PostgreSQL
+
+Si vous avez déjà une base, `:latest` pèse ~46 Mo au lieu de ~456 : elle part de `scratch`, sans
+shell ni gestionnaire de paquets. Elle attend `DATABASE_URL`, son seul réglage sans défaut, et joue
+les migrations elle-même au démarrage.
+
+```bash
+docker run -d --name numflex -p 8080:8080 \
+  -e DATABASE_URL='postgres://numflex:numflex@ma-base:5432/numflex?sslmode=disable' \
+  ouzdiop268/numflex-sandbox:latest
+```
+
+| Image | Taille | Ce qu'elle contient |
+|---|---|---|
+| `ouzdiop268/numflex-sandbox:standalone` | ~456 Mo | Le serveur, PostgreSQL **et** la page Swagger sur `8081`. Rien à orchestrer. |
+| `ouzdiop268/numflex-sandbox:latest` | ~46 Mo | Le serveur seul, sur `scratch`. Base à fournir. |
+
+`:standalone` est une commodité de démonstration, **pas** un durcissement : shell, gestionnaire de
+paquets, démarrage sous root le temps de l'`initdb`. Pour un déploiement, c'est `:latest` et une
+base à part.
+
+### La documentation de l'API
+
+**L'image `standalone` la sert elle-même**, sur son second port :
+
+```
+http://localhost:8081/swagger.html      la page Swagger, spécification inlinée
+http://localhost:8081/openapi.yaml      la spécification seule
+```
+
+Le « Try it out » y fonctionne sans rien configurer : le sandbox répond
+`Access-Control-Allow-Origin: *` par défaut.
+
+**Ce n'est pas une route de la gateway** — c'est un second serveur, dans le même conteneur, sur un
+autre port. Le port `8080` garde exactement la surface de la plateforme réelle, et `8081` peut
+s'éteindre pour retrouver la parité stricte :
+
+```bash
+docker run --rm -p 8080:8080 ouzdiop268/numflex-sandbox:standalone DOCS_PORT=0
+```
+
+`DOCS_PORT` se règle comme le reste — argument, `-e`, ou `.env`.
+
+Avec l'image mince `:latest`, qui n'embarque ni page ni serveur pour la servir, récupérez-la et
+servez-la vous-même :
+
+```bash
+mkdir -p numflex-doc && cd numflex-doc
+curl -O https://raw.githubusercontent.com/ouznoreyni/numflex-sandbox/main/docs/swagger.html
+python3 -m http.server 8081 --bind 127.0.0.1
+```
+
+Ouvrir le fichier directement (`open swagger.html`) suffit pour **lire** la spécification, mais le
+« Try it out » y échouera : depuis une origine `file://`, les navigateurs bloquent les appels vers
+`http://localhost` quels que soient les en-têtes CORS.
+
+```bash
+# la spécification seule, ou la collection Postman
+curl -O https://raw.githubusercontent.com/ouznoreyni/numflex-sandbox/main/docs/openapi.yaml
+curl -O https://raw.githubusercontent.com/ouznoreyni/numflex-sandbox/main/postman/numflex-sandbox.postman_collection.json
+```
+
+Le **CLI régulateur `artp`** est dans les deux images, à côté du serveur. Comme il n'en est pas le
+point d'entrée, on le réclame — en lui repassant `DATABASE_URL` : `docker exec` n'hérite pas des
+variables que l'entrypoint a exportées au démarrage.
+
+```bash
+docker exec -e DATABASE_URL='postgres://numflex:numflex@127.0.0.1:5432/numflex?sslmode=disable' \
+  numflex artp reverse list
+```
+
+---
+
+## Démarrer depuis le dépôt
 
 ```bash
 docker compose up
@@ -41,7 +226,7 @@ Postgres démarre, les migrations sont appliquées, le seed est joué, l'API éc
 ### L'image seule
 
 ```bash
-make image        # ou : docker build -t numflex-sandbox .
+make image        # ou : docker build --target runtime -t numflex-sandbox .
 ```
 
 Le seul réglage sans défaut est `DATABASE_URL` : le serveur refuse de démarrer sans elle.
@@ -88,6 +273,61 @@ docker run -d --name numflex-api --network numflex-net \
 `/app/migrations`. Le seul montage de l'exemple est le `.env`, et il est facultatif : tout passer
 en `-e` ou en arguments donne le même résultat.
 
+#### Tout-en-un, base comprise
+
+Une seconde cible du Dockerfile, `standalone`, embarque PostgreSQL à côté du serveur : le
+`docker-compose` de ce dépôt réduit à une seule image. Rien à orchestrer, rien à mettre en réseau.
+
+```bash
+make image-standalone     # ou : docker build --target standalone -t numflex-sandbox:standalone .
+make push-standalone      # construit ET publie, multi-arch, en une passe
+```
+
+Le répertoire de données de la base se règle **comme n'importe quel autre réglage**, avec la même
+précédence que tout le reste — argument, environnement, `.env`, défaut :
+
+```bash
+# 1. en argument
+docker run --rm -p 8080:8080 -v "$PWD/data:/data" \
+  numflex-sandbox:standalone PGDATA=/data
+
+# 2. en variable d'environnement
+docker run --rm -p 8080:8080 -v "$PWD/data:/data" \
+  -e PGDATA=/data numflex-sandbox:standalone
+
+# 3. dans un .env monté à l'emplacement par défaut — le serveur lit le même fichier
+printf 'PGDATA=/data\nFIDELITY=contract\n' > .env
+docker run --rm -p 8080:8080 -v "$PWD/data:/data" -v "$PWD/.env:/app/.env:ro" \
+  numflex-sandbox:standalone
+
+# 4. dans un .env ailleurs, désigné en argument
+docker run --rm -p 8080:8080 -v "$PWD/data:/data" -v "$PWD/prod.env:/cfg.env:ro" \
+  numflex-sandbox:standalone --env-file /cfg.env
+
+# 5. rien du tout — données éphémères, elles meurent avec le conteneur
+docker run --rm -p 8080:8080 numflex-sandbox:standalone
+```
+
+Un chemin absolu seul en premier argument est un raccourci : `… numflex-sandbox:standalone /data`
+vaut `PGDATA=/data`, et s'il désigne un fichier existant, c'est le `.env`. C'est le seul argument
+que le serveur ne saurait pas lire lui-même — il n'accepte que `--env-file` et `CLE=valeur`.
+
+`make run-standalone` fait tout ça pour toi :
+
+```bash
+make run-standalone
+make run-standalone DATA=/srv/numflex PORT=9000 ENV_FILE=./prod.env
+```
+
+`DATABASE_URL` est la seule variable que cette image tranche d'autorité : la base vit dans le
+conteneur, une valeur venue du `.env` pointerait vers une base qu'elle ne gère pas.
+
+C'est une commodité de démonstration, **pas** un durcissement, et il faut l'assumer : 456 Mo au
+lieu de 46, un shell et un gestionnaire de paquets dans l'image, un démarrage sous root le temps
+de l'`initdb`. Autrement dit tout ce que l'image `runtime` refuse. Pour un déploiement, c'est
+`make push` et une base à part. La base n'écoute que sur `127.0.0.1` dans le conteneur et 5432
+n'est jamais publié : l'API reste la seule porte.
+
 #### Monter des dossiers de l'hôte
 
 Un chemin en première position de `-v` suffit : Docker le monte tel quel, rien n'est à créer
@@ -130,22 +370,26 @@ réclame :
 ```bash
 docker run --rm --network numflex-net --entrypoint /usr/local/bin/artp \
   -e DATABASE_URL='postgres://numflex:numflex@numflex-db:5432/numflex?sslmode=disable' \
-  numflex-sandbox:latest reverse lister
+  numflex-sandbox:latest reverse list
 ```
 
 Pour publier :
 
 ```bash
 docker login
-make push                                    # docker.io/ouzdiop268/numflex-sandbox:<git describe>
-make push REGISTRY=… VERSION=v0.4.0          # ailleurs, sous une version choisie
+make push                                    # docker.io/ouzdiop268/numflex-sandbox:latest
+make push VERSION=v0.4.0                     # :latest **et** :v0.4.0
+make push REGISTRY=harbor.example.com/numflex   # ailleurs
 ```
 
 `make push` construit et pousse en une passe, pour `linux/amd64` et `linux/arm64` — un manifeste
 multi-architecture ne pouvant pas être chargé dans le démon local, il n'y a pas de `make image`
-préalable. Le constructeur `buildx` dédié est créé au premier appel. La cible refuse de publier
-depuis un arbre de travail modifié : `ALLOW_DIRTY=1` pour passer outre, la version portant alors le
-suffixe `-dirty`.
+préalable. Le constructeur `buildx` dédié est créé au premier appel.
+
+`latest` est toujours produit et toujours publié ; `VERSION=…` ajoute un second tag figé. La garde
+d'arbre propre **ne vaut que pour ce tag de version** : lui doit rester reproductible, donc
+correspondre à un commit, tandis que `latest` est par nature un pointeur mouvant et se publie depuis
+un arbre modifié. `ALLOW_DIRTY=1` lève la garde.
 
 L'image finale part de `scratch` — deux binaires statiques, les migrations, les racines de
 confiance TLS, rien d'autre : ni shell, ni gestionnaire de paquets, ni CVE de base à suivre. Elle
@@ -197,7 +441,7 @@ l'état courant. Pour repartir à zéro, supprimer le volume Postgres.
 | `JWT_SECRET` | `numflex-sandbox-dev-secret` | Secret de signature HS512 |
 | `JWT_TTL_HOURS` | `24` | Validité du jeton |
 | `FIDELITY` | `real` | `real` \| `contract` — voir ci-dessous |
-| `ETAPE_TIMEOUT_SECONDS` | `349` | Expiration d'une étape ; `0` = pas d'expiration |
+| `STEP_TIMEOUT_SECONDS` | `349` | Expiration d'une étape ; `0` = pas d'expiration |
 | `ENGINE_TICK_SECONDS` | `10` | Cadence du moteur |
 | `CONVERGENCE_MIN_SECONDS` | `0` | Fenêtre de convergence — voir ci-dessous |
 | `CONVERGENCE_MAX_SECONDS` | `0` | `0` = transition appliquée dans la requête |
@@ -245,7 +489,7 @@ En mode `contract`, la même machine à états est servie selon le contrat tel q
 corrects, enveloppe systématique, catalogue de codes d'erreur renseigné. Utile pour vérifier qu'un
 client ne s'est pas rendu dépendant d'une anomalie. **La machine à états est identique dans les
 deux modes ; seule la présentation change** — c'est ce que verrouille
-`TestMemeScenarioEnModeContrat`.
+`TestSameScenarioInContractMode`.
 
 ### Convergence : deux comportements mesurés, tous deux reproductibles
 
@@ -265,7 +509,7 @@ Les deux sources sont des mesures ; c'est la plus récente qui fait le défaut.
 ### Profil déterministe (CI)
 
 ```
-ETAPE_TIMEOUT_SECONDS=0 CONVERGENCE_MIN_SECONDS=0 CONVERGENCE_MAX_SECONDS=0
+STEP_TIMEOUT_SECONDS=0 CONVERGENCE_MIN_SECONDS=0 CONVERGENCE_MAX_SECONDS=0
 COMPLETION_LATENCY_MS=0 CLOCK_SKEW_SECONDS=0
 ```
 
@@ -285,7 +529,10 @@ Toutes portent leur identifiant du rapport SIT.
 | ANO-005 | `COMPLETION` répond en ~30,5 s, et aucun en-tête `Idempotency-Key` n'est lu |
 | ANO-006 | Les étapes expirent seules en ~349 s : un cycle complet s'achève sans qu'aucun opérateur n'agisse |
 | ANO-008 | Jeton **invalide ou expiré** → `401` à corps vide, sans `Content-Type` |
+| ANO-009 | Le référentiel des motifs de rejet expose le champ `motif`, non `libelle` |
+| ANO-010 | `client.lieuNaissance` est documenté facultatif, mais **rejeté s'il est absent** |
 | ANO-011 | `POST /otp/send` omet le champ `data` de l'enveloppe au lieu de le porter à `null` |
+| ANO-013 | Une étape franchie par une action porte `statutEtapeActuel: TERMINE`, non `VALIDE` |
 | ANO-014 | Les états d'OTP sortent en `500` avec des messages libres, hors catalogue |
 | ANO-015 | Dérive d'horloge de ~9 min : une demande créée est horodatée dans le futur |
 | ANO-016 | Échec d'authentification servi hors enveloppe, en `problem+json` |
@@ -300,13 +547,13 @@ Toutes portent leur identifiant du rapport SIT.
 Trois comportements ne sont ni documentés au guide v2, ni mesurés en recette. Ils sont marqués
 `[HYP]` dans le code, à l'endroit exact où la décision est prise :
 
-1. **Préfixe de routage EXPRESSO** (`internal/seed/seed.go`) — `191` (ORANGE) et `192` (YAS) sont
-   documentés ; `193` pour EXPRESSO est déduit de la série.
-2. **Statut `REJETE`** (`internal/domain/demande.go`) — ni documenté au cycle de vie, ni observé.
+1. **Préfixe de routage EXPRESSO** (`internal/framework/seed/seed.go`) — `191` (ORANGE) et
+   `192` (YAS) sont documentés ; `193` pour EXPRESSO est déduit de la série.
+2. **Statut `REJETE`** (`internal/entity/porting_request.go`) — ni documenté au cycle de vie, ni observé.
    Une demande refusée doit bien porter un état terminal distinct de `TERMINE`.
-3. **Répartition des rôles en restitution** (`internal/api/demandes_creation.go`) — le guide ne
-   tranche pas qui est source et qui est destinataire ; le sandbox fait de l'opérateur d'origine le
-   destinataire.
+3. **Répartition des rôles en restitution**
+   (`internal/usecase/creation/create_restitution_request.go`) — le guide ne tranche pas qui est
+   source et qui est destinataire ; le sandbox fait de l'opérateur d'origine le destinataire.
 
 D'autres `[HYP]` plus locaux existent (flotte intégralement rejetée, absence de garde de gel sur
 l'annulation, messages d'erreur non mesurés) : `grep -rn '\[HYP\]' internal/`.
@@ -358,6 +605,65 @@ rejoué. La règle est **« le numéro rentre chez lui »**, pas « le numéro r
 seed » : pour une tranche ensemencée déjà portée — `77200`, détenue par ORANGE mais d'origine YAS —
 la purge la ramène chez YAS, pas chez ORANGE.
 
+## Structure
+
+Le dépôt suit la Clean Architecture canonique : quatre couches, une seule règle de dépendance —
+un paquet n'importe qu'un paquet de couche inférieure ou égale — et `test/architecture_test.go`
+qui la vérifie sur le graphe d'imports réel, à chaque `make test`.
+
+```
+cmd/
+  server/            le serveur HTTP : racine de composition
+  artp/              le CLI régulateur
+internal/
+  entity/            couche 0 — règles métier pures, n'importe rien de ce module
+  usecase/
+    port/            couche 1 — les interfaces dont les interactors ont besoin
+    <capacité>/      couche 1 — un interactor par cas d'usage (otp, creation, acceptance…)
+  adapter/
+    controller/      couche 2 — HTTP → modèle d'entrée, résultat → view model
+    presenter/       couche 2 — view model, dans l'un des deux modes de fidélité
+    gateway/postgres/ couche 2 — les gateways. Seul endroit qui nomme une colonne française
+  framework/
+    web/             couche 3 — moteur Gin, middlewares, câblage des 35 routes (36 avec SANDBOX_ADMIN)
+    persistence/     couche 3 — pool pgx, migrations, unité de travail
+    engine/          couche 3 — le ticker : expiration, convergence, cycle du reverse
+    clock/ config/ identifier/ seed/ token/
+  testsupport/       base de test, doubles en mémoire, harnais de routeur
+test/                scénarios de bout en bout, captures de conformité, garde d'architecture
+migrations/          le schéma, en français — voir ADR 0001
+scripts/             point d'entrée de l'image `standalone`, génération de la page Swagger
+```
+
+Le détail — le diagramme des couches, le trajet complet d'une requête de Gin à pgx et retour, et
+la table des vocabulaires qui restent français parce qu'ils *sont* le contrat — est dans
+[`docs/architecture.md`](docs/architecture.md). Les quatre décisions structurantes sont dans
+[`docs/adr/`](docs/adr/) : colonnes SQL françaises, unité de travail, fidélité portée par les
+presenters, tag de build des tests d'intégration.
+
+### Français et anglais : la frontière est la destination du texte
+
+Le dépôt est en anglais — identifiants, commentaires, messages d'assertion, sorties du CLI et des
+journaux, jusqu'aux textes passés à `entity.InternalError`. Ce n'est pas une préférence de style :
+c'est ce qui rend `grep` utilisable comme test. **Un mot français hors des cas ci-dessous est un
+défaut.**
+
+Reste français tout ce qu'un client de l'API peut observer, parce que le sandbox doit être
+indiscernable de la plateforme :
+
+| Ce qui reste français | Exemple |
+|---|---|
+| Chemins de route | `/api/gateway/v1/demandes/a-accepter` |
+| Noms et valeurs JSON | `{"idDemande":…,"etapeActuelle":"ACCEPTATION"}` |
+| Messages de réponse et de faute | `"Demande particulier créée avec succès"`, `RuntimeException: …`, `VALIDATION_ECHOUEE` |
+| Tables et colonnes SQL | `demande.etape_actuelle` — voir [ADR 0001](docs/adr/0001-french-sql-columns.md) |
+| Données de référence ensemencées | les motifs de rejet : `Identité non prouvée`, `Numéro Inactif` |
+
+S'y ajoutent, dans des commentaires par ailleurs anglais, les **citations** entre guillemets : noms
+des requêtes Postman capturées, extraits du guide ARTP, symboles supprimés que l'historique cite
+encore. Traduire l'une de ces chaînes casse la fidélité au contrat, et les captures du 2026-08-27
+avec elle.
+
 ## Tests
 
 ```bash
@@ -386,17 +692,17 @@ go build -o artp ./cmd/artp
 
 export DATABASE_URL='postgres://numflex:numflex@localhost:5432/numflex?sslmode=disable'
 
-./artp reverse lister          # les demandes de reverse et leur statut
-./artp reverse valider <id>    # crée la Demande REVERSE, à CONFIRMATION
-./artp reverse rejeter <id>
-./artp seed                    # rejoue le seed (idempotent)
+./artp reverse list             # les demandes de reverse et leur statut
+./artp reverse validate <id>    # crée la Demande REVERSE, à CONFIRMATION
+./artp reverse reject <id>
+./artp seed                     # rejoue le seed (idempotent)
 ```
 
 Le binaire est aussi dans l'image, à côté du serveur. Comme il n'en est pas le point d'entrée, il
 se réclame explicitement — et lit le même `.env` :
 
 ```bash
-docker compose run --rm --entrypoint /usr/local/bin/artp api reverse lister
+docker compose run --rm --entrypoint /usr/local/bin/artp api reverse list
 ```
 
 `artp` **ne joue pas les migrations** : le serveur est seul propriétaire du cycle de vie du schéma.

@@ -1,12 +1,12 @@
-// Package main est le CLI régulateur : il porte les actes que le contrat
-// ARTP place hors de l'API gateway — la validation et le rejet d'une demande
-// de reverse (§6 du guide), tous deux réservés à l'ARTP. Ce binaire n'ouvre
-// aucun serveur HTTP : il ouvre le pool, effectue un acte, et quitte.
+// Package main is the regulator CLI: it carries the acts that the ARTP
+// contract places outside the API gateway — validating and rejecting a
+// reverse request (§6 of the guide), both reserved to the ARTP. This binary
+// opens no HTTP server: it opens the pool, performs one act, and exits.
 //
-//	artp reverse lister              liste les demandes de reverse et leur statut
-//	artp reverse valider <id>        valide — crée la Demande REVERSE à CONFIRMATION
-//	artp reverse rejeter <id>        rejette
-//	artp seed                        rejoue le seed (idempotent)
+//	artp reverse list                lists reverse requests and their status
+//	artp reverse validate <id>       validates — creates the REVERSE Request at CONFIRMATION
+//	artp reverse reject <id>         rejects
+//	artp seed                        replays the seed (idempotent)
 package main
 
 import (
@@ -15,82 +15,82 @@ import (
 	"os"
 	"time"
 
-	"github.com/ouznoreyni/numflex-sandbox/internal/config"
-	"github.com/ouznoreyni/numflex-sandbox/internal/engine"
-	"github.com/ouznoreyni/numflex-sandbox/internal/seed"
-	"github.com/ouznoreyni/numflex-sandbox/internal/store"
+	"github.com/ouznoreyni/numflex-sandbox/internal/framework/config"
+	"github.com/ouznoreyni/numflex-sandbox/internal/framework/engine"
+	"github.com/ouznoreyni/numflex-sandbox/internal/framework/persistence"
+	"github.com/ouznoreyni/numflex-sandbox/internal/framework/seed"
 )
 
 func main() {
-	if err := executer(os.Args[1:]); err != nil {
-		fmt.Fprintln(os.Stderr, "artp : "+err.Error())
+	if err := execute(os.Args[1:]); err != nil {
+		fmt.Fprintln(os.Stderr, "artp: "+err.Error())
 		os.Exit(1)
 	}
 }
 
-func executer(args []string) error {
+func execute(args []string) error {
 	if len(args) == 0 {
 		return usage()
 	}
 
-	// Pas d'arguments CLEF=valeur ici : ils entreraient en collision avec les
-	// sous-commandes. Le fichier .env — ou ENV_FILE — reste lu.
-	if err := config.ChargerFichierEnv(); err != nil {
+	// No KEY=value arguments here: they would collide with the
+	// subcommands. The .env file — or ENV_FILE — is still read.
+	if err := config.LoadEnvFile(); err != nil {
 		return err
 	}
 	cfg, err := config.Load()
 	if err != nil {
-		return fmt.Errorf("configuration : %w", err)
+		return fmt.Errorf("configuration: %w", err)
 	}
 
 	ctx := context.Background()
-	db, err := store.Open(ctx, cfg.DatabaseURL)
+	db, err := persistence.Open(ctx, cfg.DatabaseURL)
 	if err != nil {
-		return fmt.Errorf("ouverture de la base : %w", err)
+		return fmt.Errorf("opening the database: %w", err)
 	}
 	defer db.Close()
 
 	switch args[0] {
 	case "reverse":
-		return executerReverse(ctx, db, args[1:])
+		return executeReverse(ctx, db, args[1:])
 	case "seed":
 		if err := seed.Run(ctx, db); err != nil {
-			return fmt.Errorf("seed : %w", err)
+			return fmt.Errorf("seed: %w", err)
 		}
-		fmt.Println("seed rejoué avec succès")
+		fmt.Println("seed replayed successfully")
 		return nil
 	default:
 		return usage()
 	}
 }
 
-func executerReverse(ctx context.Context, db *store.DB, args []string) error {
+func executeReverse(ctx context.Context, db *persistence.DB, args []string) error {
 	if len(args) == 0 {
 		return usage()
 	}
 
 	switch args[0] {
-	case "lister":
-		return listerReverses(ctx, db)
-	case "valider":
+	case "list":
+		return listReverses(ctx, db)
+	case "validate":
 		id, err := argID(args)
 		if err != nil {
 			return err
 		}
-		if err := engine.ValiderReverse(ctx, db, id); err != nil {
-			return fmt.Errorf("validation de la demande de reverse %s : %w", id, err)
+		if err := engine.ValidateReverse(ctx, db, id); err != nil {
+			return fmt.Errorf("validating reverse request %s: %w", id, err)
 		}
-		fmt.Printf("demande de reverse %s validée : Demande REVERSE créée à CONFIRMATION\n", id)
+		fmt.Printf("reverse request %s validated: REVERSE request created at CONFIRMATION\n", id)
 		return nil
-	case "rejeter":
+	case "reject":
 		id, err := argID(args)
 		if err != nil {
 			return err
 		}
-		if err := engine.RejeterReverse(ctx, db, id); err != nil {
-			return fmt.Errorf("rejet de la demande de reverse %s : %w", id, err)
+		if err := engine.RejectReverse(ctx, db, id); err != nil {
+			return fmt.Errorf("rejecting reverse request %s: %w", id, err)
 		}
-		fmt.Printf("demande de reverse %s rejetée\n", id)
+		fmt.Printf("reverse request %s rejected\n", id)
 		return nil
 	default:
 		return usage()
@@ -99,44 +99,44 @@ func executerReverse(ctx context.Context, db *store.DB, args []string) error {
 
 func argID(args []string) (string, error) {
 	if len(args) < 2 || args[1] == "" {
-		return "", fmt.Errorf("identifiant de la demande de reverse manquant")
+		return "", fmt.Errorf("missing reverse request identifier")
 	}
 	return args[1], nil
 }
 
-func listerReverses(ctx context.Context, db *store.DB) error {
+func listReverses(ctx context.Context, db *persistence.DB) error {
 	rows, err := db.Pool.Query(ctx,
 		`SELECT id, numero, operateur_id, statut, date_demande
 		   FROM reverse_request ORDER BY date_demande`)
 	if err != nil {
-		return fmt.Errorf("lecture des demandes de reverse : %w", err)
+		return fmt.Errorf("reading the reverse requests: %w", err)
 	}
 	defer rows.Close()
 
 	n := 0
 	for rows.Next() {
-		var id, numero, operateurID, statut string
-		var dateDemande time.Time
-		if err := rows.Scan(&id, &numero, &operateurID, &statut, &dateDemande); err != nil {
-			return fmt.Errorf("lecture des demandes de reverse : %w", err)
+		var id, number, operatorID, status string
+		var requestDate time.Time
+		if err := rows.Scan(&id, &number, &operatorID, &status, &requestDate); err != nil {
+			return fmt.Errorf("reading the reverse requests: %w", err)
 		}
-		fmt.Printf("%s\t%s\t%s\t%s\t%s\n", id, numero, operateurID, statut,
-			dateDemande.Format(time.RFC3339))
+		fmt.Printf("%s\t%s\t%s\t%s\t%s\n", id, number, operatorID, status,
+			requestDate.Format(time.RFC3339))
 		n++
 	}
 	if err := rows.Err(); err != nil {
-		return fmt.Errorf("lecture des demandes de reverse : %w", err)
+		return fmt.Errorf("reading the reverse requests: %w", err)
 	}
 	if n == 0 {
-		fmt.Println("aucune demande de reverse")
+		fmt.Println("no reverse request")
 	}
 	return nil
 }
 
 func usage() error {
-	return fmt.Errorf(`commande inconnue — usage :
-  artp reverse lister
-  artp reverse valider <id>
-  artp reverse rejeter <id>
+	return fmt.Errorf(`unknown command — usage:
+  artp reverse list
+  artp reverse validate <id>
+  artp reverse reject <id>
   artp seed`)
 }
