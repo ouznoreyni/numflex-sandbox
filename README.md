@@ -87,7 +87,7 @@ La suite du cycle appartient à ORANGE : réauthentifiez-vous en `orange` pour `
 puis l'acceptation. **Le jeton n'est pas neutre, chaque étape est réservée à un opérateur précis** —
 c'est détaillé plus bas, à la section Postman.
 
-### Trois pièges du premier essai
+### Quatre pièges du premier essai
 
 - **Le champ de l'OTP s'appelle `otpCode`, pas `code`.** Le code est toujours `123456`
   (`OTP_STATIC_CODE`) : aucun SMS n'est envoyé, et la réponse d'`otp/send` n'atteste rien
@@ -95,6 +95,10 @@ c'est détaillé plus bas, à la section Postman.
 - **Un refus métier sort en `500`, pas en `4xx`.** Demande introuvable, opérateur non habilité,
   étape non atteinte : tous en `500` avec `RuntimeException: …` dans `detail`. Ce n'est pas une
   panne, c'est ANO-003, reproduit exprès.
+- **`http://localhost:8080/swagger.html` répond `404 page not found`, et c'est normal.** Le
+  conteneur ne sert **aucune** documentation : il n'expose que les 33 routes du contrat plus les
+  deux d'authentification. Une route de doc, de santé ou de metrics le rendrait discernable de la
+  plateforme réelle, ce qui ruinerait son intérêt. La page Swagger se sert à côté — voir plus bas.
 - **Par défaut le sandbox est lent, et c'est voulu** : `COMPLETION` répond en ~30 s (ANO-005), une
   étape expire seule au bout de ~349 s (ANO-006), les horodatages dérivent de 9 min (ANO-015). Pour
   explorer sans subir ça, voir le profil calme ci-dessous.
@@ -157,15 +161,23 @@ base à part.
 
 ### La documentation de l'API, sans cloner non plus
 
-La page Swagger est autoportante — la spécification y est inlinée, aucune requête réseau à
-l'ouverture. Un `curl` et un navigateur suffisent :
+**Le conteneur ne la sert pas** — c'est délibéré, voir le piège ci-dessus. La page Swagger se
+récupère et se sert à côté, sur un autre port. Elle est autoportante : la spécification y est
+inlinée, la page n'émet aucune requête réseau pour se charger.
 
 ```bash
+mkdir -p numflex-doc && cd numflex-doc
 curl -O https://raw.githubusercontent.com/ouznoreyni/numflex-sandbox/main/docs/swagger.html
-open swagger.html          # xdg-open sous Linux, start sous Windows
+python3 -m http.server 8081 --bind 127.0.0.1
 ```
 
-Le « Try it out » de la page fonctionne contre le conteneur : le CORS est ouvert par défaut.
+Puis `http://localhost:8081/swagger.html`. Le « Try it out » fonctionne contre le conteneur : le
+sandbox répond `Access-Control-Allow-Origin: *` par défaut, quel que soit le port d'où la page est
+servie.
+
+Ouvrir le fichier directement (`open swagger.html`) suffit pour **lire** la spécification, mais le
+« Try it out » y échouera probablement : depuis une origine `file://`, les navigateurs bloquent les
+appels vers `http://localhost` quels que soient les en-têtes CORS. D'où le petit serveur ci-dessus.
 
 ```bash
 # la spécification seule, ou la collection Postman
