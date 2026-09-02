@@ -15,9 +15,10 @@ info:
     rendu en `application/problem+json`. Les descriptions signalent ces écarts par
     leur identifiant SIT (ANO-0xx).
 
-    Cette page de documentation est servie **hors de la gateway**, sur un port
-    distinct : le sandbox ne doit exposer que les 33 routes du contrat, sans route
-    de santé, de metrics ni de documentation.
+    Cette page de documentation vit **à la racine, hors de la gateway** :
+    `/api/gateway/v1` garde exactement les 33 routes du contrat, sans route de
+    santé, de metrics ni de documentation. Le serveur la sert lui-même, sur le
+    port de l'API ; `DOCS_ENABLED=false` la retire.
 
 servers:
   - url: http://localhost:8080

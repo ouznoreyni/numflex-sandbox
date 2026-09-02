@@ -718,6 +718,11 @@ peut la déclencher par `/demandes/traitement`.
 
 ## Swagger
 
+![La page Swagger du sandbox : le bandeau des comptes de test, les 35 opérations groupées par section, et le sélecteur de serveur pointé sur http://localhost:8080](docs/images/swagger.png)
+
+Le serveur sert la page lui-même, à la racine : **`http://localhost:8080/swagger.html`**. Pour la
+servir seule, sans lancer l'API :
+
 ```bash
 make swagger      # → http://localhost:8081/swagger.html
 ```
@@ -726,16 +731,19 @@ make swagger      # → http://localhost:8081/swagger.html
 routes d'authentification. `make swagger-build` régénère `openapi.json` et `swagger.html` à partir
 de ce seul fichier.
 
-**La documentation est servie hors de la gateway, sur un port distinct, et c'est délibéré** : le
-sandbox ne doit exposer que les 33 routes du contrat — aucune route de doc, de santé ni de metrics,
-sinon il ne présente plus la même surface que la plateforme réelle.
+**La documentation vit à la racine, hors de la gateway, et c'est délibéré** : `/api/gateway/v1` ne
+doit exposer que les 33 routes du contrat — aucune route de doc, de santé ni de metrics, sinon le
+sandbox ne présente plus la même surface que la plateforme réelle. Le serveur la sert sur le port de
+l'API ; `DOCS_ENABLED=false` la retire, et l'image mince `:latest`, qui n'embarque aucune page, y
+répond `404` quoi qu'il arrive.
 
 Deux conséquences à connaître :
 
-- **« Try it out » exige que le CORS soit activé, et il l'est par défaut.** L'appel part d'une
-  autre origine (`8081` → `8080`) ; sans en-tête `Access-Control-Allow-Origin`, le navigateur le
-  bloque. Le défaut, écrit dans le code, est `*` : rien à configurer, quel que soit le port d'où
-  vous servez la page.
+- **« Try it out » fonctionne sans rien configurer.** Servie par le serveur lui-même, la page
+  appelle l'API sur sa propre origine : aucun en-tête CORS n'entre en jeu. Servie ailleurs —
+  `make swagger` sur `8081`, ou le fichier ouvert depuis le disque — l'appel devient cross-origin,
+  et sans `Access-Control-Allow-Origin` le navigateur le bloque ; le défaut écrit dans le code est
+  `*`, donc il passe quand même.
   **Ce CORS est une commodité de bac à sable, pas un trait du contrat** : la gateway réelle est
   consommée de serveur à serveur, n'émet aucun en-tête CORS, et aucun test du SIT n'a mesuré son
   comportement cross-origin. Poser `CORS_ALLOWED_ORIGINS=` — vide — retrouve ce silence ; y mettre

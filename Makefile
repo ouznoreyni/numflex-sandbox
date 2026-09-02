@@ -17,15 +17,18 @@ test: up
 test-unit:
 	go test ./... -count=1
 
-# CORS is open to every origin by default, so that the Swagger page
-# (port 8081) can call the API from a browser. The real platform sends none:
+# The server serves the Swagger page itself, at the root, so "Try it out" is
+# same-origin and needs no CORS at all. CORS is open to every origin by default
+# for the page served from somewhere else — `make swagger` on 8081, or the file
+# opened from disk. The real platform sends none:
 # CORS_ALLOWED_ORIGINS="" restores its exact behaviour.
 run: up
 	DATABASE_URL="postgres://numflex:numflex@localhost:5432/numflex?sslmode=disable" \
 	go run ./cmd/server
 
-# Documentation served outside the gateway, on a separate port: the sandbox
-# must expose only the contract's 33 routes (no doc, health or metrics route).
+# Serves docs/ alone, on its own port — for reading the page without starting
+# the API. The server also serves it at the root, on the API's port, which is
+# the usual way in: http://localhost:8080/swagger.html
 # http://localhost:8081/swagger.html
 swagger:
 	@echo "Swagger UI → http://localhost:8081/swagger.html"
