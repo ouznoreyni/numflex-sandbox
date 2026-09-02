@@ -38,7 +38,7 @@ func LoadEnvFile() error {
 		if os.IsNotExist(err) && !explicit {
 			return nil
 		}
-		return fmt.Errorf("fichier d'environnement : %w", err)
+		return fmt.Errorf("environment file: %w", err)
 	}
 	defer f.Close()
 
@@ -85,7 +85,7 @@ func ApplyArguments(args []string) error {
 				return err
 			}
 		case strings.HasPrefix(arg, "-"):
-			return fmt.Errorf("argument inconnu %q ; formes acceptées : --env-file <chemin>, CLEF=valeur", arg)
+			return fmt.Errorf("unknown argument %q; accepted forms: --env-file <path>, KEY=value", arg)
 		default:
 			key, value, err := parseAssignment(arg)
 			if err != nil {
@@ -111,11 +111,11 @@ func parseLine(line string) (string, string, error) {
 func parseAssignment(s string) (string, string, error) {
 	key, value, ok := strings.Cut(s, "=")
 	if !ok {
-		return "", "", fmt.Errorf("affectation attendue sous la forme CLEF=valeur, reçu %q", s)
+		return "", "", fmt.Errorf("assignment expected in the form KEY=value, got %q", s)
 	}
 	key = strings.TrimSpace(key)
 	if !validKey(key) {
-		return "", "", fmt.Errorf("nom de variable invalide : %q", key)
+		return "", "", fmt.Errorf("invalid variable name: %q", key)
 	}
 	return key, unquote(strings.TrimSpace(value)), nil
 }

@@ -75,7 +75,7 @@ func (g *RequestGateway) RoutingPrefix(_ context.Context, operatorID string) (st
 	defer g.mu.Unlock()
 	p, ok := g.prefixes[operatorID]
 	if !ok {
-		return "", errors.New("opérateur inconnu")
+		return "", errors.New("unknown operator")
 	}
 	return p, nil
 }

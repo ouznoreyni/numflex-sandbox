@@ -28,7 +28,163 @@ ARTP.
 - Aucune notification de l'abonné (ANO-022) — ce manque est **reproduit**, pas corrigé.
 - Pas de back-office, pas d'UI, pas d'API réseau aval.
 
-## Démarrer
+## Démarrer sans cloner le dépôt
+
+**C'est le chemin le plus court, et il ne demande que Docker** — ni le code, ni Go, ni `make`. Les
+images sont publiées sur Docker Hub.
+
+```bash
+docker run --rm -p 8080:8080 ouzdiop268/numflex-sandbox:standalone
+```
+
+L'image `standalone` embarque son PostgreSQL : rien à installer à côté, rien à mettre en réseau. En
+quelques secondes la base est initialisée, les migrations jouées, le vivier de numéros ensemencé, et
+l'API répond sur `http://localhost:8080`. `--rm` jette tout à l'arrêt — ce qu'on veut pour un premier
+essai. Les images sont multi-architecture : `amd64` et `arm64`, Apple Silicon compris.
+
+### Le premier portage, en quatre appels
+
+À coller tel quel dans un autre terminal, le conteneur tournant (`jq` sert seulement à lire les
+réponses) :
+
+```bash
+# 1. s'authentifier — trois comptes existent : yas, orange, expresso
+TOKEN=$(curl -s localhost:8080/api/authenticate \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"yas","password":"yas2026"}' | jq -r .id_token)
+
+# 2. lire le référentiel des opérateurs et retenir deux identifiants
+ORANGE=$(curl -s localhost:8080/api/gateway/v1/operateurs -H "Authorization: Bearer $TOKEN" \
+  | jq -r '.data[] | select(.nom=="ORANGE") | .id')
+YAS=$(curl -s localhost:8080/api/gateway/v1/operateurs -H "Authorization: Bearer $TOKEN" \
+  | jq -r '.data[] | select(.nom=="YAS") | .id')
+
+# 3. déclencher l'OTP sur un numéro du vivier — 771000001 est chez ORANGE, jamais porté
+curl -s localhost:8080/api/gateway/v1/otp/send -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' -d '{"numero":"771000001"}'
+
+# 4. créer la demande de portage ORANGE → YAS
+curl -s localhost:8080/api/gateway/v1/demandes/particulier \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d "{
+    \"numero\": \"771000001\",
+    \"otpCode\": \"123456\",
+    \"operateurSourceId\": \"$ORANGE\",
+    \"operateurDestinataireId\": \"$YAS\",
+    \"typePortabilite\": \"PREPAID\",
+    \"client\": {
+      \"nom\": \"Diop\", \"prenom\": \"Awa\", \"dateNaissance\": \"1990-04-12\",
+      \"lieuNaissance\": \"Dakar\", \"typePiece\": \"CNI\", \"numeroPiece\": \"1234567890123\"
+    }
+  }" | jq '{message, id: .data.id, etape: .data.etapeActuelle}'
+```
+
+```json
+{ "message": "Demande particulier créée avec succès",
+  "id": "6a98197f513c174baed51cba", "etape": "ACCEPTATION" }
+```
+
+La suite du cycle appartient à ORANGE : réauthentifiez-vous en `orange` pour `/demandes/a-accepter`
+puis l'acceptation. **Le jeton n'est pas neutre, chaque étape est réservée à un opérateur précis** —
+c'est détaillé plus bas, à la section Postman.
+
+### Trois pièges du premier essai
+
+- **Le champ de l'OTP s'appelle `otpCode`, pas `code`.** Le code est toujours `123456`
+  (`OTP_STATIC_CODE`) : aucun SMS n'est envoyé, et la réponse d'`otp/send` n'atteste rien
+  (ANO-021).
+- **Un refus métier sort en `500`, pas en `4xx`.** Demande introuvable, opérateur non habilité,
+  étape non atteinte : tous en `500` avec `RuntimeException: …` dans `detail`. Ce n'est pas une
+  panne, c'est ANO-003, reproduit exprès.
+- **Par défaut le sandbox est lent, et c'est voulu** : `COMPLETION` répond en ~30 s (ANO-005), une
+  étape expire seule au bout de ~349 s (ANO-006), les horodatages dérivent de 9 min (ANO-015). Pour
+  explorer sans subir ça, voir le profil calme ci-dessous.
+
+### Garder les données entre deux lancements
+
+```bash
+mkdir -p "$PWD/data"
+docker run -d --name numflex -p 8080:8080 \
+  -v "$PWD/data:/data" \
+  ouzdiop268/numflex-sandbox:standalone PGDATA=/data
+```
+
+Le cluster PostgreSQL s'initialise dans `./data`. Détruire le conteneur et le relancer sur le même
+dossier retrouve les demandes créées. Le chemin doit être **absolu** — `$PWD/data`, pas `./data` —
+et sur macOS appartenir aux dossiers partagés avec la VM Docker (`/Users`, `/private`, `/tmp`).
+
+Pour repartir de zéro : `docker rm -f numflex && rm -rf ./data`.
+
+### Régler le sandbox sans fichier de configuration
+
+Tout se pose en `-e` ou en argument après le nom de l'image, l'argument l'emportant :
+
+```bash
+# écouter ailleurs que sur 8080
+docker run --rm -p 9000:9000 ouzdiop268/numflex-sandbox:standalone PORT=9000
+
+# profil calme : pas d'expiration, pas de latence, pas de dérive d'horloge
+docker run --rm -p 8080:8080 ouzdiop268/numflex-sandbox:standalone \
+  STEP_TIMEOUT_SECONDS=0 COMPLETION_LATENCY_MS=0 CLOCK_SKEW_SECONDS=0
+
+# servir le contrat tel qu'écrit plutôt que la recette telle que mesurée
+docker run --rm -p 8080:8080 ouzdiop268/numflex-sandbox:standalone FIDELITY=contract
+```
+
+Le tableau complet des variables est à la section [Configuration](#configuration). Les quatre qui
+comptent pour un premier contact : `PORT`, `FIDELITY`, `STEP_TIMEOUT_SECONDS`,
+`COMPLETION_LATENCY_MS`.
+
+### L'image mince, avec votre propre PostgreSQL
+
+Si vous avez déjà une base, `:latest` pèse ~46 Mo au lieu de ~456 : elle part de `scratch`, sans
+shell ni gestionnaire de paquets. Elle attend `DATABASE_URL`, son seul réglage sans défaut, et joue
+les migrations elle-même au démarrage.
+
+```bash
+docker run -d --name numflex -p 8080:8080 \
+  -e DATABASE_URL='postgres://numflex:numflex@ma-base:5432/numflex?sslmode=disable' \
+  ouzdiop268/numflex-sandbox:latest
+```
+
+| Image | Taille | Ce qu'elle contient |
+|---|---|---|
+| `ouzdiop268/numflex-sandbox:standalone` | ~456 Mo | Le serveur **et** PostgreSQL. Rien à orchestrer. |
+| `ouzdiop268/numflex-sandbox:latest` | ~46 Mo | Le serveur seul, sur `scratch`. Base à fournir. |
+
+`:standalone` est une commodité de démonstration, **pas** un durcissement : shell, gestionnaire de
+paquets, démarrage sous root le temps de l'`initdb`. Pour un déploiement, c'est `:latest` et une
+base à part.
+
+### La documentation de l'API, sans cloner non plus
+
+La page Swagger est autoportante — la spécification y est inlinée, aucune requête réseau à
+l'ouverture. Un `curl` et un navigateur suffisent :
+
+```bash
+curl -O https://raw.githubusercontent.com/ouznoreyni/numflex-sandbox/main/docs/swagger.html
+open swagger.html          # xdg-open sous Linux, start sous Windows
+```
+
+Le « Try it out » de la page fonctionne contre le conteneur : le CORS est ouvert par défaut.
+
+```bash
+# la spécification seule, ou la collection Postman
+curl -O https://raw.githubusercontent.com/ouznoreyni/numflex-sandbox/main/docs/openapi.yaml
+curl -O https://raw.githubusercontent.com/ouznoreyni/numflex-sandbox/main/postman/numflex-sandbox.postman_collection.json
+```
+
+Le **CLI régulateur `artp`** est dans les deux images, à côté du serveur. Comme il n'en est pas le
+point d'entrée, on le réclame — en lui repassant `DATABASE_URL` : `docker exec` n'hérite pas des
+variables que l'entrypoint a exportées au démarrage.
+
+```bash
+docker exec -e DATABASE_URL='postgres://numflex:numflex@127.0.0.1:5432/numflex?sslmode=disable' \
+  numflex artp reverse list
+```
+
+---
+
+## Démarrer depuis le dépôt
 
 ```bash
 docker compose up

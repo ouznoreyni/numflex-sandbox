@@ -19,10 +19,10 @@ type DB struct {
 func Open(ctx context.Context, url string) (*DB, error) {
 	pool, err := pgxpool.New(ctx, url)
 	if err != nil {
-		return nil, fmt.Errorf("ouverture du pool : %w", err)
+		return nil, fmt.Errorf("opening the pool: %w", err)
 	}
 	if err := pool.Ping(ctx); err != nil {
-		return nil, fmt.Errorf("connexion à la base : %w", err)
+		return nil, fmt.Errorf("connecting to the database: %w", err)
 	}
 	return &DB{Pool: pool}, nil
 }
