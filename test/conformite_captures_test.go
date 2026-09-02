@@ -1,4 +1,4 @@
-package api
+package test
 
 import (
 	"net/http"
@@ -9,6 +9,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// Moved from internal/api/conformite_captures_test.go (Task 18):
+// internal/api is deleted, and this file's own harnais — nouveauHarnais,
+// jeton, appel, liste, avancerA, creerPortage, converger, etape — now lives
+// in test/harnais_test.go instead. Renamed only in the final task.
+//
 // This file freezes the responses actually recorded against the ARTP platform
 // on 2026-08-27, kept in « Num Flex API.postman_collection.json ».
 //

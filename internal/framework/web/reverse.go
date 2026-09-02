@@ -1,4 +1,4 @@
-package api
+package web
 
 import (
 	"github.com/ouznoreyni/numflex-sandbox/internal/adapter/controller"
@@ -12,16 +12,10 @@ import (
 // reverseController wires the clean-architecture stack behind guide §6's
 // two routes — POST /reverse-requests, GET /reverse-requests/mes-demandes —
 // one NumberGateway (shared in shape with creationController's own build),
-// one ReverseGateway (Task 16's own addition to port.Repositories), a
-// UnitOfWork, two interactors, a presenter and a clock. NewRouter calls it
-// once, at router construction, exactly as it does the eight controllers
-// before it.
-//
-// This is the strangler pattern's next stop: internal/api/reverse.go's own
-// former self — the handlers that read and wrote through *Deps and
-// internal/api/dto.go's Deps.etatNumero directly — is gone, replaced by
-// internal/usecase/reverse's two interactors, orchestrating their one write
-// through port.UnitOfWork.Do like every other capability's own.
+// one ReverseGateway, a UnitOfWork, two interactors, a presenter and a
+// clock. NewRouter calls it once, at router construction. No cancellation
+// route: the guide excludes it explicitly for a reverse. Moved from
+// internal/api/reverse.go (Task 18).
 func (d *Deps) reverseController() *controller.ReverseController {
 	numbers := postgres.NewNumberGateway(d.DB.Pool)
 	reverses := postgres.NewReverseGateway(d.DB.Pool)

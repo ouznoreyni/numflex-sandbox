@@ -5,12 +5,11 @@ import (
 	"log"
 	"os"
 
-	"github.com/ouznoreyni/numflex-sandbox/internal/api"
 	"github.com/ouznoreyni/numflex-sandbox/internal/framework/config"
 	"github.com/ouznoreyni/numflex-sandbox/internal/framework/engine"
 	"github.com/ouznoreyni/numflex-sandbox/internal/framework/persistence"
 	"github.com/ouznoreyni/numflex-sandbox/internal/framework/seed"
-	"github.com/ouznoreyni/numflex-sandbox/internal/httpx"
+	"github.com/ouznoreyni/numflex-sandbox/internal/framework/web"
 )
 
 func main() {
@@ -51,8 +50,15 @@ func main() {
 	moteur := engine.New(c, db)
 	go moteur.Run(ctx)
 
-	d := &api.Deps{Cfg: c, DB: db, R: httpx.NewRenderer(c.Fidelity, c.ClockSkew), Moteur: moteur}
-	r := api.NewRouter(d)
+	// cmd/server/main.go is the composition root: config, database,
+	// migrations and seed are already built above; web.Deps carries the rest
+	// (fidelity, the opened database, the running engine) into
+	// web.NewRouter, which builds every gateway, unit of work, interactor,
+	// presenter and controller exactly once, then wires the whole route
+	// table (Task 18 — internal/api is gone, this package is now the router
+	// actually served).
+	d := &web.Deps{Cfg: c, DB: db, Moteur: moteur}
+	r := web.NewRouter(d)
 
 	if err := r.Run(":" + c.Port); err != nil {
 		log.Fatalf("serveur HTTP : %v", err)

@@ -1,9 +1,11 @@
-// Le paquet test est un paquet distinct de internal/api : il ne peut pas
-// importer les helpers de test de internal/api (fichiers _test.go, non
-// exportés hors de leur paquet). Ce fichier reprend donc localement le
-// harnais de la Task 9 (internal/api/testutil_test.go), en y ajoutant
-// statutEtape, detenteur et postBrut — les seuls ajouts nécessaires aux
-// scénarios de bout en bout de cette tâche.
+// Le paquet test est un paquet distinct de internal/framework/web : il ne
+// peut pas importer les helpers de test de ce dernier (fichiers _test.go,
+// non exportés hors de leur paquet). Ce fichier reprend donc localement le
+// harnais de la Task 9 (à l'origine internal/api/testutil_test.go), en y
+// ajoutant statutEtape, detenteur et postBrut — les seuls ajouts
+// nécessaires aux scénarios de bout en bout de cette tâche — puis, à la
+// tâche 18, avancerA et creerPortage pour accueillir
+// conformite_captures_test.go, déplacé depuis internal/api (supprimé).
 package test
 
 import (
@@ -15,12 +17,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ouznoreyni/numflex-sandbox/internal/api"
 	"github.com/ouznoreyni/numflex-sandbox/internal/framework/config"
 	"github.com/ouznoreyni/numflex-sandbox/internal/framework/engine"
 	"github.com/ouznoreyni/numflex-sandbox/internal/framework/persistence"
 	"github.com/ouznoreyni/numflex-sandbox/internal/framework/seed"
-	"github.com/ouznoreyni/numflex-sandbox/internal/httpx"
+	"github.com/ouznoreyni/numflex-sandbox/internal/framework/web"
 	"github.com/ouznoreyni/numflex-sandbox/internal/testsupport"
 	"github.com/stretchr/testify/require"
 )
@@ -54,12 +55,11 @@ func nouveauHarnais(t *testing.T, ajuste ...func(*config.Config)) *harnais {
 	}
 
 	mot := engine.New(cfg, db)
-	d := &api.Deps{
+	d := &web.Deps{
 		Cfg: cfg, DB: db,
-		R:      httpx.NewRenderer(cfg.Fidelity, cfg.ClockSkew),
 		Moteur: mot,
 	}
-	srv := httptest.NewServer(api.NewRouter(d))
+	srv := httptest.NewServer(web.NewRouter(d))
 	t.Cleanup(srv.Close)
 
 	return &harnais{t: t, srv: srv, cfg: cfg, db: db, moteur: mot}
@@ -201,4 +201,33 @@ func corpsParticulier(numero string) map[string]any {
 			"typePiece": "CNI", "numeroPiece": "1234567890123",
 		},
 	}
+}
+
+// avancerA walks a request forward to the wanted step by writing to the
+// database directly — the processing endpoints are tested elsewhere. Moved
+// from internal/api/testutil_test.go (Task 18, alongside
+// conformite_captures_test.go).
+func (h *harnais) avancerA(id, etape string) {
+	h.t.Helper()
+	_, err := h.db.Pool.Exec(context.Background(),
+		`UPDATE demande SET etape_actuelle = $2, statut_etape_actuel = 'EN_COURS',
+		                    date_debut_etape = now(), transition_prevue_a = NULL
+		  WHERE id = $1`, id, etape)
+	require.NoError(h.t, err)
+}
+
+// creerPortage sends the OTP then creates an individual request ORANGE →
+// YAS through the live router. Moved from internal/api/testutil_test.go
+// (Task 18, alongside conformite_captures_test.go).
+func (h *harnais) creerPortage(numero string) string {
+	h.t.Helper()
+	jeton := h.jeton("yas", "yas2026")
+	h.appel(http.MethodPost, "/api/gateway/v1/otp/send", jeton, map[string]any{"numero": numero})
+
+	rep, corps := h.appel(http.MethodPost, "/api/gateway/v1/demandes/particulier",
+		jeton, corpsParticulier(numero))
+	require.Equal(h.t, http.StatusCreated, rep.StatusCode, corps)
+
+	data := corps["data"].(map[string]any)
+	return data["id"].(string)
 }

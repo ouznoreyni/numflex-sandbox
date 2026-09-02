@@ -1,4 +1,4 @@
-package api
+package web
 
 import (
 	"context"
@@ -11,12 +11,11 @@ import (
 )
 
 // moteurEngine adapts Deps.Moteur — PlaceGelee/PlanifierTransition, the
-// vocabulary internal/engine.Engine and its own tests have always used — to
-// port.Engine's MarketFrozen/ScheduleTransition: same behaviour, renamed
-// for the use-case layer. This file is the only wiring point where the
-// mismatch needs bridging; nothing upstream of it (internal/engine, cmd/
-// server's ticker) has any reason to know the use-case layer's vocabulary
-// exists.
+// vocabulary internal/framework/engine.Engine and its own tests have always
+// used — to port.Engine's MarketFrozen/ScheduleTransition: same behaviour,
+// renamed for the use-case layer. This file and porting.go are the only
+// wiring points where the mismatch needs bridging. Moved from
+// internal/api/acceptation.go (Task 18).
 type moteurEngine struct{ m Moteur }
 
 func (e moteurEngine) MarketFrozen(ctx context.Context) (bool, error) {
@@ -32,14 +31,8 @@ func (e moteurEngine) ScheduleTransition(ctx context.Context, requestID string) 
 // queryController's own builds), one ReferenceGateway for the
 // motifRejetId guard, a UnitOfWork, port.Engine via moteurEngine above, two
 // interactors, a presenter and a clock — behind the two acceptance routes.
-// NewRouter calls it once, at router construction, exactly as it does the
-// six controllers before it.
-//
-// This is the strangler pattern's next stop: internal/api/acceptation.go —
-// the 334-line handler that opened a *pgx.Tx directly for a fleet's
-// numéro-by-numéro rejection — is gone, replaced by
-// internal/usecase/acceptance's two interactors, each orchestrating a
-// single port.UnitOfWork.Do rather than any *pgx.Tx of its own.
+// NewRouter calls it once, at router construction. Moved from
+// internal/api/acceptation.go (Task 18).
 func (d *Deps) acceptanceController() *controller.AcceptanceController {
 	requests := postgres.NewRequestGateway(d.DB.Pool)
 	reasons := postgres.NewReferenceGateway(d.DB.Pool)

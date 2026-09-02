@@ -1,4 +1,4 @@
-package api
+package web
 
 import (
 	"github.com/ouznoreyni/numflex-sandbox/internal/adapter/controller"
@@ -13,8 +13,8 @@ import (
 // build: both are pool-bound and stateless, so a second construction here
 // costs nothing and keeps this file independent of creation.go), seven
 // interactors, a presenter and a clock — behind the seven read-only routes.
-// NewRouter calls it once, at router construction, exactly as it does
-// otpController, referenceController, authController and creationController.
+// NewRouter calls it once, at router construction. Moved from
+// internal/api/query.go (Task 18).
 //
 // excludeSource — ANO-019 — is resolved here, at the one point in this
 // package allowed to read config.Fidelity, and handed to

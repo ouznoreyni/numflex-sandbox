@@ -1,11 +1,11 @@
 // Package routerharness starts the real, live router for adapter-layer
 // controller tests. It is a separate package from internal/testsupport
 // (rather than living alongside NewTestDB there) specifically because it
-// imports internal/api: internal/testsupport is itself imported by
-// internal/api's own tests (for NewTestDB), and internal/api importing back
-// from the same package would be a test import cycle. Only controller test
-// packages (internal/adapter/controller and its successors) import
-// routerharness; internal/api and internal/engine's own tests never do.
+// imports internal/framework/web: internal/testsupport is itself imported
+// by internal/framework/web's own tests (for NewTestDB), and
+// internal/framework/web importing back from the same package would be a
+// test import cycle. Only controller test packages (internal/adapter/
+// controller and its successors) import routerharness.
 package routerharness
 
 import (
@@ -17,26 +17,20 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ouznoreyni/numflex-sandbox/internal/api"
 	"github.com/ouznoreyni/numflex-sandbox/internal/framework/config"
 	"github.com/ouznoreyni/numflex-sandbox/internal/framework/engine"
 	"github.com/ouznoreyni/numflex-sandbox/internal/framework/persistence"
-	"github.com/ouznoreyni/numflex-sandbox/internal/httpx"
+	"github.com/ouznoreyni/numflex-sandbox/internal/framework/web"
 	"github.com/ouznoreyni/numflex-sandbox/internal/testsupport"
 	"github.com/stretchr/testify/require"
 )
 
-// RouterHarness starts the real, live router — api.NewRouter, wired exactly
+// RouterHarness starts the real, live router — web.NewRouter, wired exactly
 // as cmd/server/main.go wires it — against a fresh, migrated, seeded test
 // database. It exists so an adapter-layer controller's test (which cannot
 // import internal/framework directly: see test/architecture_test.go) can
 // still exercise the whole HTTP stack end to end, proving a request really
 // reaches its controller rather than some leftover handler.
-//
-// internal/api/testutil_test.go keeps its own private harnais for
-// internal/api's own tests, which are not layer-constrained; this type is
-// the one every capability's moved controller test (Task 9 onward) should
-// use instead of reimplementing it.
 type RouterHarness struct {
 	T      *testing.T
 	Srv    *httptest.Server
@@ -104,13 +98,12 @@ func NewRouterHarness(t *testing.T, ajuste ...func(*config.Config)) *RouterHarne
 	}
 
 	mot := engine.New(cfg, db)
-	d := &api.Deps{
+	d := &web.Deps{
 		Cfg:    cfg,
 		DB:     db,
-		R:      httpx.NewRenderer(cfg.Fidelity, cfg.ClockSkew),
 		Moteur: mot,
 	}
-	srv := httptest.NewServer(api.NewRouter(d))
+	srv := httptest.NewServer(web.NewRouter(d))
 	t.Cleanup(srv.Close)
 
 	return &RouterHarness{T: t, Srv: srv, DB: db, Cfg: cfg, Moteur: mot}
