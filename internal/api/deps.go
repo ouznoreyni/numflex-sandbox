@@ -15,24 +15,24 @@ type Deps struct {
 	Cfg *config.Config
 	DB  *persistence.DB
 	R   *httpx.Renderer
-	// Moteur est renseigné en Task 9. Déclaré ici en interface pour que le
-	// paquet api ne dépende pas de l'ordre de livraison des tâches.
+	// Moteur is filled in by Task 9. Declared here as an interface so that the
+	// api package does not depend on the order the tasks land in.
 	Moteur Moteur
 }
 
-// Moteur : la part du comportement de la plateforme que les appels ne pilotent pas.
+// Moteur — the part of the platform's behaviour that calls do not drive.
 type Moteur interface {
 	PlaceGelee(ctx context.Context) (bool, error)
 	PlanifierTransition(ctx context.Context, demandeID string) error
 }
 
-// Appelant lit le Caller que middleware.Authenticate (Task 6, câblé en
-// Task 10) a résolu et déposé sur le contexte de la requête — pas sur le
-// magasin propre à *gin.Context comme le faisait l'ancien Authentifier :
-// port.CallerFromContext est le point de passage commun entre le
-// middleware (internal/framework) et ce paquet, qui n'est pas soumis à la
-// règle de dépendance de test/architecture_test.go (il n'est ni adapter, ni
-// framework) et peut donc lire ce que le middleware y a placé.
+// Appelant reads the Caller that middleware.Authenticate (Task 6, wired in
+// Task 10) resolved and put on the request's context — not on *gin.Context's
+// own store, as the former Authentifier did: port.CallerFromContext is the
+// shared crossing point between the middleware (internal/framework) and this
+// package, which is not bound by test/architecture_test.go's dependency rule
+// (being neither adapter nor framework) and may therefore read what the
+// middleware left there.
 func Appelant(c *gin.Context) entity.Caller {
 	return port.CallerFromContext(c.Request.Context())
 }

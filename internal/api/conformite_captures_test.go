@@ -9,18 +9,17 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Ce fichier fige les réponses réellement enregistrées contre la plateforme
-// ARTP le 2026-08-27, conservées dans « Num Flex API.postman_collection.json ».
+// This file freezes the responses actually recorded against the ARTP platform
+// on 2026-08-27, kept in « Num Flex API.postman_collection.json ».
 //
-// Elles priment sur les exemples du guide : ce sont des captures, pas des
-// illustrations. On les distingue des exemples écrits à la main de la même
-// collection par leurs identifiants — les captures portent de vrais ObjectId
-// (`6a90bc9bad2131073eddbbdc`, opérateurs `6a21745c…` / `6a2174c3…`) et des
-// horodatages à la nanoseconde, là où les exemples portent `65abc111111111`
-// et « Orange Sénégal ».
+// They outrank the guide's examples: these are captures, not illustrations.
+// They are told apart from the same collection's hand-written examples by their
+// identifiers — captures carry real ObjectIds (`6a90bc9bad2131073eddbbdc`,
+// operators `6a21745c…` / `6a2174c3…`) and nanosecond timestamps, where the
+// examples carry `65abc111111111` and « Orange Sénégal ».
 
-// clientAttendu est le sous-objet client tel que la plateforme le rend, avec
-// exactement ces six champs.
+// clientAttendu is the client sub-object as the platform renders it, with
+// exactly these six fields.
 func exigeClient(t *testing.T, dto map[string]any) {
 	t.Helper()
 	client, ok := dto["client"].(map[string]any)
@@ -63,10 +62,10 @@ func TestCaptureAcceptation(t *testing.T) {
 	exigeClient(t, corps["data"].(map[string]any))
 }
 
-// Capture « 1.orange1_EN_COURS_Demandes à traiter_next_ACCEPTATION » : une
-// demande à l'étape ACCEPTATION figure dans a-traiter de la source. La file
-// répond à « nécessitant une action de votre part » (§7.7), pas à un
-// sous-ensemble d'étapes.
+// Capture « 1.orange1_EN_COURS_Demandes à traiter_next_ACCEPTATION »: a request
+// at the ACCEPTATION step does appear in the source's a-traiter. The queue
+// answers « nécessitant une action de votre part » (§7.7), not a subset of
+// steps.
 func TestCaptureATraiterInclutAcceptation(t *testing.T) {
 	h := nouveauHarnais(t)
 	id := h.creerPortage("771000001")
@@ -78,14 +77,14 @@ func TestCaptureATraiterInclutAcceptation(t *testing.T) {
 	require.Equal(t, "ACCEPTATION", dto["etapeActuelle"])
 	exigeClient(t, dto)
 
-	// Le destinataire n'a rien à traiter à cette étape.
+	// The recipient has nothing to process at this step.
 	require.Empty(t, h.liste("/api/gateway/v1/demandes/a-traiter", h.jeton("yas", "yas2026")))
 }
 
-// Captures « 1.orange_CONFIRMATION_Demandes à confirmer » et
-// « 1_orange_Confirmer une demande » : ni la file ni la réponse de confirmation
-// ne portent de client, là où toutes les autres en portent un. L'asymétrie est
-// mesurée sur quatre captures, elle n'est pas un oubli d'enregistrement.
+// Captures « 1.orange_CONFIRMATION_Demandes à confirmer » and
+// « 1_orange_Confirmer une demande »: neither the queue nor the confirmation
+// response carries a client, where every other one does. The asymmetry is
+// measured across four captures; it is not a recording oversight.
 func TestCaptureConfirmationSansClient(t *testing.T) {
 	h := nouveauHarnais(t)
 	id := h.creerPortage("771000001")
@@ -106,9 +105,9 @@ func TestCaptureConfirmationSansClient(t *testing.T) {
 	require.NotContains(t, corps["data"].(map[string]any), "client")
 }
 
-// Captures « in » et « 2_yas_confirmer-a COMPLETION » : une demande achevée
-// porte statutEtapeActuel TERMINE, pas VALIDE. ANO-013 le disait déjà —
-// TERMINE en nominal, EXPIRE par expiration — et la capture le confirme.
+// Captures « in » and « 2_yas_confirmer-a COMPLETION »: a finished request
+// carries statutEtapeActuel TERMINE, not VALIDE. ANO-013 already said so —
+// TERMINE nominally, EXPIRE on expiry — and the capture confirms it.
 func TestCaptureDemandeAcheveePorteTermine(t *testing.T) {
 	h := nouveauHarnais(t)
 	id := h.creerPortage("771000001")
@@ -127,8 +126,8 @@ func TestCaptureDemandeAcheveePorteTermine(t *testing.T) {
 	exigeClient(t, dto)
 }
 
-// Toutes les captures rendent les horodatages à la milliseconde
-// (« 2026-08-27T22:39:23.583Z »), pas à la microseconde.
+// Every capture renders timestamps to the millisecond
+// (« 2026-08-27T22:39:23.583Z »), not to the microsecond.
 func TestCaptureHorodatagesEnMillisecondes(t *testing.T) {
 	h := nouveauHarnais(t)
 	id := h.creerPortage("771000001")
@@ -141,9 +140,9 @@ func TestCaptureHorodatagesEnMillisecondes(t *testing.T) {
 		"la plateforme rend des horodatages à la milliseconde")
 }
 
-// Captures « 1.orange_3_DESACTIVATION…_next_ACTIVATION » et
-// « 1. yas_4_ACTIVATION…_next_CONFIRMATION » : la reponse porte l'etape
-// SUIVANTE. La transition est appliquee dans la requete.
+// Captures « 1.orange_3_DESACTIVATION…_next_ACTIVATION » and
+// « 1. yas_4_ACTIVATION…_next_CONFIRMATION »: the response carries the NEXT
+// step. The transition is applied within the request.
 func TestCaptureTraitementRendLEtapeSuivante(t *testing.T) {
 	h := nouveauHarnais(t) // convergence nulle : le profil des captures
 	id := h.creerPortage("771000001")
@@ -157,7 +156,7 @@ func TestCaptureTraitementRendLEtapeSuivante(t *testing.T) {
 	require.Equal(t, "ACTIVATION", data["etapeActuelle"])
 	require.Equal(t, "EN_COURS", data["statutEtapeActuel"])
 
-	// L'acceptation suit la même règle : la capture rend DESACTIVATION.
+	// Acceptance follows the same rule: the capture renders DESACTIVATION.
 	autre := h.creerPortage("771000002")
 	_, corpsAcc := h.appel(http.MethodPost, "/api/gateway/v1/demandes/acceptation",
 		h.jeton("orange", "orange2026"),
@@ -166,10 +165,10 @@ func TestCaptureTraitementRendLEtapeSuivante(t *testing.T) {
 		corpsAcc["data"].(map[string]any)["etapeActuelle"])
 }
 
-// Le comportement mesuré au SIT v0.3 (R-10) reste atteignable : une fenêtre de
-// convergence non nulle rend l'étape précédente, et la bascule survient plus
-// tard. Les deux mesures restent donc reproductibles, celle de 2026-08-27 par
-// défaut et celle du SIT sur demande.
+// The behaviour measured at SIT v0.3 (R-10) stays reachable: a non-zero
+// convergence window renders the previous step, and the switch happens later.
+// Both measurements therefore stay reproducible — 2026-08-27's by default, the
+// SIT's on demand.
 func TestConvergenceNonNulleRestaureLeComportementDuSIT(t *testing.T) {
 	h := nouveauHarnais(t, func(c *config.Config) {
 		c.ConvergenceMin = 30 * time.Second

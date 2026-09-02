@@ -7,17 +7,17 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// CORS n'appartient pas au contrat ARTP : la gateway réelle est consommée de
-// serveur à serveur, et aucun test du SIT n'a mesuré son comportement sur une
-// requête cross-origin. Ce middleware n'existe donc que pour le confort du bac
-// à sable — permettre à la page Swagger, servie sur un autre port, d'appeler
-// l'API depuis un navigateur. Il autorise toute origine par défaut ; poser
-// CORS_ALLOWED_ORIGINS à vide le rend inerte, et rend au sandbox le silence de
-// la gateway réelle.
+// CORS is no part of the ARTP contract: the real gateway is consumed server to
+// server, and no SIT test measured its behaviour on a cross-origin request.
+// This middleware exists only for the sandbox's comfort — letting the Swagger
+// page, served on another port, call the API from a browser. It allows every
+// origin by default; setting CORS_ALLOWED_ORIGINS to empty makes it inert, and
+// gives the sandbox back the real gateway's silence.
 //
-// Il est délibérément écrit comme un middleware global plutôt qu'en routes
-// OPTIONS enregistrées : la contrainte D-4 veut que le sandbox n'expose que les
-// 33 routes du contrat, et une route OPTIONS par endpoint doublerait sa surface.
+// It is deliberately written as a global middleware rather than as registered
+// OPTIONS routes: constraint D-4 wants the sandbox to expose the 33 contract
+// routes and nothing else, and one OPTIONS route per endpoint would double that
+// surface.
 func (d *Deps) autoriserCORS() gin.HandlerFunc {
 	origines := d.Cfg.CORSAllowedOrigins
 	toutes := false
@@ -42,8 +42,8 @@ func (d *Deps) autoriserCORS() gin.HandlerFunc {
 			}
 		}
 		if !autorisee {
-			// Aucun en-tête : le navigateur bloquera la lecture de la réponse,
-			// ce qui est le comportement attendu d'une origine non autorisée.
+			// No header at all: the browser will block reading the response,
+			// which is what an unauthorised origin is meant to get.
 			c.Next()
 			return
 		}
@@ -55,9 +55,9 @@ func (d *Deps) autoriserCORS() gin.HandlerFunc {
 		c.Header("Access-Control-Allow-Origin", valeur)
 		c.Header("Vary", "Origin")
 
-		// Préambule : le navigateur l'émet sans en-tête Authorization. Il doit
-		// être soldé ici, avant le middleware d'authentification, sinon il part
-		// en 401 et la vraie requête n'est jamais émise.
+		// Preflight: the browser sends it without an Authorization header. It must
+		// be settled here, before the authentication middleware, or it comes back
+		// 401 and the real request is never sent.
 		if c.Request.Method == http.MethodOptions {
 			c.Header("Access-Control-Allow-Methods", strings.Join([]string{
 				http.MethodGet, http.MethodPost, http.MethodOptions,

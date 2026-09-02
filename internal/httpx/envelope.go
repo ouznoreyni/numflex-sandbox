@@ -1,6 +1,6 @@
 package httpx
 
-// Enveloppe de succès du §8 du guide, identique dans les deux modes de fidélité.
+// Envelope is the guide's §8 success envelope, identical in both fidelity modes.
 type Envelope struct {
 	Success bool   `json:"success"`
 	Code    string `json:"code"`
@@ -8,8 +8,8 @@ type Envelope struct {
 	Data    any    `json:"data"`
 }
 
-// EnvelopeSansData sert ANO-011 : la réponse de otp/send omet le champ data —
-// il n'est ni présent, ni null.
+// EnvelopeSansData serves ANO-011: otp/send's response omits the data field —
+// it is neither present nor null.
 type EnvelopeSansData struct {
 	Success bool   `json:"success"`
 	Code    string `json:"code"`

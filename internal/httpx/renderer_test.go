@@ -70,7 +70,7 @@ func TestRealErreurValidationSortEn400AvecFieldErrors(t *testing.T) {
 }
 
 func TestRealDetailPersonnalise(t *testing.T) {
-	// ANO-002 : le refus de re-portage à moins de 3 mois se présente comme une panne.
+	// ANO-002: refusing a re-porting inside 3 months presents itself as a failure.
 	c, rec, r := contexte(config.FidelityReal, "/api/gateway/v1/demandes/particulier")
 
 	r.Fail(c, entity.PortingDelayNotRespected())
@@ -134,7 +134,7 @@ func TestSucces(t *testing.T) {
 }
 
 func TestOKSansDataOmetLeChampEnReel(t *testing.T) {
-	// ANO-011 : la réponse de otp/send ne porte pas de champ data du tout.
+	// ANO-011: otp/send's response carries no data field at all.
 	c, rec, r := contexte(config.FidelityReal, "/x")
 	r.OKSansData(c, http.StatusOK, "OTP envoyé avec succès")
 
@@ -179,10 +179,10 @@ func TestRealValidationAvecChampsGardeConstraintViolation(t *testing.T) {
 }
 
 func TestRealValidationSansChampsRendMessagePrecis(t *testing.T) {
-	// Correction revue #1 : sans Fields, la forme constraint-violation ne serait
-	// jamais produite par une pile Spring/JHipster (elle porte toujours au moins un
-	// fieldError). FormatJSONInvalide, FlotteVide, ValidationEchouee(msg) doivent
-	// donc rendre un problem-with-message en 400 qui porte le message métier.
+	// Review round 1 fix: without Fields, the constraint-violation shape would
+	// never be produced by a Spring/JHipster stack (it always carries at least one
+	// fieldError). FormatJSONInvalide, FlotteVide and ValidationEchouee(msg) must
+	// therefore render a problem-with-message in 400 carrying the business message.
 	c, rec, r := contexte(config.FidelityReal, "/api/gateway/v1/demandes/flotte")
 
 	r.Fail(c, entity.ValidationFailed("un message précis"))
@@ -200,8 +200,8 @@ func TestRealValidationSansChampsRendMessagePrecis(t *testing.T) {
 }
 
 func TestFailAvecErreurNilNePaniquePas(t *testing.T) {
-	// Correction revue #2 : un appelant qui fait `return r.Fail(c, err)` avec err
-	// nil ne doit pas transformer la requête en panique récupérée par gin.
+	// Review round 2 fix: a caller doing `return r.Fail(c, err)` with a nil err
+	// must not turn the request into a panic recovered by gin.
 	c, rec, r := contexte(config.FidelityReal, "/x")
 
 	require.NotPanics(t, func() {
@@ -213,8 +213,8 @@ func TestFailAvecErreurNilNePaniquePas(t *testing.T) {
 }
 
 func TestFailAvecApperrErrorTypeNilNePaniquePas(t *testing.T) {
-	// Correction revue #2 : un *entity.Fault typé nil, emballé dans un error,
-	// fait réussir errors.As avec e == nil ; e.Kind paniquerait sans la garde.
+	// Review round 2 fix: a typed-nil *entity.Fault wrapped in an error makes
+	// errors.As succeed with e == nil; e.Kind would panic without the guard.
 	c, rec, r := contexte(config.FidelityReal, "/x")
 
 	var e *entity.Fault
@@ -229,7 +229,7 @@ func TestFailAvecApperrErrorTypeNilNePaniquePas(t *testing.T) {
 }
 
 func TestFailErreurNueDevient500AvecSonTexte(t *testing.T) {
-	// Correction revue #3 : chemin de repli pour une erreur qui n'est pas un
+	// Review round 3 fix: the fallback path for an error that is not an
 	// *entity.Fault.
 	c, rec, r := contexte(config.FidelityReal, "/x")
 
@@ -242,8 +242,8 @@ func TestFailErreurNueDevient500AvecSonTexte(t *testing.T) {
 }
 
 func TestFailErreurEmballeeConserveKindEtMessage(t *testing.T) {
-	// Correction revue #3 : errors.As doit déballer une erreur enveloppée par
-	// fmt.Errorf("...: %w", ...), comme le feront les tâches en aval.
+	// Review round 3 fix: errors.As must unwrap an error wrapped by
+	// fmt.Errorf("...: %w", ...), as the downstream tasks will do.
 	c, rec, r := contexte(config.FidelityContract, "/x")
 
 	err := fmt.Errorf("contexte : %w", entity.RequestNotFound())

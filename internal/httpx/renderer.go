@@ -20,15 +20,17 @@ func NewRenderer(fid config.Fidelity, skew time.Duration) *Renderer {
 
 func (r *Renderer) Fidelity() config.Fidelity { return r.fid }
 
-// Skew applique la dérive d'horloge serveur mesurée en recette (ANO-015, ~9 min),
-// et tronque à la milliseconde. Elle ne touche que les horodatages rendus ; ceux
-// stockés en base restent justes et à leur pleine précision.
+// Skew applies the server clock drift measured in the ARTP staging environment
+// (ANO-015, ~9 min) and truncates to the millisecond. It touches only rendered
+// timestamps; those stored in the database stay accurate, at their full
+// precision.
 //
-// La troncature vient des captures du 2026-08-27 : la plateforme relit ses
-// documents depuis Mongo, dont l'horodatage est milliseconde, et rend donc
-// « 2026-08-27T22:39:23.583Z ». Postgres stocke à la microseconde ; sans
-// troncature le sandbox rendrait un champ plus précis que l'original, et un
-// client qui compare des horodatages au format exact verrait la différence.
+// The truncation comes from the captures of 2026-08-27: the platform reads its
+// documents back from Mongo, whose timestamps are millisecond-precise, and so
+// renders « 2026-08-27T22:39:23.583Z ». Postgres stores microseconds; without
+// truncation the sandbox would render a field more precise than the original,
+// and a client comparing timestamps on their exact format would see the
+// difference.
 func (r *Renderer) Skew(t time.Time) time.Time {
 	return t.Add(r.skew).Truncate(time.Millisecond)
 }
@@ -64,16 +66,16 @@ func (r *Renderer) Fail(c *gin.Context, err error) {
 	r.failReel(c, e)
 }
 
-// failReel reproduit ANO-001, ANO-003 et ANO-004 : aucune enveloppe, aucun champ
-// code, les erreurs métier en 500, et le nom de la classe d'exception Java exposé.
+// failReel reproduces ANO-001, ANO-003 and ANO-004: no envelope, no code field,
+// business errors as 500s, and the Java exception class name exposed.
 func (r *Renderer) failReel(c *gin.Context, e *entity.Fault) {
 	chemin := ""
 	if c.Request != nil {
 		chemin = c.Request.URL.Path
 	}
 
-	// KindValidation avec Fields : une vraie violation de bean validation Spring,
-	// qui porte toujours au moins un fieldError.
+	// KindValidation with Fields: a real Spring bean validation violation, which
+	// always carries at least one fieldError.
 	if e.Kind == entity.FaultValidation && len(e.Fields) > 0 {
 		c.Header("Content-Type", "application/problem+json")
 		c.JSON(http.StatusBadRequest, problem{
@@ -88,11 +90,12 @@ func (r *Renderer) failReel(c *gin.Context, e *entity.Fault) {
 		return
 	}
 
-	// KindValidation sans Fields : une validation métier échouée en dehors de la
-	// couche bean validation (ex. FormatJSONInvalide, FlotteVide, ValidationEchouee).
-	// Une pile Spring/JHipster ne répond jamais constraint-violation avec zéro
-	// fieldErrors ; ce corps-là est un problem-with-message ordinaire en 400, et le
-	// message métier reste lisible (pas de préfixe RuntimeException:, réservé aux 500).
+	// KindValidation without Fields: a business validation that failed outside the
+	// bean validation layer (FormatJSONInvalide, FlotteVide, ValidationEchouee, say).
+	// A Spring/JHipster stack never answers constraint-violation with zero
+	// fieldErrors; that body is an ordinary problem-with-message in 400, and the
+	// business message stays readable (no RuntimeException: prefix, which is
+	// reserved for 500s).
 	if e.Kind == entity.FaultValidation {
 		detail := e.RealDetail
 		if detail == "" {

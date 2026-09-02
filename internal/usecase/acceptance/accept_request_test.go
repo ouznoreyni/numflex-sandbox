@@ -74,21 +74,20 @@ func TestAcceptRequestNominal(t *testing.T) {
 	require.Nil(t, fault)
 	require.Equal(t, "d1", view.ID)
 
-	// La transition a été planifiée — preuve que le chemin d'acceptation
-	// est bien allé jusqu'au bout.
+	// The transition was scheduled — proof the acceptance path really ran all
+	// the way through.
 	require.Equal(t, []string{"d1"}, f.engine.Scheduled)
 	require.Equal(t, "Demande conforme", f.requests.Comment("d1"))
 }
 
-// TestAcceptRequestExecuteNeVerifiePlusLeGel documente le déplacement du
-// fix round 1 : le gel de la place n'est plus l'affaire d'Execute — il doit
-// être vérifié par AcceptanceController, AVANT le décodage du corps de la
-// requête, pour que le cas « place gelée + corps invalide » réponde bien
-// « place gelée » plutôt qu'une erreur de format JSON (voir
-// TestAcceptationPlaceGeleePrimeSurCorpsInvalide au niveau HTTP). Un
-// Execute qui vérifiait encore le gel après ce déplacement referait exactement
-// l'erreur d'ordre que ce fix corrige : ce test le garantit en prouvant
-// qu'une place gelée n'empêche plus Execute d'aboutir.
+// TestAcceptRequestExecuteNeVerifiePlusLeGel documents where the frozen-market
+// check moved to: it is no longer Execute's business — AcceptanceController
+// must make it BEFORE decoding the request body, so that the "frozen market +
+// invalid body" case answers "frozen market" rather than a JSON format error
+// (see TestAcceptationPlaceGeleePrimeSurCorpsInvalide at the HTTP level). An
+// Execute still checking the freeze after that move would reproduce exactly
+// the ordering bug the move fixes: this test guards against that by proving a
+// frozen market no longer keeps Execute from succeeding.
 func TestAcceptRequestExecuteNeVerifiePlusLeGel(t *testing.T) {
 	f := newFixture()
 	seedRequest(f)
@@ -101,9 +100,9 @@ func TestAcceptRequestExecuteNeVerifiePlusLeGel(t *testing.T) {
 	require.Equal(t, "d1", view.ID)
 }
 
-// TestMarketFrozen couvre directement la fonction exportée
-// qu'AcceptanceController appelle désormais avant tout décodage — la seule
-// vérification du gel qui subsiste, au niveau contrôleur plutôt qu'Execute.
+// TestMarketFrozen covers directly the exported function AcceptanceController
+// now calls before any decoding — the only freeze check left, sitting at the
+// controller level rather than inside Execute.
 func TestMarketFrozen(t *testing.T) {
 	f := newFixture()
 	require.Nil(t, acceptance.MarketFrozen(context.Background(), f.engine))
@@ -168,8 +167,8 @@ func TestAcceptRequestRejetAvecMotifTermineLaDemande(t *testing.T) {
 }
 
 func TestAcceptRequestMotifRejetInconnuRefuseMemeSurAcceptation(t *testing.T) {
-	// Le contrôle d'existence du motifRejetId ne dépend pas de accepte : un
-	// identifiant inconnu est refusé même sur une acceptation.
+	// The motifRejetId existence check does not depend on accepte: an unknown
+	// identifier is refused even on an acceptance.
 	f := newFixture()
 	seedRequest(f)
 
@@ -181,14 +180,13 @@ func TestAcceptRequestMotifRejetInconnuRefuseMemeSurAcceptation(t *testing.T) {
 	require.Equal(t, "Motif de rejet inconnu", fault.Message)
 }
 
-// TestAcceptRequestEchecEcritureNArretePasAvantLaTransaction est la preuve,
-// au niveau interactor, qu'un rejet dont l'écriture échoue ne va jamais
-// jusqu'à planifier quoi que ce soit ni jusqu'à relire la demande — l'ordre
-// des appels à l'intérieur de la même transaction. La preuve qu'un
-// UnitOfWork RÉEL défait vraiment ses écritures sur ce même chemin (aucune
-// ligne etape_historique, demande inchangée) vit dans
-// internal/framework/persistence (Postgres, //go:build integration) : ce
-// test-ci ne peut pas la simuler, un double en mémoire n'annulant rien.
+// TestAcceptRequestEchecEcritureNArretePasAvantLaTransaction is the proof, at
+// the interactor level, that a rejection whose write fails never goes on to
+// schedule anything, nor to read the request back — the order of the calls
+// inside one transaction. The proof that a REAL UnitOfWork does undo its
+// writes on that same path (no etape_historique row, demande unchanged) lives
+// in internal/framework/persistence (Postgres, //go:build integration): this
+// test cannot simulate it, an in-memory double rolling nothing back.
 func TestAcceptRequestEchecEcritureNArretePasAvantLaTransaction(t *testing.T) {
 	f := newFixture()
 	seedRequest(f)

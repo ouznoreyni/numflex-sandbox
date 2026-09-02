@@ -10,11 +10,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Le CORS est une commodité de bac à sable, pas un trait du contrat : une
-// gateway consommée de serveur à serveur n'en envoie pas, et aucune mesure du
-// SIT n'en atteste. Le sandbox l'ouvre à toute origine par défaut, pour le
-// confort ; liste vide — CORS_ALLOWED_ORIGINS posée vide — le middleware
-// redevient muet, et c'est ce que ce test vérifie.
+// CORS is a sandbox convenience, not a trait of the contract: a gateway
+// consumed server to server sends none, and no SIT measurement attests to it.
+// The sandbox opens it to every origin by default, for comfort; on an empty
+// list — CORS_ALLOWED_ORIGINS set to empty — the middleware goes silent again,
+// and that is what this test checks.
 func TestSansConfigurationAucunEnTeteCORS(t *testing.T) {
 	h := nouveauHarnais(t)
 
@@ -51,9 +51,9 @@ func TestOrigineNonAutoriseeNeRecoitRien(t *testing.T) {
 	require.Empty(t, rep.Header.Get("Access-Control-Allow-Origin"))
 }
 
-// Le préambule part sans en-tête Authorization : il doit passer avant le
-// middleware d'authentification, sinon il est refusé en 401 et le navigateur
-// n'émet jamais la vraie requête.
+// The preflight goes out without an Authorization header: it must pass before
+// the authentication middleware, or it is refused with a 401 and the browser
+// never sends the real request.
 func TestPreambuleRepondSansAuthentification(t *testing.T) {
 	h := nouveauHarnais(t, func(c *config.Config) {
 		c.CORSAllowedOrigins = []string{"http://localhost:8081"}
@@ -73,8 +73,8 @@ func TestPreambuleRepondSansAuthentification(t *testing.T) {
 	require.Contains(t, rep.Header.Get("Access-Control-Allow-Methods"), "POST")
 }
 
-// Garde-fou de la contrainte D-4 : le CORS passe par un middleware global, pas
-// par des routes OPTIONS enregistrées. La surface exposée ne doit pas bouger.
+// Guard on constraint D-4: CORS goes through a global middleware, not through
+// registered OPTIONS routes. The exposed surface must not move.
 func TestLeCORSNAjouteAucuneRoute(t *testing.T) {
 	compter := func(ajuste ...func(*config.Config)) int {
 		cfg := &config.Config{Port: "0", JWTSecret: "s"}
@@ -82,10 +82,10 @@ func TestLeCORSNAjouteAucuneRoute(t *testing.T) {
 			f(cfg)
 		}
 		gin.SetMode(gin.ReleaseMode)
-		// DB non nil mais vide : le test ne fait aucune requête, mais NewRouter
-		// construit désormais le contrôleur OTP une seule fois, à la
-		// construction du routeur — comme cmd/server/main.go, qui fournit
-		// toujours un *persistence.DB réel, jamais nil.
+		// A non-nil but empty DB: the test issues no query, yet NewRouter now
+		// builds the OTP controller once, when the router is built — like
+		// cmd/server/main.go, which always supplies a real *persistence.DB,
+		// never nil.
 		return len(NewRouter(&Deps{Cfg: cfg, DB: &persistence.DB{}}).Routes())
 	}
 

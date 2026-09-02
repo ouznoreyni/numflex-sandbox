@@ -6,11 +6,11 @@ import (
 	"github.com/ouznoreyni/numflex-sandbox/internal/usecase/sandbox"
 )
 
-// prefixeSandbox porte ce que la plateforme réelle n'a pas. Il est délibérément
-// distinct de prefixeGateway : la promesse du sandbox est que /api/gateway/v1
-// expose exactement les 33 routes du contrat ARTP, et une commodité de bac à
-// sable ne doit pas s'y glisser. Un client qui bascule son baseUrl vers l'ARTP
-// ne perd donc que ce qu'il sait ne pas exister là-bas.
+// prefixeSandbox carries what the real platform does not have. It is
+// deliberately distinct from prefixeGateway: the sandbox's promise is that
+// /api/gateway/v1 exposes exactly the 33 routes of the ARTP contract, and a
+// sandbox convenience must not slip in among them. A client switching its
+// baseUrl to the ARTP therefore loses only what it knows does not exist there.
 const prefixeSandbox = "/api/sandbox/v1"
 
 // sandboxController wires the clean-architecture stack behind

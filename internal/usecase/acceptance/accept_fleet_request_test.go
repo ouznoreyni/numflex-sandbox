@@ -65,10 +65,10 @@ func TestAcceptFleetRequestRejetTotal(t *testing.T) {
 	require.Empty(t, f.engine.Scheduled)
 }
 
-// TestAcceptFleetRequestEpuiseeNumeroParNumeroBascule est la preuve du [HYP]
-// documenté sur accept_fleet_request.go : rejeter chaque numéro d'une flotte
-// jusqu'à épuisement bascule la demande elle-même en REJETE, sans transition
-// planifiée — le même dénouement qu'un rejet total explicite.
+// TestAcceptFleetRequestEpuiseeNumeroParNumeroBascule is the proof of the
+// [HYP] documented on accept_fleet_request.go: rejecting a fleet's numbers one
+// by one until none is left flips the request itself to REJETE, with no
+// transition scheduled — the same outcome an explicit total rejection has.
 func TestAcceptFleetRequestEpuiseeNumeroParNumeroBascule(t *testing.T) {
 	f := newFixture()
 	seedFleetRequest(f, "771000001", "771000002")
@@ -99,18 +99,17 @@ func TestAcceptFleetRequestNumeroHorsFlotteRefuse(t *testing.T) {
 	require.Equal(t, "VALIDATION_ECHOUEE", fault.Code)
 	require.Contains(t, fault.Message, "771009999")
 
-	// Rien n'a été écrit : la validation a échoué avant l'ouverture de la
-	// transaction.
+	// Nothing was written: validation failed before the transaction opened.
 	require.Equal(t, "EN_COURS", f.requests.NumberStatus("flotte1", "771000001"))
 	require.Equal(t, "EN_COURS", f.requests.NumberStatus("flotte1", "771000002"))
 }
 
-// TestAcceptFleetRequestEchecEcritureNArretePasAvantLaTransaction prouve, au
-// niveau interactor, qu'un échec pendant la transaction empêche toute suite
-// — HasActiveNumber, Reject et la planification de la transition ne sont
-// jamais atteints. Voir accept_request_test.go pour la même preuve côté
-// individuel, et internal/framework/persistence pour la preuve du rollback
-// réel contre Postgres.
+// TestAcceptFleetRequestEchecEcritureNArretePasAvantLaTransaction proves, at
+// the interactor level, that a failure inside the transaction stops everything
+// that follows — HasActiveNumber, Reject and the transition scheduling are
+// never reached. See accept_request_test.go for the same proof on the
+// individual side, and internal/framework/persistence for the proof of the
+// real rollback against Postgres.
 func TestAcceptFleetRequestEchecEcritureNArretePasAvantLaTransaction(t *testing.T) {
 	f := newFixture()
 	seedFleetRequest(f, "771000001", "771000002")
