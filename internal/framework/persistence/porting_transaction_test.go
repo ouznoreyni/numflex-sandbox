@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ouznoreyni/numflex-sandbox/internal/entity"
 	"github.com/ouznoreyni/numflex-sandbox/internal/framework/persistence"
 	"github.com/ouznoreyni/numflex-sandbox/internal/framework/seed"
 	"github.com/ouznoreyni/numflex-sandbox/internal/testsupport"
@@ -122,7 +123,7 @@ func TestPortingCancelRollsBack(t *testing.T) {
 	boom := errors.New("boom")
 
 	err := uow.Do(ctx, func(repos port.Repositories) error {
-		if err := repos.Requests.Cancel(ctx, id, seed.OperateurYAS, time.Now()); err != nil {
+		if err := repos.Requests.Cancel(ctx, id, seed.OperateurYAS, entity.StepAcceptance, time.Now()); err != nil {
 			return err
 		}
 		return boom

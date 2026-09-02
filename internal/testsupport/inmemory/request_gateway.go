@@ -259,8 +259,12 @@ func (g *RequestGateway) Reject(_ context.Context, requestID, _, rejectionReason
 
 // Cancel — moved verbatim in shape from Reject above (Task 15): a
 // cancellation has no rejection reason and no commentaire, but does move
-// the request to RequestCancelled rather than RequestRejected.
-func (g *RequestGateway) Cancel(_ context.Context, requestID, _ string, _ time.Time) error {
+// the request to RequestCancelled rather than RequestRejected. expectedStep
+// is accepted for interface conformance with the real gateway's step guard
+// (Task 17b) but not checked here: this double has no concurrent writer to
+// race against, and the guard itself is proven only where it matters, in
+// internal/framework/engine's own integration test against real Postgres.
+func (g *RequestGateway) Cancel(_ context.Context, requestID, _ string, _ entity.Step, _ time.Time) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	if g.FailCancel != nil {

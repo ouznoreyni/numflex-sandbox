@@ -140,6 +140,15 @@ type RequestView struct {
 	Client                                     *ClientView
 }
 
+// ErrCancelStepChanged is Cancel's answer when its step guard does not
+// match: requestID is no longer at the step the caller was authorized
+// against, because a scheduled convergence landed between the interactor's
+// read and this write. It is a sentinel rather than a raw affected-rows
+// count because the guarantee comes from the guard itself — Cancel's own
+// WHERE clause on etape_actuelle — not from a pre-check, which is exactly
+// the read-then-write gap this guards against (Task 17b).
+var ErrCancelStepChanged = errors.New("l'étape de la demande a changé depuis l'autorisation d'annuler")
+
 // RequestGateway persists a new porting/restitution request and its
 // associated rows, and reads one back right after creation. RoutingPrefix,
 // Create, AddNumber, AddExcludedNumber and AddClient are always called
@@ -207,7 +216,14 @@ type RequestGateway interface {
 	// the deleted internal/api/annulation.go's postAnnuler, which opened its
 	// own *pgx.Tx for exactly these two statements. Task 15
 	// (internal/usecase/porting) is its first caller.
-	Cancel(ctx context.Context, requestID, operatorID string, now time.Time) error
+	//
+	// expectedStep is the step CanCancel authorized against — both writes
+	// are guarded on the demande still sitting at that step, so a scheduled
+	// convergence that lands in the gap between the interactor's read and
+	// this write loses the race instead of silently overwriting a request
+	// that has since moved (Task 17b). ErrCancelStepChanged is returned,
+	// with neither write taking effect, when the guard does not match.
+	Cancel(ctx context.Context, requestID, operatorID string, expectedStep entity.Step, now time.Time) error
 
 	// LockForTransition reads a request's transition-relevant fields — the
 	// same six columns AppliquerTransition used to SELECT ... FOR UPDATE

@@ -2,6 +2,7 @@ package porting
 
 import (
 	"context"
+	"errors"
 
 	"github.com/ouznoreyni/numflex-sandbox/internal/entity"
 	"github.com/ouznoreyni/numflex-sandbox/internal/usecase/port"
@@ -34,6 +35,15 @@ func NewCancelRequest(requests port.RequestGateway, uow port.UnitOfWork, clock p
 // unchanged from the deleted handler's own comment — cancelling a request
 // still at ACCEPTATION withdraws it rather than processing a step, and
 // BR-012 only blocks processing.
+//
+// dm.CurrentStep — the step entity.CanCancel just authorized against — is
+// passed to Cancel so its own guard checks the very thing CanCancel checked,
+// rather than Cancel re-reading the request itself: a second read would
+// reopen the same gap a scheduled convergence can land in between this
+// read and the transaction's write (Task 17b). When that guard loses the
+// race, Cancel returns port.ErrCancelStepChanged and the caller receives
+// entity.InvalidStep — the same fault CanCancel itself would give for a
+// request no longer at a cancellable step — rather than a silent no-op.
 func (i *CancelRequestInteractor) Execute(
 	ctx context.Context, requestID string,
 ) (port.RequestView, *entity.Fault) {
@@ -50,7 +60,12 @@ func (i *CancelRequestInteractor) Execute(
 	}
 
 	err = i.uow.Do(ctx, func(repos port.Repositories) error {
-		if err := repos.Requests.Cancel(ctx, dm.ID, caller.OperatorID, i.clock.Now()); err != nil {
+		err := repos.Requests.Cancel(ctx, dm.ID, caller.OperatorID, dm.CurrentStep, i.clock.Now())
+		if errors.Is(err, port.ErrCancelStepChanged) {
+			return entity.InvalidStep(
+				"Cette demande ne peut plus être annulée : son étape a changé depuis l'autorisation.")
+		}
+		if err != nil {
 			return entity.InternalError("annulation de la demande")
 		}
 		return nil

@@ -11,6 +11,7 @@ import (
 	"github.com/ouznoreyni/numflex-sandbox/internal/framework/persistence"
 	"github.com/ouznoreyni/numflex-sandbox/internal/framework/seed"
 	"github.com/ouznoreyni/numflex-sandbox/internal/testsupport"
+	"github.com/ouznoreyni/numflex-sandbox/internal/usecase/port"
 	"github.com/stretchr/testify/require"
 )
 
@@ -271,64 +272,67 @@ func TestTransfertRegistreExclutNumerosExclusEtRejetes(t *testing.T) {
 // TestAnnulationPendantConvergenceEnCours pins the outcome of a race Task 17
 // inherited rather than introduced: porting.CancelRequestInteractor reads a
 // request (entity.CanCancel) outside any lock, before opening its own
-// port.UnitOfWork.Do; RequestGateway.Cancel's own UPDATE carries no WHERE
-// condition on the current step. If a scheduled convergence applies in the
-// window between that read and Cancel's write, Cancel proceeds on stale
-// information. This test reproduces the worst-case interleaving
-// deterministically — no goroutines needed, since the bug is a
-// read-then-write ordering problem, not a data race in the Go sense — by
-// applying the due convergence first and only then issuing the same write
-// porting.CancelRequestInteractor.Execute would have issued from its own
-// stale read.
+// port.UnitOfWork.Do. Task 17b closes the gap this used to leave open:
+// RequestGateway.Cancel now guards both of its writes on the demande still
+// sitting at the step the caller authorized against, so a convergence that
+// applies in the window between that read and Cancel's write loses the
+// race instead of overwriting stale information. This test reproduces the
+// worst-case interleaving deterministically — no goroutines needed, since
+// the race is a read-then-write ordering problem, not a data race in the Go
+// sense — by applying the due convergence first and only then issuing the
+// same guarded write porting.CancelRequestInteractor.Execute would have
+// issued from its own (by-then stale) read.
 //
-// The result: the request ends up ANNULE (cancelled) while sitting at
-// DESACTIVATION — a step nobody ever processed — with a spurious
-// etape_historique row claiming DESACTIVATION was itself terminated by an
-// "ACTION" origin cancellation. This is a real defect, pre-existing this
-// task (Cancel's SQL is unchanged in shape), and is reported rather than
-// fixed here — see the task-17 report.
+// The result, now that the guard is in place: Cancel refuses
+// (port.ErrCancelStepChanged), and the request is left exactly as the
+// convergence left it — EN_COURS at DESACTIVATION, not ANNULE — with no
+// etape_historique row for DESACTIVATION, a step nobody ever processed.
 func TestAnnulationPendantConvergenceEnCours(t *testing.T) {
 	e, db := moteur(t)
 	insererDemande(t, db, "d1", entity.StepAcceptance, time.Second)
 
-	// Un opérateur accepte la demande avec une fenêtre de convergence non
-	// nulle : la transition est planifiée, déjà due.
+	// An operator accepts the request with a non-zero convergence window:
+	// the transition is scheduled, already due.
 	_, err := db.Pool.Exec(context.Background(),
 		`UPDATE demande SET transition_prevue_a = now() - interval '1 second' WHERE id = 'd1'`)
 	require.NoError(t, err)
 
-	// L'interactor de CancelRequest lirait ici la demande, la trouverait
-	// encore à ACCEPTATION (entity.CanCancel l'autoriserait) — read reproduced
-	// implicitly: nothing about the state below has changed yet.
+	// CancelRequestInteractor would read the request here and find it still
+	// at ACCEPTATION (entity.CanCancel would authorize it against that step)
+	// — read reproduced implicitly: nothing about the state below has
+	// changed yet.
 	etape, _, statut := etatDemande(t, db, "d1")
 	require.Equal(t, "ACCEPTATION", etape)
 	require.Equal(t, "EN_COURS", statut)
+	stepAutorise := entity.Step(etape)
 
-	// ... puis, avant que Cancel n'écrive, le moteur fait converger la
-	// transition planifiée.
+	// ... then, before Cancel writes, the engine converges the scheduled
+	// transition.
 	require.NoError(t, e.Tick(context.Background()))
 	etape, _, statut = etatDemande(t, db, "d1")
-	require.Equal(t, "DESACTIVATION", etape, "la convergence a fait avancer la demande")
+	require.Equal(t, "DESACTIVATION", etape, "convergence moved the request forward")
 	require.Equal(t, "EN_COURS", statut)
 
-	// ... et enfin Cancel écrit, sans revérifier l'étape courante — le même
-	// appel que porting.CancelRequestInteractor.Execute ferait à travers
-	// port.UnitOfWork.Do, ici fait directement pour isoler la course de
-	// l'autorisation qui la précède.
+	// ... and only then does Cancel write, carrying the step it was
+	// authorized against (ACCEPTATION, from the stale read above) — the
+	// same call porting.CancelRequestInteractor.Execute would make through
+	// port.UnitOfWork.Do, made directly here to isolate the race from the
+	// authorization that precedes it. The guard on that step no longer
+	// matches the request's actual current step, so Cancel refuses.
 	gw := postgres.NewRequestGateway(db.Pool)
-	require.NoError(t, gw.Cancel(context.Background(), "d1", seed.OperateurOrange, time.Now()))
+	err = gw.Cancel(context.Background(), "d1", seed.OperateurOrange, stepAutorise, time.Now())
+	require.ErrorIs(t, err, port.ErrCancelStepChanged)
 
 	etape, statutEtape, statutDemande := etatDemande(t, db, "d1")
-	require.Equal(t, "ANNULE", statutDemande, "Cancel a bien écrasé l'état, sans revérifier l'étape")
-	require.Equal(t, "DESACTIVATION", etape, "mais l'étape n'a jamais bougé : demande incohérente")
-	require.Equal(t, "TERMINE", statutEtape)
+	require.Equal(t, "EN_COURS", statutDemande, "Cancel refused: the request keeps convergence's own state")
+	require.Equal(t, "DESACTIVATION", etape, "the step convergence left it at, untouched by the refused cancel")
+	require.Equal(t, "EN_COURS", statutEtape)
 
-	// La ligne d'historique écrite par Cancel porte l'étape DESACTIVATION —
-	// alors que personne n'a jamais traité cette étape.
-	var origine, historiqueStatut string
+	// No etape_historique row was written for DESACTIVATION — nobody ever
+	// processed that step, and the refused Cancel must not fabricate one.
+	var n int
 	require.NoError(t, db.Pool.QueryRow(context.Background(),
-		`SELECT origine, statut FROM etape_historique
-		  WHERE demande_id = 'd1' AND etape = 'DESACTIVATION'`).Scan(&origine, &historiqueStatut))
-	require.Equal(t, "ACTION", origine)
-	require.Equal(t, "TERMINE", historiqueStatut)
+		`SELECT count(*) FROM etape_historique
+		  WHERE demande_id = 'd1' AND etape = 'DESACTIVATION'`).Scan(&n))
+	require.Equal(t, 0, n, "no history row for a step nobody processed")
 }

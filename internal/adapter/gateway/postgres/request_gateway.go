@@ -259,23 +259,41 @@ func (g *RequestGateway) Reject(ctx context.Context, requestID, operatorID, reje
 // rejection reason and no commentaire to record, but transition_prevue_a is
 // cleared: a request cancelled mid-convergence must not have the engine
 // apply a transition onto a demande that no longer exists as EN_COURS.
-func (g *RequestGateway) Cancel(ctx context.Context, requestID, operatorID string, now time.Time) error {
+//
+// Both statements carry a guard on etape_actuelle = expectedStep — the step
+// CancelRequestInteractor authorized against — so that a scheduled
+// convergence applied by the engine in the gap between the interactor's
+// read and this write cannot be silently overwritten (Task 17b). When the
+// guard does not match, the UPDATE affects zero rows and Cancel returns
+// port.ErrCancelStepChanged without either write taking effect: the INSERT
+// alone, guarded by the same condition, either never matched either (no
+// spurious history row) or matched while the two statements were briefly
+// out of step with one another, in which case the whole port.UnitOfWork.Do
+// transaction the caller wraps this in rolls the INSERT back too — Cancel
+// itself is never called outside one.
+func (g *RequestGateway) Cancel(ctx context.Context, requestID, operatorID string, expectedStep entity.Step, now time.Time) error {
 	if _, err := g.db.Exec(ctx,
 		`INSERT INTO etape_historique
 		   (demande_id, etape, statut, operateur_id, origine, commentaire, date_debut, date_fin)
 		 SELECT id, etape_actuelle, 'TERMINE', $2, 'ACTION', NULL, date_debut_etape, $3
-		   FROM demande WHERE id = $1`,
-		requestID, operatorID, now); err != nil {
+		   FROM demande WHERE id = $1 AND etape_actuelle = $4`,
+		requestID, operatorID, now, string(expectedStep)); err != nil {
 		return err
 	}
 
-	_, err := g.db.Exec(ctx,
+	tag, err := g.db.Exec(ctx,
 		`UPDATE demande
 		    SET statut_demande = 'ANNULE', statut_etape_actuel = 'TERMINE',
 		        date_finalisation = $2, transition_prevue_a = NULL
-		  WHERE id = $1`,
-		requestID, now)
-	return err
+		  WHERE id = $1 AND etape_actuelle = $3`,
+		requestID, now, string(expectedStep))
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return port.ErrCancelStepChanged
+	}
+	return nil
 }
 
 // LockForTransition reads a request's transition-relevant fields with a row
