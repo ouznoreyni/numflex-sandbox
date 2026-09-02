@@ -1,6 +1,8 @@
 package web
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -167,5 +169,55 @@ func NewRouter(d *Deps) *gin.Engine {
 		r.Group(SandboxPrefix, authenticate).DELETE("/demandes", sandboxCtrl.Purge)
 	}
 
+	// The documentation, outside the gateway and outside the contract, like
+	// /api/sandbox/v1 above. No flag gates it: the folder's presence does.
+	// The standalone image ships docs/, so the page is there; the
+	// scratch-based runtime image ships none, so the same binary registers
+	// nothing and answers 404 — the platform's exact surface, with no
+	// configuration to remember. DOCS_ENABLED=false forces it off everywhere.
+	//
+	// Serving it here rather than behind a reverse proxy is deliberate. A
+	// proxy in front would stamp Server and Connection on all 33 contract
+	// responses, which today carry exactly three headers — Content-Type,
+	// Date, Content-Length. Fidelity on those responses outweighs the
+	// three extra rows in this route table.
+	if dir, ok := resolveDocsDir(d.Cfg.DocsDir); ok && d.Cfg.Docs {
+		for _, f := range []string{"swagger.html", "openapi.yaml", "openapi.json"} {
+			path := filepath.Join(dir, f)
+			r.GET("/"+f, func(c *gin.Context) { c.File(path) })
+		}
+	}
+
 	return r
+}
+
+// resolveDocsDir walks up from the working directory looking for name, the
+// same way persistence.MigrationsDir finds the schema: the server is started
+// from /app in the image but from a package directory under test, and both
+// must agree on where the folder is. An empty name disables the lookup
+// outright.
+func resolveDocsDir(name string) (string, bool) {
+	if name == "" {
+		return "", false
+	}
+	if filepath.IsAbs(name) {
+		st, err := os.Stat(name)
+		return name, err == nil && st.IsDir()
+	}
+	dir, err := os.Getwd()
+	if err != nil {
+		return "", false
+	}
+	for i := 0; i < 8; i++ {
+		candidate := filepath.Join(dir, name)
+		if st, err := os.Stat(candidate); err == nil && st.IsDir() {
+			return candidate, true
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
+	}
+	return "", false
 }

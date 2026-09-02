@@ -38,6 +38,21 @@ type Config struct {
 	// on the other hand, keeps its 33 routes either way.
 	SandboxAdmin bool
 
+	// Docs registers /swagger.html, /openapi.yaml and /openapi.json at the
+	// root — outside /api/gateway/v1, which keeps exactly its 33 routes
+	// either way. True by default so that running the standalone image needs
+	// no argument at all; DOCS_ENABLED=false gives back the platform's exact
+	// surface. It is a boolean rather than an empty DocsDir because in this
+	// configuration an empty value counts as absent everywhere except
+	// CORS_ALLOWED_ORIGINS, and that exception is meant to stay unique.
+	Docs bool
+
+	// DocsDir is where those three files are looked up, walking up from the
+	// working directory. The routes appear only if the folder is actually
+	// there, so the scratch-based `runtime` image — which ships none —
+	// registers nothing even with Docs true.
+	DocsDir string
+
 	// CORSAllowedOrigins is a sandbox convenience, not a trait of the
 	// contract: it exists only so that a page served on another port —
 	// Swagger, a back-office in development — can call the API from a
@@ -55,6 +70,7 @@ func Load() (*Config, error) {
 		JWTSecret:     str("JWT_SECRET", "numflex-sandbox-dev-secret"),
 		Fidelity:      Fidelity(str("FIDELITY", string(FidelityReal))),
 		OTPStaticCode: str("OTP_STATIC_CODE", "123456"),
+		DocsDir:       str("DOCS_DIR", "docs"),
 	}
 
 	// The one variable where an empty string differs from being unset,
@@ -95,6 +111,9 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 	if c.OTPMaxAttempts, err = num("OTP_MAX_ATTEMPTS", 3); err != nil {
+		return nil, err
+	}
+	if c.Docs, err = boolean("DOCS_ENABLED", true); err != nil {
 		return nil, err
 	}
 	if c.SandboxAdmin, err = boolean("SANDBOX_ADMIN", false); err != nil {

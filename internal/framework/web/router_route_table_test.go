@@ -3,6 +3,9 @@ package web_test
 import (
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -54,6 +57,68 @@ func TestWithSandboxAdminOneMoreRoute(t *testing.T) {
 	}).Routes())
 
 	require.Equal(t, 36, withSandbox)
+}
+
+// The documentation is served by the router itself, on the API's own port,
+// rather than from a second server or behind a reverse proxy: a proxy would
+// stamp Server and Connection on all 33 contract responses, which carry
+// exactly three headers today. The cost is these three root routes, and the
+// guard is that they stay OUTSIDE the gateway prefix — /api/gateway/v1 keeps
+// exactly its 33 whether the folder is there or not.
+func TestDocsDirAddsThreeRootRoutesAndNoGatewayRoute(t *testing.T) {
+	dir := t.TempDir()
+	for _, f := range []string{"swagger.html", "openapi.yaml", "openapi.json"} {
+		require.NoError(t, os.WriteFile(filepath.Join(dir, f), []byte("x"), 0o600))
+	}
+
+	gateway := func(rt gin.RoutesInfo) int {
+		n := 0
+		for _, r := range rt {
+			if strings.HasPrefix(r.Path, web.GatewayPrefix) {
+				n++
+			}
+		}
+		return n
+	}
+
+	without := buildRouter().Routes()
+	with := buildRouter(func(c *config.Config) { c.Docs, c.DocsDir = true, dir }).Routes()
+
+	require.Equal(t, len(without)+3, len(with))
+	require.Equal(t, gateway(without), gateway(with), "the gateway gains nothing")
+	require.Equal(t, 33, gateway(with))
+
+	paths := map[string]bool{}
+	for _, r := range with {
+		paths[r.Path] = true
+	}
+	for _, p := range []string{"/swagger.html", "/openapi.yaml", "/openapi.json"} {
+		require.Truef(t, paths[p], "%s must be registered", p)
+	}
+}
+
+// A DocsDir that does not resolve registers nothing: that is how the
+// scratch-based runtime image keeps the platform's exact surface without any
+// flag to remember.
+func TestMissingDocsDirRegistersNothing(t *testing.T) {
+	with := buildRouter(func(c *config.Config) {
+		c.Docs, c.DocsDir = true, filepath.Join(t.TempDir(), "absent")
+	}).Routes()
+	require.Len(t, with, 35)
+}
+
+// DOCS_ENABLED=false registers nothing even when the folder is right there:
+// the switch that gives back the platform's exact surface on an image that
+// does ship the documentation.
+func TestDocsDisabledRegistersNothing(t *testing.T) {
+	dir := t.TempDir()
+	for _, f := range []string{"swagger.html", "openapi.yaml", "openapi.json"} {
+		require.NoError(t, os.WriteFile(filepath.Join(dir, f), []byte("x"), 0o600))
+	}
+	with := buildRouter(func(c *config.Config) {
+		c.Docs, c.DocsDir = false, dir
+	}).Routes()
+	require.Len(t, with, 35)
 }
 
 // Ruling R32: an unauthenticated request to an unknown path under the

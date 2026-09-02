@@ -34,13 +34,13 @@ ARTP.
 images sont publiées sur Docker Hub.
 
 ```bash
-docker run --rm -p 8080:8080 -p 8081:8081 ouzdiop268/numflex-sandbox:standalone
+docker run --rm -p 8080:8080 ouzdiop268/numflex-sandbox:standalone
 ```
 
 L'image `standalone` embarque son PostgreSQL : rien à installer à côté, rien à mettre en réseau. En
 quelques secondes la base est initialisée, les migrations jouées, le vivier de numéros ensemencé,
 l'API répond sur `http://localhost:8080` et la page Swagger sur
-**`http://localhost:8081/swagger.html`**. `--rm` jette tout à l'arrêt — ce qu'on veut pour un premier
+**`http://localhost:8080/swagger.html`**. Un seul port. `--rm` jette tout à l'arrêt — ce qu'on veut pour un premier
 essai. Les images sont multi-architecture : `amd64` et `arm64`, Apple Silicon compris.
 
 ### Le premier portage, en quatre appels
@@ -96,11 +96,10 @@ c'est détaillé plus bas, à la section Postman.
 - **Un refus métier sort en `500`, pas en `4xx`.** Demande introuvable, opérateur non habilité,
   étape non atteinte : tous en `500` avec `RuntimeException: …` dans `detail`. Ce n'est pas une
   panne, c'est ANO-003, reproduit exprès.
-- **La documentation est sur `8081`, pas sur `8080`.** `http://localhost:8080/swagger.html`
-  répond `404 page not found`, et c'est voulu : le port `8080` n'expose que les 33 routes du
-  contrat plus les deux d'authentification, et une route de doc rendrait le sandbox discernable de
-  la plateforme réelle. Le conteneur sert donc la page sur un **second port**,
-  `http://localhost:8081/swagger.html` — pensez à publier `-p 8081:8081`.
+- **Seule l'image `standalone` sert la documentation.** `:latest` part de `scratch` et
+  n'embarque aucune page : `/swagger.html` y répond `404`. Dans les deux images,
+  `/api/gateway/v1` garde exactement ses 33 routes — la page vit à la racine, à côté du contrat,
+  jamais dedans.
 - **Par défaut le sandbox est lent, et c'est voulu** : `COMPLETION` répond en ~30 s (ANO-005), une
   étape expire seule au bout de ~349 s (ANO-006), les horodatages dérivent de 9 min (ANO-015). Pour
   explorer sans subir ça, voir le profil calme ci-dessous.
@@ -109,7 +108,7 @@ c'est détaillé plus bas, à la section Postman.
 
 ```bash
 mkdir -p "$PWD/data"
-docker run -d --name numflex -p 8080:8080 -p 8081:8081 \
+docker run -d --name numflex -p 8080:8080 \
   -v "$PWD/data:/data" \
   ouzdiop268/numflex-sandbox:standalone PGDATA=/data
 ```
@@ -154,7 +153,7 @@ docker run -d --name numflex -p 8080:8080 \
 
 | Image | Taille | Ce qu'elle contient |
 |---|---|---|
-| `ouzdiop268/numflex-sandbox:standalone` | ~456 Mo | Le serveur, PostgreSQL **et** la page Swagger sur `8081`. Rien à orchestrer. |
+| `ouzdiop268/numflex-sandbox:standalone` | ~456 Mo | Le serveur, PostgreSQL **et** la page Swagger, sur un seul port. Rien à orchestrer. |
 | `ouzdiop268/numflex-sandbox:latest` | ~46 Mo | Le serveur seul, sur `scratch`. Base à fournir. |
 
 `:standalone` est une commodité de démonstration, **pas** un durcissement : shell, gestionnaire de
@@ -163,28 +162,32 @@ base à part.
 
 ### La documentation de l'API
 
-**L'image `standalone` la sert elle-même**, sur son second port :
+**L'image `standalone` la sert elle-même, sur le même port que l'API** :
 
 ```
-http://localhost:8081/swagger.html      la page Swagger, spécification inlinée
-http://localhost:8081/openapi.yaml      la spécification seule
+http://localhost:8080/swagger.html      la page Swagger, spécification inlinée
+http://localhost:8080/openapi.yaml      la spécification seule
+http://localhost:8080/openapi.json
 ```
 
 Le « Try it out » y fonctionne sans rien configurer : le sandbox répond
 `Access-Control-Allow-Origin: *` par défaut.
 
-**Ce n'est pas une route de la gateway** — c'est un second serveur, dans le même conteneur, sur un
-autre port. Le port `8080` garde exactement la surface de la plateforme réelle, et `8081` peut
-s'éteindre pour retrouver la parité stricte :
+**Ces trois chemins sont à la racine, jamais sous `/api/gateway/v1`**, qui garde exactement ses 33
+routes. Ils n'existent que parce que l'image embarque le dossier `docs/` — l'image mince `:latest`,
+qui n'embarque rien, n'en enregistre aucun. `DOCS_ENABLED=false` les éteint et rend au conteneur la
+surface exacte de la plateforme :
 
 ```bash
-docker run --rm -p 8080:8080 ouzdiop268/numflex-sandbox:standalone DOCS_PORT=0
+docker run --rm -p 8080:8080 ouzdiop268/numflex-sandbox:standalone DOCS_ENABLED=false
 ```
 
-`DOCS_PORT` se règle comme le reste — argument, `-e`, ou `.env`.
+Pas de reverse proxy dans le conteneur, et c'est un choix mesuré : un nginx devant ajouterait
+`Server` et `Connection` aux réponses des 33 routes du contrat, qui n'en portent aujourd'hui que
+trois — `Content-Type`, `Date`, `Content-Length`. La fidélité de ces réponses vaut plus que trois
+lignes de plus dans la table de routage.
 
-Avec l'image mince `:latest`, qui n'embarque ni page ni serveur pour la servir, récupérez-la et
-servez-la vous-même :
+Avec l'image mince `:latest`, qui n'embarque aucune page, récupérez-la et servez-la vous-même :
 
 ```bash
 mkdir -p numflex-doc && cd numflex-doc
@@ -452,6 +455,7 @@ l'état courant. Pour repartir à zéro, supprimer le volume Postgres.
 | `OTP_MAX_ATTEMPTS` | `3` | Tentatives de saisie |
 | `REVERSE_AUTO_VALIDATION_SECONDS` | `0` | `0` = validation par le CLI `artp` uniquement |
 | `CORS_ALLOWED_ORIGINS` | `*` | Origines autorisées, séparées par des virgules. **Absente = `*`**, toute origine ; **posée vide = aucun en-tête CORS**, comme la plateforme réelle |
+| `DOCS_ENABLED` | `true` | Sert `/swagger.html`, `/openapi.yaml` et `/openapi.json` à la racine — hors contrat, `/api/gateway/v1` garde ses 33 routes. `false` rend la surface exacte de la plateforme |
 | `SANDBOX_ADMIN` | `false` | Ouvre la purge des données de test sous `/api/sandbox/v1` — hors contrat ARTP, voir ci-dessous |
 | `ENV_FILE` | `.env` | Chemin du fichier d'environnement à charger — voir ci-dessous |
 
