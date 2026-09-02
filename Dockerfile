@@ -69,6 +69,14 @@ COPY --from=build /out/server /out/artp /usr/local/bin/
 COPY migrations /app/migrations
 COPY scripts/standalone-entrypoint.sh /usr/local/bin/standalone-entrypoint.sh
 
+# The documentation, served by the entrypoint on its own port — never by the Go
+# server, which must keep exactly the contract's route table. busybox-extras
+# carries httpd, 135 KB, the smallest static file server this base image can
+# get. `runtime` gets neither: it has no shell to run one, and no business
+# serving a page.
+RUN apk add --no-cache busybox-extras
+COPY docs/swagger.html docs/openapi.yaml docs/openapi.json /app/docs/
+
 # The postgres image sets ENV PGDATA=/var/lib/postgresql/data. We empty it: an
 # environment value wins over the file, so a PGDATA written in a .env would
 # never be used. Empty counts as absent, as everywhere else in the sandbox's
@@ -81,9 +89,10 @@ ENV PGDATA=""
 # side as on the server side.
 WORKDIR /app
 
-# Only 8080 is published. 5432 is not, and the database listens on 127.0.0.1
-# only anyway: the API is the container's single door.
-EXPOSE 8080
+# 8080 is the API, 8081 the documentation — two ports, because the gateway must
+# not serve a doc route. 5432 is not published, and the database listens on
+# 127.0.0.1 only anyway.
+EXPOSE 8080 8081
 
 ENTRYPOINT ["/usr/local/bin/standalone-entrypoint.sh"]
 
