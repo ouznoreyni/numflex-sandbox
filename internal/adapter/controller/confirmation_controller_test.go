@@ -105,12 +105,12 @@ func TestRestitutionRequiresRecipientConfirmation(t *testing.T) {
 	data := h.List("/api/gateway/v1/demandes/a-confirmer", h.Token("orange", "orange2026"))
 	require.Len(t, data, 1)
 
-	for _, compte := range [][2]string{
+	for _, count := range [][2]string{
 		{"orange", "orange2026"}, {"yas", "yas2026"}, {"expresso", "expresso2026"},
 	} {
 		resp, _ := h.Call(http.MethodPost, "/api/gateway/v1/demandes/a-confirmer",
-			h.Token(compte[0], compte[1]), map[string]any{"idDemande": id})
-		require.Equalf(t, http.StatusOK, resp.StatusCode, compte[0])
+			h.Token(count[0], count[1]), map[string]any{"idDemande": id})
+		require.Equalf(t, http.StatusOK, resp.StatusCode, count[0])
 	}
 
 	require.Equal(t, "COMPLETION", step(h, id),

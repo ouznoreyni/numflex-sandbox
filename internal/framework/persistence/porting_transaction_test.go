@@ -99,13 +99,13 @@ func TestPortingProcessStepCommentRollsBack(t *testing.T) {
 		t.Fatalf("expected boom, got %v", err)
 	}
 
-	var commentaire *string
+	var comment *string
 	if err := db.Pool.QueryRow(ctx,
-		"SELECT commentaire FROM demande WHERE id = $1", id).Scan(&commentaire); err != nil {
+		"SELECT commentaire FROM demande WHERE id = $1", id).Scan(&comment); err != nil {
 		t.Fatal(err)
 	}
-	if commentaire != nil {
-		t.Fatalf("le commentaire a survécu au rollback (%q)", *commentaire)
+	if comment != nil {
+		t.Fatalf("le commentaire a survécu au rollback (%q)", *comment)
 	}
 }
 
