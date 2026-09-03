@@ -88,7 +88,7 @@ La suite du cycle appartient à ORANGE : réauthentifiez-vous en `orange` pour `
 puis l'acceptation. **Le jeton n'est pas neutre, chaque étape est réservée à un opérateur précis** —
 c'est détaillé plus bas, à la section Postman.
 
-### Quatre pièges du premier essai
+### Cinq pièges du premier essai
 
 - **Le champ de l'OTP s'appelle `otpCode`, pas `code`.** Le code est toujours `123456`
   (`OTP_STATIC_CODE`) : aucun SMS n'est envoyé, et la réponse d'`otp/send` n'atteste rien
@@ -96,6 +96,16 @@ c'est détaillé plus bas, à la section Postman.
 - **Un refus métier sort en `500`, pas en `4xx`.** Demande introuvable, opérateur non habilité,
   étape non atteinte : tous en `500` avec `RuntimeException: …` dans `detail`. Ce n'est pas une
   panne, c'est ANO-003, reproduit exprès.
+- **Un numéro inventé n'existe pas, et le sandbox le dit mal.** Le vivier est fermé : hors des
+  70 numéros ensemencés, aucun MSISDN n'est connu du registre, et la création répond
+  `RuntimeException: Le numéro n'appartient pas à l'opérateur source indiqué`
+  (`OPERATEUR_SOURCE_INCORRECT`). Un numéro absent ne peut appartenir à aucun opérateur source :
+  les quatre créations — `particulier`, `entreprise`, `restitution`, `reverse` — le rejettent
+  ainsi, plutôt que par un « numéro introuvable ». Rien ne prévient à l'étape d'avant :
+  `otp/send` accepte n'importe quel numéro sans consulter le registre. Le même message sort quand
+  le numéro existe mais qu'`operateurSourceId` ne désigne pas son détenteur actuel — `771000001`
+  déclaré source EXPRESSO, par exemple. Si ce détenteur est le destinataire déclaré,
+  c'est `NUMERO_DEJA_CHEZ_DESTINATAIRE` qui l'emporte.
 - **Seule l'image `standalone` sert la documentation.** `:latest` part de `scratch` et
   n'embarque aucune page : `/swagger.html` y répond `404`. Dans les deux images,
   `/api/gateway/v1` garde exactement ses 33 routes — la page vit à la racine, à côté du contrat,
@@ -431,6 +441,9 @@ premier démarrage :
 | `77300xxxx` | YAS, porté il y a 8 mois depuis ORANGE | Restitution nominale |
 | `77400xxxx` | YAS, porté il y a 2 mois depuis ORANGE | `DELAI_RESTITUTION_NON_RESPECTE` / ANO-020 |
 | `77500xxxx` | YAS, porté puis déjà restitué | `NUMERO_DEJA_RESTITUE` |
+
+Ces 70 numéros sont les seuls que le sandbox connaisse : tout autre MSISDN, même bien formé, est
+rejeté à la création en `OPERATEUR_SOURCE_INCORRECT` — voir les pièges du premier essai.
 
 Le seed est idempotent (`ON CONFLICT DO NOTHING`) : il est rejoué à chaque démarrage sans écraser
 l'état courant. Pour repartir à zéro, supprimer le volume Postgres.
