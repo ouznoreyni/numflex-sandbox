@@ -132,7 +132,10 @@ echo "standalone — data: $PGDATA · database: $POSTGRES_DB · env: $env_file$(
 #
 # listen_addresses=127.0.0.1: the database listens inside the container only.
 # The sandbox publishes 8080, never 5432 — the API is the single door.
-docker-entrypoint.sh postgres -c listen_addresses=127.0.0.1 &
+# jit=off: the image ships no LLVM — 180 MB removed for a JIT this sandbox
+# never reaches. Without this, a query costly enough to try would fail on a
+# missing module instead of simply running interpreted.
+docker-entrypoint.sh postgres -c listen_addresses=127.0.0.1 -c jit=off &
 
 # Availability is observed, not assumed: an initdb on an empty volume takes a
 # few seconds, and the first migration would fail against a database that does

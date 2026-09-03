@@ -3,7 +3,7 @@
 // wiring of all 36 routes. One file per capability builds that capability's
 // gateways, interactors, presenter and controller exactly once, then
 // declares its routes; router.go assembles them in the order the guide
-// lists them, with the SANDBOX_ADMIN group added only when configured.
+// lists them, the two /api/sandbox/v1 routes included.
 //
 // May import: anything — it is the outermost layer, with cmd/.
 //

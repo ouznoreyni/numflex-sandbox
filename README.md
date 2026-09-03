@@ -8,8 +8,9 @@ ARTP.
 
 - Les **33 routes** du contrat gateway, plus les deux routes d'authentification. Rien d'autre sous
   `/api/gateway/v1` : aucune route de santé, de metrics ou de debug, pour que la surface exposée
-  soit exactement celle de la plateforme réelle. La seule commodité de bac à sable — la purge des
-  données de test — vit sous un autre préfixe et reste fermée par défaut.
+  soit exactement celle de la plateforme réelle. Les deux commodités de bac à sable — lire les
+  tranches du vivier, purger ses données de test — vivent sous un autre préfixe,
+  `/api/sandbox/v1`.
 - Une **machine à états complète** — `ACCEPTATION` → `DESACTIVATION` → `ACTIVATION` →
   `CONFIRMATION` → `COMPLETION` — avec ses habilitations, son moteur d'expiration et sa fenêtre de
   convergence réglable.
@@ -34,14 +35,30 @@ ARTP.
 images sont publiées sur Docker Hub.
 
 ```bash
-docker run --rm -p 8080:8080 ouzdiop268/numflex-sandbox:standalone
+docker run --rm -p 8080:8080 ouzdiop268/numflex-sandbox:latest
 ```
 
-L'image `standalone` embarque son PostgreSQL : rien à installer à côté, rien à mettre en réseau. En
-quelques secondes la base est initialisée, les migrations jouées, le vivier de numéros ensemencé,
-l'API répond sur `http://localhost:8080` et la page Swagger sur
-**`http://localhost:8080/swagger.html`**. Un seul port. `--rm` jette tout à l'arrêt — ce qu'on veut pour un premier
-essai. Les images sont multi-architecture : `amd64` et `arm64`, Apple Silicon compris.
+L'image `standalone` embarque son PostgreSQL : rien à installer à côté, rien à mettre en réseau. La
+base est initialisée, les migrations jouées, le vivier de numéros ensemencé, puis l'API répond sur
+`http://localhost:8080` et la page Swagger sur **`http://localhost:8080/swagger.html`**. Un seul
+port. `--rm` jette tout à l'arrêt — ce qu'on veut pour un premier essai. Les images sont
+multi-architecture : `amd64` et `arm64`, Apple Silicon compris.
+
+**Comptez environ vingt-cinq secondes avant la première réponse** — `initdb`, les migrations et le
+vivier — et autant à chaque lancement, puisque `--rm` jette la base. Rien d'autre à passer : ni
+argument, ni volume, ni fichier de configuration.
+
+Le vivier par défaut donne **cent mille numéros par tranche**, soit huit cent mille par opérateur :
+de quoi explorer sans jamais l'épuiser. Pour que *tout* numéro bien formé d'une tranche existe —
+`771000000` à `771999999`, et ainsi de suite — ajoutez `FULL_NUMBERS=true` :
+
+```bash
+docker run --rm -p 8080:8080 ouzdiop268/numflex-sandbox:latest FULL_NUMBERS=true
+```
+
+Seize millions de numéros au lieu de huit cent mille : **4 min 20 s** de démarrage et 1,9 Go de
+table, mesurés. À réserver aux cas où le numéro à tester est imposé de l'extérieur, et à combiner
+avec un volume persistant pour ne payer la facture qu'une fois.
 
 ### Le premier portage, en quatre appels
 
@@ -97,14 +114,15 @@ c'est détaillé plus bas, à la section Postman.
   étape non atteinte : tous en `500` avec `RuntimeException: …` dans `detail`. Ce n'est pas une
   panne, c'est ANO-003, reproduit exprès.
 - **Un numéro inventé n'existe pas, et le sandbox le dit mal.** Le vivier est fermé : hors des
-  70 numéros ensemencés, aucun MSISDN n'est connu du registre, et la création répond
+  seize millions de numéros ensemencés, aucun MSISDN n'est connu du registre, et la création répond
   `RuntimeException: Le numéro n'appartient pas à l'opérateur source indiqué`
   (`OPERATEUR_SOURCE_INCORRECT`). Un numéro absent ne peut appartenir à aucun opérateur source :
   les quatre créations — `particulier`, `entreprise`, `restitution`, `reverse` — le rejettent
   ainsi, plutôt que par un « numéro introuvable ». Rien ne prévient à l'étape d'avant :
   `otp/send` accepte n'importe quel numéro sans consulter le registre. Le même message sort quand
   le numéro existe mais qu'`operateurSourceId` ne désigne pas son détenteur actuel — `771000001`
-  déclaré source EXPRESSO, par exemple. Si ce détenteur est le destinataire déclaré,
+  déclaré source EXPRESSO, par exemple. Pour lever le doute,
+  `GET /api/sandbox/v1/numeros/tranches?operateur=ORANGE` dit quels numéros existent. Si ce détenteur est le destinataire déclaré,
   c'est `NUMERO_DEJA_CHEZ_DESTINATAIRE` qui l'emporte.
 - **Seule l'image `standalone` sert la documentation.** `:latest` part de `scratch` et
   n'embarque aucune page : `/swagger.html` y répond `404`. Dans les deux images,
@@ -120,7 +138,7 @@ c'est détaillé plus bas, à la section Postman.
 mkdir -p "$PWD/data"
 docker run -d --name numflex -p 8080:8080 \
   -v "$PWD/data:/data" \
-  ouzdiop268/numflex-sandbox:standalone PGDATA=/data
+  ouzdiop268/numflex-sandbox:latest PGDATA=/data
 ```
 
 Le cluster PostgreSQL s'initialise dans `./data`. Détruire le conteneur et le relancer sur le même
@@ -135,14 +153,14 @@ Tout se pose en `-e` ou en argument après le nom de l'image, l'argument l'empor
 
 ```bash
 # écouter ailleurs que sur 8080
-docker run --rm -p 9000:9000 ouzdiop268/numflex-sandbox:standalone PORT=9000
+docker run --rm -p 9000:9000 ouzdiop268/numflex-sandbox:latest PORT=9000
 
 # profil calme : pas d'expiration, pas de latence, pas de dérive d'horloge
-docker run --rm -p 8080:8080 ouzdiop268/numflex-sandbox:standalone \
+docker run --rm -p 8080:8080 ouzdiop268/numflex-sandbox:latest \
   STEP_TIMEOUT_SECONDS=0 COMPLETION_LATENCY_MS=0 CLOCK_SKEW_SECONDS=0
 
 # servir le contrat tel qu'écrit plutôt que la recette telle que mesurée
-docker run --rm -p 8080:8080 ouzdiop268/numflex-sandbox:standalone FIDELITY=contract
+docker run --rm -p 8080:8080 ouzdiop268/numflex-sandbox:latest FIDELITY=contract
 ```
 
 Le tableau complet des variables est à la section [Configuration](#configuration). Les quatre qui
@@ -151,24 +169,33 @@ comptent pour un premier contact : `PORT`, `FIDELITY`, `STEP_TIMEOUT_SECONDS`,
 
 ### L'image mince, avec votre propre PostgreSQL
 
-Si vous avez déjà une base, `:latest` pèse ~46 Mo au lieu de ~456 : elle part de `scratch`, sans
+Si vous avez déjà une base, `:slim` pèse ~11 Mo au lieu de ~44 : elle part de `scratch`, sans
 shell ni gestionnaire de paquets. Elle attend `DATABASE_URL`, son seul réglage sans défaut, et joue
 les migrations elle-même au démarrage.
 
 ```bash
 docker run -d --name numflex -p 8080:8080 \
   -e DATABASE_URL='postgres://numflex:numflex@ma-base:5432/numflex?sslmode=disable' \
-  ouzdiop268/numflex-sandbox:latest
+  ouzdiop268/numflex-sandbox:slim
 ```
 
 | Image | Taille | Ce qu'elle contient |
 |---|---|---|
-| `ouzdiop268/numflex-sandbox:standalone` | ~456 Mo | Le serveur, PostgreSQL **et** la page Swagger, sur un seul port. Rien à orchestrer. |
-| `ouzdiop268/numflex-sandbox:latest` | ~46 Mo | Le serveur seul, sur `scratch`. Base à fournir. |
+| `ouzdiop268/numflex-sandbox:latest` | **~44 Mo** | Le serveur, PostgreSQL **et** la page Swagger, sur un seul port. Rien à orchestrer. C'est ce que `docker run` sans plus de précision vous donne. |
+| `ouzdiop268/numflex-sandbox:slim` | **~11 Mo** | Le serveur seul, sur `scratch`. Base à fournir. |
 
-`:standalone` est une commodité de démonstration, **pas** un durcissement : shell, gestionnaire de
-paquets, démarrage sous root le temps de l'`initdb`. Pour un déploiement, c'est `:latest` et une
-base à part.
+Chaque publication pose aussi un tag de version figé : `:defcon-1` à côté de `:latest`,
+`:slim-defcon-1` à côté de `:slim`. `latest` et `slim` suivent le dernier build ; les tags de
+version, eux, ne bougent plus et correspondent à un commit.
+
+Les tailles sont celles que Docker transfère. `docker images` en annonce de tout autres — sa colonne
+`DISK USAGE` compte les attestations de build et le cache, et affichait 457 Mo pour cette image de
+44. `docker image inspect --format '{{.Size}}'` donne le bon chiffre, et c'est ce que le Makefile
+imprime maintenant.
+
+L'image tout-en-un est une commodité de démonstration, **pas** un durcissement : shell,
+gestionnaire de paquets, démarrage sous root le temps de l'`initdb`. Pour un déploiement, c'est
+`:slim` et une base à part.
 
 ### La documentation de l'API
 
@@ -189,7 +216,7 @@ qui n'embarque rien, n'en enregistre aucun. `DOCS_ENABLED=false` les éteint et 
 surface exacte de la plateforme :
 
 ```bash
-docker run --rm -p 8080:8080 ouzdiop268/numflex-sandbox:standalone DOCS_ENABLED=false
+docker run --rm -p 8080:8080 ouzdiop268/numflex-sandbox:latest DOCS_ENABLED=false
 ```
 
 Pas de reverse proxy dans le conteneur, et c'est un choix mesuré : un nginx devant ajouterait
@@ -268,7 +295,7 @@ docker run -d --name numflex-api --network numflex-net \
   -e DATABASE_URL='postgres://numflex:numflex@numflex-db:5432/numflex?sslmode=disable' \
   --read-only --cap-drop ALL --security-opt no-new-privileges \
   --restart unless-stopped \
-  numflex-sandbox:latest \
+  numflex-sandbox:slim \
   PORT=8095 FIDELITY=contract
 ```
 
@@ -292,8 +319,8 @@ Une seconde cible du Dockerfile, `standalone`, embarque PostgreSQL à côté du 
 `docker-compose` de ce dépôt réduit à une seule image. Rien à orchestrer, rien à mettre en réseau.
 
 ```bash
-make image-standalone     # ou : docker build --target standalone -t numflex-sandbox:standalone .
-make push-standalone      # construit ET publie, multi-arch, en une passe
+make image-standalone     # ou : docker build --target standalone -t numflex-sandbox:latest .
+make push                 # construit ET publie, multi-arch, en une passe
 ```
 
 Le répertoire de données de la base se règle **comme n'importe quel autre réglage**, avec la même
@@ -335,8 +362,8 @@ make run-standalone DATA=/srv/numflex PORT=9000 ENV_FILE=./prod.env
 `DATABASE_URL` est la seule variable que cette image tranche d'autorité : la base vit dans le
 conteneur, une valeur venue du `.env` pointerait vers une base qu'elle ne gère pas.
 
-C'est une commodité de démonstration, **pas** un durcissement, et il faut l'assumer : 456 Mo au
-lieu de 46, un shell et un gestionnaire de paquets dans l'image, un démarrage sous root le temps
+C'est une commodité de démonstration, **pas** un durcissement, et il faut l'assumer : 44 Mo au
+lieu de 11, un shell et un gestionnaire de paquets dans l'image, un démarrage sous root le temps
 de l'`initdb`. Autrement dit tout ce que l'image `runtime` refuse. Pour un déploiement, c'est
 `make push` et une base à part. La base n'écoute que sur `127.0.0.1` dans le conteneur et 5432
 n'est jamais publié : l'API reste la seule porte.
@@ -372,7 +399,7 @@ puis désigner le fichier voulu.
 ```bash
 docker run -d --name numflex-api --network numflex-net -p 8097:8097 \
   -v "$PWD/config:/config:ro" \
-  numflex-sandbox:latest --env-file /config/recette.env
+  numflex-sandbox:slim --env-file /config/recette.env
 ```
 
 `-e ENV_FILE=/config/recette.env` fait la même chose.
@@ -383,15 +410,17 @@ réclame :
 ```bash
 docker run --rm --network numflex-net --entrypoint /usr/local/bin/artp \
   -e DATABASE_URL='postgres://numflex:numflex@numflex-db:5432/numflex?sslmode=disable' \
-  numflex-sandbox:latest reverse list
+  numflex-sandbox:slim reverse list
 ```
 
 Pour publier :
 
 ```bash
 docker login
-make push                                    # docker.io/ouzdiop268/numflex-sandbox:latest
-make push VERSION=v0.4.0                     # :latest **et** :v0.4.0
+make push                                  # …/numflex-sandbox:latest        (tout-en-un)
+make push VERSION=defcon-1                 # :latest **et** :defcon-1
+make push-slim VERSION=defcon-1            # :slim **et** :slim-defcon-1
+make push-all VERSION=defcon-1             # les deux images, en un appel
 make push REGISTRY=harbor.example.com/numflex   # ailleurs
 ```
 
@@ -399,10 +428,10 @@ make push REGISTRY=harbor.example.com/numflex   # ailleurs
 multi-architecture ne pouvant pas être chargé dans le démon local, il n'y a pas de `make image`
 préalable. Le constructeur `buildx` dédié est créé au premier appel.
 
-`latest` est toujours produit et toujours publié ; `VERSION=…` ajoute un second tag figé. La garde
-d'arbre propre **ne vaut que pour ce tag de version** : lui doit rester reproductible, donc
-correspondre à un commit, tandis que `latest` est par nature un pointeur mouvant et se publie depuis
-un arbre modifié. `ALLOW_DIRTY=1` lève la garde.
+`latest` et `slim` sont toujours produits et toujours publiés ; `VERSION=…` ajoute un second tag
+figé. La garde d'arbre propre **ne vaut que pour ce tag de version** : lui doit rester
+reproductible, donc correspondre à un commit, tandis que `latest` est par nature un pointeur mouvant
+et se publie depuis un arbre modifié. `ALLOW_DIRTY=1` lève la garde.
 
 L'image finale part de `scratch` — deux binaires statiques, les migrations, les racines de
 confiance TLS, rien d'autre : ni shell, ni gestionnaire de paquets, ni CVE de base à suivre. Elle
@@ -429,24 +458,80 @@ Le jeton renvoyé (`id_token`) est un JWT HS512 valable 24 h, à présenter en `
 
 ### Vivier de numéros
 
-Dix numéros par tranche (`…0001` à `…0010`), chaque tranche rendant une règle exerçable dès le
-premier démarrage :
+**Huit cent mille numéros portables pour ORANGE, autant pour YAS**, 1 622 000 lignes en base au
+premier démarrage — ou seize millions si `FULL_NUMBERS=true` remplit les tranches. Le préfixe d'une
+tranche tient sur trois chiffres et sa terminaison sur six : `771000001` s'y lit `771` + `000001`,
+exactement le numéro qu'il était quand les tranches comptaient cinq chiffres. Une tranche part
+toujours de `000000` ; ce qui change, c'est où elle s'arrête.
 
-| Tranche | Situation | Rend testable |
+Jamais portés — huit tranches par opérateur, plus les deux tranches historiques `761` et `701`,
+conservées pour que les numéros publiés avant l'élargissement restent valides :
+
+| Opérateur | Tranches | Par tranche | Total portable |
+|---|---|---|---|
+| ORANGE | `771000000`–`771099999` … `778000000`–`778099999` | 100 000 | **800 000** |
+| YAS | `781000000`–`781099999` … `788000000`–`788099999` | 100 000 | **800 000** |
+| EXPRESSO | `711` … `718`, terminaisons `000000`–`000999` | 1 000 | 8 000 |
+| Historiques | `761000000`–`761000999`, `701000000`–`701000999` | 1 000 | 2 000 |
+
+Avec `FULL_NUMBERS=true`, les deux premières lignes passent à `771000000`–`771999999`, un million
+par tranche et huit millions par opérateur : tout numéro bien formé d'une tranche existe alors.
+EXPRESSO garde ses mille par tranche dans les deux cas — il sert à exercer le portage entre deux
+tiers (UC-08), pas à être consommé en volume. `FULL_NUMBERS` et `POOL_NUMBERS_PER_OPERATOR` ne
+règlent que les deux premières lignes.
+
+Déjà portés — le **groupe `900`**, une tranche par opérateur, où les quatre scénarios sont empilés
+en blocs de mille :
+
+| Bloc | Situation | Rend testable |
 |---|---|---|
-| `77100xxxx` | ORANGE, jamais porté | Portage nominal ORANGE → YAS |
-| `76100xxxx` | YAS, jamais porté | Portage sortant YAS → ORANGE |
-| `70100xxxx` | EXPRESSO, jamais porté | Portage impliquant un tiers |
-| `77200xxxx` | ORANGE, porté il y a 30 jours | `DELAI_PORTAGE_NON_RESPECTE` / ANO-002 |
-| `77300xxxx` | YAS, porté il y a 8 mois depuis ORANGE | Restitution nominale |
-| `77400xxxx` | YAS, porté il y a 2 mois depuis ORANGE | `DELAI_RESTITUTION_NON_RESPECTE` / ANO-020 |
-| `77500xxxx` | YAS, porté puis déjà restitué | `NUMERO_DEJA_RESTITUE` |
+| `…000000` → `…000999` | porté il y a 30 jours | `DELAI_PORTAGE_NON_RESPECTE` / ANO-002 |
+| `…001000` → `…001999` | porté il y a 8 mois | Restitution nominale |
+| `…002000` → `…002999` | porté il y a 2 mois | `DELAI_RESTITUTION_NON_RESPECTE` / ANO-020 |
+| `…003000` → `…003999` | porté puis déjà restitué | `NUMERO_DEJA_RESTITUE` |
 
-Ces 70 numéros sont les seuls que le sandbox connaisse : tout autre MSISDN, même bien formé, est
-rejeté à la création en `OPERATEUR_SOURCE_INCORRECT` — voir les pièges du premier essai.
+| Tranche | Détenteur actuel | Opérateur d'origine |
+|---|---|---|
+| `779…` | ORANGE | YAS |
+| `789…` | YAS | ORANGE |
+| `719…` | EXPRESSO | ORANGE |
 
-Le seed est idempotent (`ON CONFLICT DO NOTHING`) : il est rejoué à chaque démarrage sans écraser
-l'état courant. Pour repartir à zéro, supprimer le volume Postgres.
+`789001001` est donc détenu par YAS, venu d'ORANGE, porté il y a huit mois : ORANGE peut en
+demander la restitution. `779000001` est chez ORANGE depuis trente jours : il se heurte au délai de
+trois mois. Ces quatre mille numéros par opérateur sont du **matériel de rejet**, pas du vivier
+portable — deux de leurs blocs (8 mois, déjà restitué) dépassent tout de même les 3 mois et se
+portent normalement.
+
+Ces numéros sont les seuls que le sandbox connaisse : tout autre MSISDN, même bien formé — une
+tranche hors liste, ou une terminaison au-delà de ce que la tranche porte — est rejeté à la
+création en `OPERATEUR_SOURCE_INCORRECT`, voir les pièges du premier essai.
+`GET /api/sandbox/v1/numeros/tranches?operateur=ORANGE` dit exactement où s'arrête chaque tranche
+de l'instance qui tourne.
+
+**Ce que coûte ce volume.** Mesuré dans l'image `standalone`, sur Apple Silicon, `initdb` et
+migrations comprises :
+
+| | Lignes | Table `numero` | Démarrage à froid |
+|---|---|---|---|
+| Défaut | 1 622 000 | 193 Mo | **~25 s** |
+| `FULL_NUMBERS=true` | 16 022 000 | 1 905 Mo | **4 min 20 s** |
+
+Le seed insère une tranche par instruction (`INSERT … SELECT generate_series`) et **saute une
+tranche déjà installée** : une tranche est posée par une instruction unique, donc entière ou pas du
+tout, et la présence de son dernier numéro suffit à le savoir. Redémarrage sur la même base,
+mesuré : **2 s**. Un volume persistant (`-v $PWD/data:/data`) ne repaie donc jamais le seed ; un
+`--rm` le repaie à chaque lancement — vingt-cinq secondes par défaut, quatre minutes et demie avec
+les tranches pleines.
+
+```bash
+# les tranches pleines, payées une seule fois grâce au volume
+docker run -d -p 8080:8080 -v "$PWD/data:/data" \
+  ouzdiop268/numflex-sandbox:latest PGDATA=/data FULL_NUMBERS=true
+```
+
+La suite de tests, elle, n'utilise jamais ce volume : `testsupport.NewTestDB` tronque et reseed à
+**chaque** test, et sème `seed.TestVolumes` — mille par tranche, soit le premier millier de chacune
+et tous les numéros cités ici, en un dixième de seconde.
 
 ## Configuration
 
@@ -467,9 +552,9 @@ l'état courant. Pour repartir à zéro, supprimer le volume Postgres.
 | `OTP_TTL_SECONDS` | `300` | Validité de l'OTP |
 | `OTP_MAX_ATTEMPTS` | `3` | Tentatives de saisie |
 | `REVERSE_AUTO_VALIDATION_SECONDS` | `0` | `0` = validation par le CLI `artp` uniquement |
-| `CORS_ALLOWED_ORIGINS` | `*` | Origines autorisées, séparées par des virgules. **Absente = `*`**, toute origine ; **posée vide = aucun en-tête CORS**, comme la plateforme réelle |
 | `DOCS_ENABLED` | `true` | Sert `/swagger.html`, `/openapi.yaml` et `/openapi.json` à la racine — hors contrat, `/api/gateway/v1` garde ses 33 routes. `false` rend la surface exacte de la plateforme |
-| `SANDBOX_ADMIN` | `false` | Ouvre la purge des données de test sous `/api/sandbox/v1` — hors contrat ARTP, voir ci-dessous |
+| `FULL_NUMBERS` | `false` | Remplit chaque tranche portable entière, `000000` à `999999`. Coûte 4 min 20 s de démarrage à froid et 1,9 Go ; à `false`, une tranche porte ses cent mille premiers numéros et le conteneur répond en ~25 s |
+| `POOL_NUMBERS_PER_OPERATOR` | `800000` | Numéros jamais portés semés pour ORANGE et pour YAS, répartis sur leurs huit tranches. Entre `8` et `8000000`. Absente, elle suit `FULL_NUMBERS` ; posée, elle l'emporte sur lui |
 | `ENV_FILE` | `.env` | Chemin du fichier d'environnement à charger — voir ci-dessous |
 
 ### D'où viennent les valeurs
@@ -575,21 +660,55 @@ Trois comportements ne sont ni documentés au guide v2, ni mesurés en recette. 
 D'autres `[HYP]` plus locaux existent (flotte intégralement rejetée, absence de garde de gel sur
 l'annulation, messages d'erreur non mesurés) : `grep -rn '\[HYP\]' internal/`.
 
-## Purge des données de test — hors contrat
+## Les deux routes hors contrat — `/api/sandbox/v1`
 
-**Cette route n'existe pas chez l'ARTP.** Elle vit délibérément sous un autre préfixe, pour que
+**Ces routes n'existent pas chez l'ARTP.** Elles vivent délibérément sous un autre préfixe, pour que
 `/api/gateway/v1` reste exactement la surface de la plateforme réelle : un client qui bascule son
-`baseUrl` vers la recette ARTP ne perd que ce qu'il sait ne pas exister là-bas.
+`baseUrl` vers la recette ARTP ne perd que ce qu'il sait ne pas exister là-bas. Toutes deux exigent
+un jeton, et figurent dans la page Swagger sous le tag **Sandbox**.
+
+### Lire les tranches du vivier
 
 ```bash
-SANDBOX_ADMIN=true          # défaut : false
+GET /api/sandbox/v1/numeros/tranches?operateur=ORANGE    Authorization: Bearer <jeton>
+```
 
+`operateur` vaut `ORANGE`, `YAS` ou `EXPRESSO`, insensible à la casse ; absent ou inconnu, la
+réponse est un `400` en `problem+json` qui nomme les valeurs acceptées — hors contrat, donc hors
+ANO-003.
+
+```json
+{ "success": true, "code": "SUCCESS", "message": "Tranches de l'opérateur ORANGE",
+  "data": { "operateur": "ORANGE", "operateurId": "6a21745ce6c37b5b5b487ec1",
+            "nombreTranches": 9, "totalNumeros": 8004000,
+            "tranches": [ { "prefixe": "771", "premier": "771000000", "dernier": "771999999",
+                            "total": 1000000, "nature": "JAMAIS_PORTE" } ] } }
+```
+
+C'est la réponse à la question que le registre pose mal : un MSISDN hors vivier est rejeté par
+`Le numéro n'appartient pas à l'opérateur source indiqué`, exactement comme un numéro existant
+déclaré sous le mauvais opérateur source — rien dans la réponse ne distingue les deux cas.
+
+Le décompte est **lu en base**, pas déduit de `POOL_NUMBERS_PER_OPERATOR` : une tranche installée à
+un autre volume dit sa vraie taille, et un numéro passé chez son destinataire après un portage
+complet est compté chez lui. La `nature` sort des lignes elles-mêmes — une tranche dont les numéros
+portent une date de portage est du matériel de rejet.
+
+Compter coûte : mesuré, **2,7 s** sur le vivier plein — **4,6 s** au tout premier appel après
+démarrage, cache froid — et quelques millisecondes sur un vivier réduit. Aucun index n'y change
+rien : un `(operateur_actuel_id, msisdn)` a été mesuré à 902 Mo pour aucun gain, l'agrégat devant de
+toute façon visiter chaque ligne. C'est une route d'introspection, pas une étape du cycle de
+portage.
+
+### Purger ses données de test
+
+```bash
 DELETE /api/sandbox/v1/demandes     Authorization: Bearer <jeton>
 ```
 
-À `false` — le défaut — la route **n'est pas enregistrée** : elle répond `404`, indistinguable d'un
-chemin inconnu, jeton valide ou non. Rien n'est purgeable par accident, et rien ne se découvre par
-balayage.
+Elle est montée sans condition, comme la lecture des tranches : un bac à sable dont le bouton de
+remise à zéro attend une variable d'environnement est un bac à sable que personne ne remet à
+zéro. Un jeton reste exigé — sans lui, `401`.
 
 ```json
 { "success": true, "code": "SUCCESS", "message": "Demandes purgées avec succès",
@@ -642,7 +761,7 @@ internal/
     presenter/       couche 2 — view model, dans l'un des deux modes de fidélité
     gateway/postgres/ couche 2 — les gateways. Seul endroit qui nomme une colonne française
   framework/
-    web/             couche 3 — moteur Gin, middlewares, câblage des 35 routes (36 avec SANDBOX_ADMIN)
+    web/             couche 3 — moteur Gin, middlewares, câblage des 37 routes (36 sans la purge)
     persistence/     couche 3 — pool pgx, migrations, unité de travail
     engine/          couche 3 — le ticker : expiration, convergence, cycle du reverse
     clock/ config/ identifier/ seed/ token/
@@ -687,9 +806,14 @@ avec elle.
 make test
 ```
 
-Démarre les deux Postgres (`5432` applicatif, `5433` de test), puis joue toute la suite sous le
-profil déterministe. Les tests d'intégration montent un serveur `httptest` sur une base réelle et
-assertent sur **le code HTTP et le corps exacts**, jamais sur une abstraction.
+Lève la base de test sur `5433`, joue toute la suite sous le profil déterministe, puis **supprime
+le conteneur** — passant ou non : chaque test tronque et reseed cette base, elle ne conserve rien
+qui vaille la peine d'être gardé, et le code de retour qui ressort est celui de `go test`, jamais
+celui du démontage. La base applicative de `5432` ne bouge pas : c'est `make up` et `make run` qui
+la possèdent.
+
+Les tests d'intégration montent un serveur `httptest` sur une base réelle et assertent sur **le code
+HTTP et le corps exacts**, jamais sur une abstraction.
 
 Les cas nommés du SIT sont rejoués tels quels : TC-021, TC-034, TC-036, TC-041, TC-044, TC-050,
 TC-062, plus ANO-001 vérifiée en volume et ANO-018 vérifiée sur son effet réel.
@@ -755,12 +879,11 @@ Deux conséquences à connaître :
 - **« Try it out » fonctionne sans rien configurer.** Servie par le serveur lui-même, la page
   appelle l'API sur sa propre origine : aucun en-tête CORS n'entre en jeu. Servie ailleurs —
   `make swagger` sur `8081`, ou le fichier ouvert depuis le disque — l'appel devient cross-origin,
-  et sans `Access-Control-Allow-Origin` le navigateur le bloque ; le défaut écrit dans le code est
-  `*`, donc il passe quand même.
+  et le sandbox répond `Access-Control-Allow-Origin: *`, sans rien à configurer.
   **Ce CORS est une commodité de bac à sable, pas un trait du contrat** : la gateway réelle est
   consommée de serveur à serveur, n'émet aucun en-tête CORS, et aucun test du SIT n'a mesuré son
-  comportement cross-origin. Poser `CORS_ALLOWED_ORIGINS=` — vide — retrouve ce silence ; y mettre
-  une liste d'origines restreint sans l'éteindre.
+  comportement cross-origin. L'en-tête n'est émis que si la requête porte un `Origin`, donc pour un
+  navigateur : un appel de serveur à serveur reçoit exactement les trois en-têtes de la plateforme.
 - **La spécification décrit le contrat**, donc le sandbox lancé en `FIDELITY=contract`. En
   `FIDELITY=real` — le défaut — les réponses d'erreur diffèrent ; chaque description signale
   l'écart par son identifiant SIT.

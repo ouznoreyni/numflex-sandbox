@@ -118,9 +118,9 @@ func TestCreateIndividualPortingDelayPresentsAsAFailure(t *testing.T) {
 	h := routerharness.NewRouterHarness(t)
 	token := h.Token("yas", "yas2026")
 	h.Call(http.MethodPost, "/api/gateway/v1/otp/send", token,
-		map[string]any{"numero": "772000001"})
+		map[string]any{"numero": "779000001"})
 
-	c := individualBody("772000001")
+	c := individualBody("779000001")
 	resp, body := h.Call(http.MethodPost, "/api/gateway/v1/demandes/particulier", token, c)
 
 	require.Equal(t, http.StatusInternalServerError, resp.StatusCode)
@@ -166,10 +166,10 @@ func TestCreateIndividualInContractModeReturnsABusinessCode(t *testing.T) {
 	h := routerharness.NewRouterHarness(t, routerharness.ContractFidelity)
 	token := h.Token("yas", "yas2026")
 	h.Call(http.MethodPost, "/api/gateway/v1/otp/send", token,
-		map[string]any{"numero": "772000002"})
+		map[string]any{"numero": "779000002"})
 
 	resp, body := h.Call(http.MethodPost, "/api/gateway/v1/demandes/particulier",
-		token, individualBody("772000002"))
+		token, individualBody("779000002"))
 
 	require.Equal(t, http.StatusConflict, resp.StatusCode)
 	require.Equal(t, "DELAI_PORTAGE_NON_RESPECTE", body["code"])

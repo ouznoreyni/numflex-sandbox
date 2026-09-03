@@ -15,7 +15,7 @@ func TestRestitutionNominal(t *testing.T) {
 	// Slice 773: YAS, ported from ORANGE 240 days ago.
 	h := routerharness.NewRouterHarness(t)
 	resp, body := h.Call(http.MethodPost, "/api/gateway/v1/demandes/restitution",
-		h.Token("orange", "orange2026"), map[string]any{"numero": "773000001"})
+		h.Token("orange", "orange2026"), map[string]any{"numero": "789001001"})
 
 	require.Equal(t, http.StatusCreated, resp.StatusCode, body)
 	data := body["data"].(map[string]any)
@@ -47,7 +47,7 @@ func TestRestitutionTooSoonIsA500WrappingA400(t *testing.T) {
 	// ANO-020.
 	h := routerharness.NewRouterHarness(t)
 	resp, body := h.Call(http.MethodPost, "/api/gateway/v1/demandes/restitution",
-		h.Token("orange", "orange2026"), map[string]any{"numero": "774000001"})
+		h.Token("orange", "orange2026"), map[string]any{"numero": "789002001"})
 
 	require.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 	require.Contains(t, body["detail"], "error.numeroRestitutionTooEarly")
@@ -57,7 +57,7 @@ func TestRestitutionTooSoonIsA500WrappingA400(t *testing.T) {
 func TestRestitutionAlreadyRestituted(t *testing.T) {
 	h := routerharness.NewRouterHarness(t)
 	resp, body := h.Call(http.MethodPost, "/api/gateway/v1/demandes/restitution",
-		h.Token("orange", "orange2026"), map[string]any{"numero": "775000001"})
+		h.Token("orange", "orange2026"), map[string]any{"numero": "789003001"})
 
 	require.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 	require.Equal(t, "RuntimeException: Ce numéro a déjà été restitué", body["detail"])
@@ -65,9 +65,9 @@ func TestRestitutionAlreadyRestituted(t *testing.T) {
 
 func TestRestitutionReservedToTheOriginOperator(t *testing.T) {
 	h := routerharness.NewRouterHarness(t)
-	// EXPRESSO is neither the holder nor the origin operator of 773000001.
+	// EXPRESSO is neither the holder nor the origin operator of 789001001.
 	resp, _ := h.Call(http.MethodPost, "/api/gateway/v1/demandes/restitution",
-		h.Token("expresso", "expresso2026"), map[string]any{"numero": "773000001"})
+		h.Token("expresso", "expresso2026"), map[string]any{"numero": "789001001"})
 
 	require.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 }
@@ -76,6 +76,6 @@ func TestRestitutionWithoutOTP(t *testing.T) {
 	// §7.5: the body carries only the number, no OTP is required.
 	h := routerharness.NewRouterHarness(t)
 	resp, _ := h.Call(http.MethodPost, "/api/gateway/v1/demandes/restitution",
-		h.Token("orange", "orange2026"), map[string]any{"numero": "773000002"})
+		h.Token("orange", "orange2026"), map[string]any{"numero": "789001002"})
 	require.Equal(t, http.StatusCreated, resp.StatusCode)
 }

@@ -13,56 +13,38 @@ import (
 // AllowCORS does not belong to the ARTP contract: the real gateway is
 // consumed server-to-server, and no SIT test ever measured its behaviour on
 // a cross-origin request. This middleware exists purely for the sandbox's
-// own comfort — letting the Swagger page, served on another port, call the
-// API from a browser. It allows every origin by default; setting origins to
-// empty makes it inert, restoring the real gateway's silence.
+// own comfort — letting a page served from anywhere else, the Swagger one
+// or a back-office in development, call the API from a browser. Every
+// origin is allowed, with nothing to configure: a local double holds
+// nothing worth protecting from a cross-origin read, and one variable fewer
+// is one less reason for a browser call to fail unexplained.
+//
+// The header goes out only when the request carries an Origin, which is to
+// say only to a browser: a server-to-server call still receives exactly the
+// three headers the platform sends, and the fidelity of those responses is
+// untouched.
 //
 // It is deliberately written as a global middleware rather than as
 // registered OPTIONS routes: constraint D-4 wants the sandbox to expose
 // only the 33 contract routes, and an OPTIONS route per endpoint would
 // double its surface.
-func AllowCORS(origins []string) gin.HandlerFunc {
-	allowAll := false
-	for _, o := range origins {
-		if o == "*" {
-			allowAll = true
-		}
-	}
-
+func AllowCORS() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		origin := c.GetHeader("Origin")
-		if origin == "" || len(origins) == 0 {
+		if c.GetHeader("Origin") == "" {
 			c.Next()
 			return
 		}
 
-		allowed := allowAll
-		for _, o := range origins {
-			if o == origin {
-				allowed = true
-				break
-			}
-		}
-		if !allowed {
-			// No header: the browser will block reading the response, which
-			// is the expected behaviour for a disallowed origin.
-			c.Next()
-			return
-		}
-
-		value := origin
-		if allowAll {
-			value = "*"
-		}
-		c.Header("Access-Control-Allow-Origin", value)
-		c.Header("Vary", "Origin")
+		c.Header("Access-Control-Allow-Origin", "*")
 
 		// Preflight: the browser sends it without an Authorization header.
 		// It must be settled here, before the authentication middleware, or
 		// it would leave in 401 and the real request would never be issued.
+		// DELETE is in the list for the sandbox purge, the one route of the
+		// surface that uses it.
 		if c.Request.Method == http.MethodOptions {
 			c.Header("Access-Control-Allow-Methods", strings.Join([]string{
-				http.MethodGet, http.MethodPost, http.MethodOptions,
+				http.MethodGet, http.MethodPost, http.MethodDelete, http.MethodOptions,
 			}, ", "))
 			c.Header("Access-Control-Allow-Headers", "Authorization, Content-Type")
 			c.Header("Access-Control-Max-Age", "600")

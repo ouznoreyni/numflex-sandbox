@@ -108,11 +108,11 @@ func TestFleetNoEligibleNumber(t *testing.T) {
 	h := routerharness.NewRouterHarness(t)
 	token := h.Token("yas", "yas2026")
 	h.Call(http.MethodPost, "/api/gateway/v1/otp/send", token,
-		map[string]any{"numero": "772000001"})
+		map[string]any{"numero": "779000001"})
 
 	// Slice 772: ported 30 days ago, hence under the 3-month delay.
 	resp, body := h.Call(http.MethodPost, "/api/gateway/v1/demandes/entreprise", token,
-		enterpriseBody("772000001", []string{"772000001", "772000002"}))
+		enterpriseBody("779000001", []string{"779000001", "779000002"}))
 
 	require.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 	require.Equal(t, "RuntimeException: Aucun numéro de la flotte n'est éligible au portage",

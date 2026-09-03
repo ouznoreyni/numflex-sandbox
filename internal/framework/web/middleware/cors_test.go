@@ -19,11 +19,11 @@ type corsHarness struct {
 	srv *httptest.Server
 }
 
-func newCORSHarness(t *testing.T, origins []string) *corsHarness {
+func newCORSHarness(t *testing.T) *corsHarness {
 	t.Helper()
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
-	r.Use(middleware.AllowCORS(origins))
+	r.Use(middleware.AllowCORS())
 	r.POST("/api/authenticate", func(c *gin.Context) { c.Status(http.StatusOK) })
 	r.POST("/api/gateway/v1/demandes/particulier", func(c *gin.Context) { c.Status(http.StatusOK) })
 	srv := httptest.NewServer(r)
@@ -44,56 +44,37 @@ func (h *corsHarness) rawWithHeaders(method, path string, headers map[string]str
 	return resp
 }
 
-// CORS is a sandbox convenience, not a trait of the contract: a gateway
-// consumed server-to-server does not send it, and no SIT measurement
-// attests to it. The sandbox opens it to every origin by default, for
-// comfort; an empty list — origins set empty — makes the middleware mute
-// again, which is what this test checks.
-func TestWithoutConfigurationNoCORSHeader(t *testing.T) {
-	h := newCORSHarness(t, nil)
+// Every origin is allowed, with nothing to configure: a local double holds
+// nothing worth protecting from a cross-origin read, and one variable fewer
+// is one less reason for a browser call to fail unexplained.
+func TestEveryOriginIsAllowed(t *testing.T) {
+	h := newCORSHarness(t)
 
-	resp := h.rawWithHeaders(http.MethodPost, "/api/authenticate",
-		map[string]string{"Origin": "http://localhost:8081"})
+	for _, origin := range []string{"http://localhost:8081", "http://anywhere.example"} {
+		resp := h.rawWithHeaders(http.MethodPost, "/api/authenticate",
+			map[string]string{"Origin": origin})
+
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+		require.Equal(t, "*", resp.Header.Get("Access-Control-Allow-Origin"), origin)
+	}
+}
+
+// A call without an Origin is a server-to-server call: it must receive
+// exactly what the real platform sends, which is no CORS header at all.
+func TestNoOriginNoHeader(t *testing.T) {
+	h := newCORSHarness(t)
+
+	resp := h.rawWithHeaders(http.MethodPost, "/api/authenticate", nil)
 
 	require.Empty(t, resp.Header.Get("Access-Control-Allow-Origin"))
-}
-
-func TestAllowedOriginReceivesHeaders(t *testing.T) {
-	h := newCORSHarness(t, []string{"http://localhost:8081"})
-
-	resp := h.rawWithHeaders(http.MethodPost, "/api/authenticate",
-		map[string]string{"Origin": "http://localhost:8081"})
-
-	require.Equal(t, http.StatusOK, resp.StatusCode)
-	require.Equal(t, "http://localhost:8081", resp.Header.Get("Access-Control-Allow-Origin"))
-	require.Equal(t, "Origin", resp.Header.Get("Vary"))
-}
-
-func TestDisallowedOriginReceivesNothing(t *testing.T) {
-	h := newCORSHarness(t, []string{"http://localhost:8081"})
-
-	resp := h.rawWithHeaders(http.MethodPost, "/api/authenticate",
-		map[string]string{"Origin": "http://elsewhere.example"})
-
-	require.Empty(t, resp.Header.Get("Access-Control-Allow-Origin"))
-}
-
-func TestDefaultAllOriginsAllowed(t *testing.T) {
-	// config.Config's default is []string{"*"} — this test exercises that
-	// value directly, the way the middleware actually receives it.
-	h := newCORSHarness(t, []string{"*"})
-
-	resp := h.rawWithHeaders(http.MethodPost, "/api/authenticate",
-		map[string]string{"Origin": "http://anywhere.example"})
-
-	require.Equal(t, "*", resp.Header.Get("Access-Control-Allow-Origin"))
 }
 
 // The preflight goes out without an Authorization header: it must pass
 // before the authentication middleware, or it gets refused with a 401 and
-// the browser never issues the real request.
+// the browser never issues the real request. DELETE is in the list for the
+// sandbox purge, the one route of the surface that uses it.
 func TestPreflightRespondsWithoutAuthentication(t *testing.T) {
-	h := newCORSHarness(t, []string{"http://localhost:8081"})
+	h := newCORSHarness(t)
 
 	resp := h.rawWithHeaders(http.MethodOptions, "/api/gateway/v1/demandes/particulier",
 		map[string]string{
@@ -103,22 +84,19 @@ func TestPreflightRespondsWithoutAuthentication(t *testing.T) {
 		})
 
 	require.Equal(t, http.StatusNoContent, resp.StatusCode)
-	require.Equal(t, "http://localhost:8081", resp.Header.Get("Access-Control-Allow-Origin"))
+	require.Equal(t, "*", resp.Header.Get("Access-Control-Allow-Origin"))
 	require.Contains(t, resp.Header.Get("Access-Control-Allow-Headers"), "Authorization")
 	require.Contains(t, resp.Header.Get("Access-Control-Allow-Methods"), "POST")
+	require.Contains(t, resp.Header.Get("Access-Control-Allow-Methods"), "DELETE")
 }
 
 // Guards constraint D-4: CORS goes through a global middleware, not through
 // registered OPTIONS routes — AllowCORS must never register a route on the
 // engine that carries it.
 func TestCORSAddsNoRoute(t *testing.T) {
-	countRoutes := func(origins []string) int {
-		gin.SetMode(gin.ReleaseMode)
-		r := gin.New()
-		r.Use(middleware.AllowCORS(origins))
-		return len(r.Routes())
-	}
+	gin.SetMode(gin.ReleaseMode)
+	r := gin.New()
+	r.Use(middleware.AllowCORS())
 
-	require.Equal(t, 0, countRoutes(nil))
-	require.Equal(t, 0, countRoutes([]string{"*"}))
+	require.Empty(t, r.Routes())
 }

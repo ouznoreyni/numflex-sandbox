@@ -70,6 +70,10 @@ const spec = {
   {
    "name": "Incidents",
    "description": "§7.12 — deux familles distinctes, gateway et interne"
+  },
+  {
+   "name": "Sandbox",
+   "description": "**Hors contrat ARTP** — la plateforme réelle n'a pas ces routes, et elles vivent\nsous `/api/sandbox/v1` pour que `/api/gateway/v1` garde exactement ses 33.\n"
   }
  ],
  "security": [
@@ -1215,6 +1219,54 @@ const spec = {
      }
     }
    }
+  },
+  "/api/sandbox/v1/numeros/tranches": {
+   "get": {
+    "tags": [
+     "Sandbox"
+    ],
+    "summary": "Tranches de numéros d'un opérateur",
+    "description": "Les numéros que le sandbox connaît, tranche par tranche : de quel numéro à quel\nnuméro, combien, et si la tranche est du vivier portable (`JAMAIS_PORTE`) ou du\nmatériel de rejet (`DEJA_PORTE`).\n\n**À quoi ça sert.** Le registre est fermé : un MSISDN hors de ces tranches est\nrejeté à la création par `Le numéro n'appartient pas à l'opérateur source\nindiqué`, exactement comme un numéro existant déclaré sous le mauvais opérateur\nsource. Impossible de distinguer les deux depuis la réponse — cette route le dit.\n\nLe décompte est lu en base, pas déduit de la configuration : une tranche installée\nà un autre `POOL_NUMBERS_PER_OPERATOR`, ou un numéro passé chez son destinataire\naprès un portage complet, se voient ici.\n\n**Coût.** Le comptage balaie les lignes de l'opérateur : environ **2,7 s** sur le\nvivier plein (huit millions de numéros par opérateur), **4,6 s** au tout premier\nappel après démarrage, cache froid — et quelques millisecondes sur un vivier\nréduit. Mesuré.\n",
+    "parameters": [
+     {
+      "name": "operateur",
+      "in": "query",
+      "required": true,
+      "description": "Nom de l'opérateur, insensible à la casse.",
+      "schema": {
+       "type": "string",
+       "enum": [
+        "ORANGE",
+        "YAS",
+        "EXPRESSO"
+       ]
+      },
+      "example": "ORANGE"
+     }
+    ],
+    "responses": {
+     "200": {
+      "$ref": "#/components/responses/TranchesNumeros"
+     },
+     "400": {
+      "$ref": "#/components/responses/OperateurInvalide"
+     }
+    }
+   }
+  },
+  "/api/sandbox/v1/demandes": {
+   "delete": {
+    "tags": [
+     "Sandbox"
+    ],
+    "summary": "Purger ses demandes de test",
+    "description": "Supprime toutes les demandes **créées par l'opérateur du jeton** — jamais celles\nd'un partenaire, même visibles dans vos files — et remet le registre national dans\nl'état d'avant : chaque numéro concerné retourne à son opérateur d'origine, sa date\nde dernier portage et son indicateur de restitution sont effacés, ses OTP aussi.\n\nC'est ce qui rend un scénario rejouable : sans la restitution du registre, un\nnuméro déjà porté resterait bloqué trois mois par `DELAI_PORTAGE_NON_RESPECTE`.\n\nLa route est montée sans condition, comme la lecture des tranches. Un jeton reste\nexigé — sans lui, `401`.\n",
+    "responses": {
+     "200": {
+      "$ref": "#/components/responses/PurgeEffectuee"
+     }
+    }
+   }
   }
  },
  "components": {
@@ -1578,7 +1630,7 @@ const spec = {
      },
      "numero": {
       "type": "string",
-      "example": "773000001"
+      "example": "789001001"
      },
      "statut": {
       "type": "string",
@@ -2133,6 +2185,171 @@ const spec = {
              "figeSysteme": {
               "type": "boolean"
              }
+            }
+           }
+          }
+         }
+        }
+       ]
+      }
+     }
+    }
+   },
+   "TranchesNumeros": {
+    "description": "Tranches détenues par l'opérateur, du plus petit préfixe au plus grand",
+    "content": {
+     "application/json": {
+      "schema": {
+       "allOf": [
+        {
+         "$ref": "#/components/schemas/Enveloppe"
+        },
+        {
+         "type": "object",
+         "properties": {
+          "data": {
+           "type": "object",
+           "properties": {
+            "operateur": {
+             "type": "string",
+             "example": "ORANGE"
+            },
+            "operateurId": {
+             "type": "string",
+             "example": "6a21745ce6c37b5b5b487ec1"
+            },
+            "nombreTranches": {
+             "type": "integer",
+             "example": 9
+            },
+            "totalNumeros": {
+             "type": "integer",
+             "example": 8004000
+            },
+            "tranches": {
+             "type": "array",
+             "items": {
+              "type": "object",
+              "properties": {
+               "prefixe": {
+                "type": "string",
+                "example": "771"
+               },
+               "premier": {
+                "type": "string",
+                "example": "771000000"
+               },
+               "dernier": {
+                "type": "string",
+                "example": "771999999"
+               },
+               "total": {
+                "type": "integer",
+                "example": 1000000
+               },
+               "nature": {
+                "type": "string",
+                "enum": [
+                 "JAMAIS_PORTE",
+                 "DEJA_PORTE"
+                ],
+                "description": "`JAMAIS_PORTE` — vivier portable, aucun numéro de la tranche\nn'a de date de portage · `DEJA_PORTE` — matériel de rejet.\n",
+                "example": "JAMAIS_PORTE"
+               }
+              }
+             }
+            }
+           }
+          }
+         }
+        }
+       ]
+      }
+     }
+    }
+   },
+   "OperateurInvalide": {
+    "description": "`operateur` absent ou inconnu. Hors contrat, donc hors ANO-003 : cette route\nrépond bien **400**, en `problem+json`, et nomme les valeurs acceptées.\n",
+    "content": {
+     "application/problem+json": {
+      "schema": {
+       "type": "object",
+       "properties": {
+        "type": {
+         "type": "string",
+         "example": "https://www.jhipster.tech/problem/constraint-violation"
+        },
+        "title": {
+         "type": "string",
+         "example": "Method argument not valid"
+        },
+        "status": {
+         "type": "integer",
+         "example": 400
+        },
+        "path": {
+         "type": "string",
+         "example": "/api/sandbox/v1/numeros/tranches"
+        },
+        "message": {
+         "type": "string",
+         "example": "error.validation"
+        },
+        "fieldErrors": {
+         "type": "array",
+         "items": {
+          "type": "object",
+          "properties": {
+           "objectName": {
+            "type": "string",
+            "example": "tranchesQuery"
+           },
+           "field": {
+            "type": "string",
+            "example": "operateur"
+           },
+           "message": {
+            "type": "string",
+            "example": "doit valoir l'un de : ORANGE, YAS, EXPRESSO"
+           }
+          }
+         }
+        }
+       }
+      }
+     }
+    }
+   },
+   "PurgeEffectuee": {
+    "description": "Purge effectuée — les quatre décomptes de ce qu'elle a touché",
+    "content": {
+     "application/json": {
+      "schema": {
+       "allOf": [
+        {
+         "$ref": "#/components/schemas/Enveloppe"
+        },
+        {
+         "type": "object",
+         "properties": {
+          "data": {
+           "type": "object",
+           "properties": {
+            "demandesSupprimees": {
+             "type": "integer",
+             "example": 3
+            },
+            "numerosRestaures": {
+             "type": "integer",
+             "example": 3
+            },
+            "otpSupprimes": {
+             "type": "integer",
+             "example": 3
+            },
+            "reverseSupprimees": {
+             "type": "integer",
+             "example": 0
             }
            }
           }

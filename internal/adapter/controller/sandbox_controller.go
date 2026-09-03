@@ -9,21 +9,63 @@ import (
 	"github.com/ouznoreyni/numflex-sandbox/internal/usecase/sandbox"
 )
 
-// SandboxController is the interface-adapter for
-// DELETE /api/sandbox/v1/demandes — hors gateway, hors contrat ARTP. Its
-// route is registered only when config.SandboxAdmin is true (internal/api's
-// own concern, not this package's): unlike every other controller here, an
-// unauthenticated or invalid caller against a disabled purge never reaches
-// this type at all — the group simply is not mounted, and gin answers 404.
+// SandboxController is the interface-adapter for the two
+// /api/sandbox/v1 routes — hors gateway, hors contrat ARTP: the test-data
+// purge, and the registry's ranges. Both are mounted unconditionally and
+// both answer only to a token; nothing here is gated by configuration.
 type SandboxController struct {
-	purge sandbox.PurgeTestDataBoundary
-	pres  presenter.Presenter
+	purge  sandbox.PurgeTestDataBoundary
+	ranges sandbox.CountNumberRangesBoundary
+	pres   presenter.Presenter
 }
 
-// NewSandboxController wires a controller against the one boundary and a
+// NewSandboxController wires a controller against its two boundaries and a
 // presenter.
-func NewSandboxController(purge sandbox.PurgeTestDataBoundary, p presenter.Presenter) *SandboxController {
-	return &SandboxController{purge: purge, pres: p}
+func NewSandboxController(
+	purge sandbox.PurgeTestDataBoundary,
+	ranges sandbox.CountNumberRangesBoundary,
+	p presenter.Presenter,
+) *SandboxController {
+	return &SandboxController{purge: purge, ranges: ranges, pres: p}
+}
+
+// numberRangeDTO is one range of the registry, its json tags being the
+// field names the route publishes.
+type numberRangeDTO struct {
+	Prefix string `json:"prefixe"`
+	First  string `json:"premier"`
+	Last   string `json:"dernier"`
+	Total  int64  `json:"total"`
+	Nature string `json:"nature"`
+}
+
+// Ranges handles GET /api/sandbox/v1/numeros/tranches?operateur=ORANGE.
+// The parameter is the route's whole input: an enum of the operators the
+// registry knows, resolved by the interactor, so a typo comes back as the
+// 400 a bean validation would give rather than as the contract's 500.
+func (ctl *SandboxController) Ranges(c *gin.Context) {
+	out, fault := ctl.ranges.Execute(c.Request.Context(), c.Query("operateur"))
+	if fault != nil {
+		render(c, ctl.pres.Failure(fault, c.Request.URL.Path))
+		return
+	}
+
+	tranches := make([]numberRangeDTO, 0, len(out.Ranges))
+	for _, r := range out.Ranges {
+		tranches = append(tranches, numberRangeDTO{
+			Prefix: r.Prefix, First: r.First, Last: r.Last,
+			Total: r.Total, Nature: r.Nature,
+		})
+	}
+
+	render(c, ctl.pres.Success(http.StatusOK,
+		"Tranches de l'opérateur "+out.Operator, map[string]any{
+			"operateur":      out.Operator,
+			"operateurId":    out.OperatorID,
+			"nombreTranches": len(tranches),
+			"totalNumeros":   out.Total,
+			"tranches":       tranches,
+		}))
 }
 
 // Purge handles DELETE /api/sandbox/v1/demandes.

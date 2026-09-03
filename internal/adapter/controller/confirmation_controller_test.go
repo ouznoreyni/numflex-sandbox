@@ -97,7 +97,7 @@ func TestConfirmationOutsideConfirmationStep(t *testing.T) {
 func TestRestitutionRequiresRecipientConfirmation(t *testing.T) {
 	h := routerharness.NewRouterHarness(t)
 	_, body := h.Call(http.MethodPost, "/api/gateway/v1/demandes/restitution",
-		h.Token("orange", "orange2026"), map[string]any{"numero": "773000001"})
+		h.Token("orange", "orange2026"), map[string]any{"numero": "789001001"})
 	id := body["data"].(map[string]any)["id"].(string)
 	advanceTo(h, id, "CONFIRMATION")
 

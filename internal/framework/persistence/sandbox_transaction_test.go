@@ -17,7 +17,7 @@ import (
 
 // seedPurgeable inserts, directly by SQL, everything one purge touches: an
 // already-ported number (owned by ORANGE, origin YAS — the same shape as
-// the seed's own 77200 tranche), a demande created by operatorID that
+// the seed's own 77900 range), a demande created by operatorID that
 // references it, a live OTP for the same number, and a reverse_request tied
 // to the demande — so that a single purge exercises all five tables Task
 // 16's own PurgeTestDataInteractor writes.

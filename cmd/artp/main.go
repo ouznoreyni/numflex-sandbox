@@ -54,7 +54,7 @@ func execute(args []string) error {
 	case "reverse":
 		return executeReverse(ctx, db, args[1:])
 	case "seed":
-		if err := seed.Run(ctx, db); err != nil {
+		if err := seed.Run(ctx, db, seed.VolumesFor(cfg.PoolPerOperator)); err != nil {
 			return fmt.Errorf("seed: %w", err)
 		}
 		fmt.Println("seed replayed successfully")

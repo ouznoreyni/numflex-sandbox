@@ -565,3 +565,30 @@ type SandboxGateway interface {
 	// three months and the scenario could not be replayed.
 	RestoreNumbers(ctx context.Context, numbers []string) (int64, error)
 }
+
+// NumberRange is one three-digit range of the national registry as it
+// actually stands, for one operator: how many numbers that operator holds
+// in it, and the first and last of them. The sandbox seeds ranges whole,
+// but nothing guarantees they still are — a persistent database seeded at
+// another POOL_NUMBERS_PER_OPERATOR, or a completed porting moving a number
+// to its recipient, both show up here.
+type NumberRange struct {
+	Prefix string
+	First  string
+	Last   string
+	Total  int64
+	// Ported counts the numbers of the range carrying a
+	// date_dernier_portage. It is what tells rejection material from
+	// portable stock without asking internal/framework/seed what it meant
+	// to install: the rows answer for themselves.
+	Ported int64
+}
+
+// NumberRangeGateway backs GET /api/sandbox/v1/numeros/tranches — hors
+// gateway, hors contrat ARTP, and read-only, so unlike SandboxGateway it
+// needs no transaction: one aggregate query, run on the pool.
+type NumberRangeGateway interface {
+	// RangesByOperator groups every number whose current holder is
+	// operatorID by its three-digit prefix, ordered by prefix.
+	RangesByOperator(ctx context.Context, operatorID string) ([]NumberRange, error)
+}

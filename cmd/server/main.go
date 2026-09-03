@@ -43,7 +43,7 @@ func main() {
 	}
 	defer db.Close()
 
-	if err := seed.Run(ctx, db); err != nil {
+	if err := seed.Run(ctx, db, seed.VolumesFor(c.PoolPerOperator)); err != nil {
 		log.Fatalf("seed: %v", err)
 	}
 

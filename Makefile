@@ -3,15 +3,27 @@ DB_TEST := postgres://numflex:numflex@localhost:5433/numflex_test?sslmode=disabl
 # --wait blocks until the healthchecks go green. Without it,
 # `docker compose up -d` returns as soon as the containers are *started*,
 # not as soon as they accept a connection: on a cold start, go test hits
-# 5433 before Postgres and the suite fails with "connection refused".
+# the port before Postgres and the suite fails with "connection refused".
+#
+# `up` brings up the development database alone — the one `make run` uses.
+# The test database belongs to `test`, which raises it and takes it down.
 up:
-	docker compose up -d --wait postgres postgres-test
+	docker compose up -d --wait postgres
 
-test: up
+# The test database is created for the run and removed after it, whether the
+# suite passed or not: it holds nothing worth keeping — every test truncates
+# and reseeds it — and a container idling until the next reboot is a
+# container nobody remembers starting. The exit status of `go test` is the
+# one that comes out, the teardown never masking a failure.
+test:
+	docker compose up -d --wait postgres-test
+	@status=0; \
 	DATABASE_URL="$(DB_TEST)" \
 	STEP_TIMEOUT_SECONDS=0 CONVERGENCE_MIN_SECONDS=0 CONVERGENCE_MAX_SECONDS=0 \
 	COMPLETION_LATENCY_MS=0 CLOCK_SKEW_SECONDS=0 \
-	go test -tags=integration ./... -p 1 -count=1
+	go test -tags=integration ./... -p 1 -count=1 || status=$$?; \
+	docker compose rm --stop --force --volumes postgres-test >/dev/null 2>&1 || true; \
+	exit $$status
 
 # Unit tests only — no database, no Docker, a few seconds.
 test-unit:
@@ -38,12 +50,18 @@ swagger:
 swagger-build:
 	python3 scripts/build_swagger.py
 
-# ─── Image ──────────────────────────────────────────────────────────────────
-# `latest` is always built and always published. VERSION=... adds a second
-# tag, frozen on that version:
-#   make image                                   → numflex-sandbox:latest
-#   make push                                    → …/numflex-sandbox:latest
-#   make push VERSION=v0.4.0                     → :latest + :v0.4.0
+# ─── Images ─────────────────────────────────────────────────────────────────
+# Two images, one headline. The all-in-one — server AND database, nothing to
+# orchestrate — is what `:latest` points at, because it is what someone
+# discovering the sandbox should get from a bare `docker run`. The scratch
+# one, which needs a database of its own, is published as `:slim`.
+#
+#   make image                       → numflex-sandbox:slim, locally
+#   make image-standalone            → numflex-sandbox:latest (and :standalone)
+#   make push                        → …/numflex-sandbox:latest   (all-in-one)
+#   make push VERSION=defcon-1       → :latest + :defcon-1
+#   make push-slim VERSION=defcon-1  → :slim + :slim-defcon-1
+#   make push-all VERSION=defcon-1   → the two above, in one call
 #   make push REGISTRY=harbor.noorexe.com/numflex
 IMAGE     ?= numflex-sandbox
 VERSION   ?=
@@ -56,8 +74,8 @@ BUILDER   ?= numflex-builder
 # target, and the slim image must stay what `make image` produces even if the
 # order of the Dockerfile's stages ever changes.
 image:
-	docker build --target runtime -t $(IMAGE):latest $(if $(VERSION),-t $(IMAGE):$(VERSION),) .
-	@docker images $(IMAGE):latest --format '  {{.Repository}}:{{.Tag}}  {{.Size}}'
+	docker build --target runtime -t $(IMAGE):slim $(if $(VERSION),-t $(IMAGE):slim-$(VERSION),) .
+	@$(call size,$(IMAGE):slim)
 
 # Builds and publishes in one pass. buildx is mandatory here: a multi-arch
 # manifest cannot be loaded into the local daemon, so there is no prior
@@ -70,27 +88,51 @@ image:
 # and is published from a modified tree. ALLOW_DIRTY=1 lifts the guard — the
 # tag is then published as is, from a tree that matches no commit.
 push:
-	@test -z "$(VERSION)" || git diff --quiet HEAD 2>/dev/null || test -n "$(ALLOW_DIRTY)" || \
-	  { echo "modified tree: a version tag must match a commit (ALLOW_DIRTY=1 to override)"; exit 1; }
-	@docker buildx inspect $(BUILDER) >/dev/null 2>&1 || \
-	  docker buildx create --name $(BUILDER) --driver docker-container >/dev/null
+	@$(clean-tree)
+	@$(builder)
 	docker buildx build --builder $(BUILDER) --platform $(PLATFORMS) \
-	  --target runtime \
+	  --target standalone \
 	  --tag $(REGISTRY)/$(IMAGE):latest \
 	  $(if $(VERSION),--tag $(REGISTRY)/$(IMAGE):$(VERSION),) \
 	  --push .
 	@echo "published: $(REGISTRY)/$(IMAGE):latest$(if $(VERSION), and :$(VERSION),)"
+
+# The scratch image, published beside it under its own name.
+push-slim:
+	@$(clean-tree)
+	@$(builder)
+	docker buildx build --builder $(BUILDER) --platform $(PLATFORMS) \
+	  --target runtime \
+	  --tag $(REGISTRY)/$(IMAGE):slim \
+	  $(if $(VERSION),--tag $(REGISTRY)/$(IMAGE):slim-$(VERSION),) \
+	  --push .
+	@echo "published: $(REGISTRY)/$(IMAGE):slim$(if $(VERSION), and :slim-$(VERSION),)"
+
+push-all: push push-slim
+
+# The clean-tree guard only applies to a version tag: that one must stay
+# reproducible, hence match a commit. A moving pointer — `latest`, `slim` —
+# is published from a modified tree without complaint. ALLOW_DIRTY=1 lifts
+# the guard, and the version tag then names a tree that matches no commit.
+clean-tree = test -z "$(VERSION)" || git diff --quiet HEAD 2>/dev/null || test -n "$(ALLOW_DIRTY)" || \
+	  { echo "modified tree: a version tag must match a commit (ALLOW_DIRTY=1 to override)"; exit 1; }
+
+# The default `docker` driver cannot produce a multi-arch manifest, hence a
+# dedicated builder, created on first call.
+builder = docker buildx inspect $(BUILDER) >/dev/null 2>&1 || \
+	  docker buildx create --name $(BUILDER) --driver docker-container >/dev/null
 
 # ─── All-in-one image ───────────────────────────────────────────────────────
 # The repository's docker-compose reduced to a single image: PostgreSQL and the
 # server in the same container. Nothing to orchestrate, nothing to network.
 #
 #   make image-standalone                    → numflex-sandbox:standalone, locally
-#   make run-standalone                      → runs it, data in ./data
+#   make run-standalone                      → runs it, nothing to mount
+#   make run-standalone FULL=1               → full ranges (a four-minute seed)
 #   make run-standalone DATA=/srv/pg PORT=9000
 #   make run-standalone ENV_FILE=./prod.env  → mounts that file on /app/.env
-#   make push-standalone                     → builds AND publishes, multi-arch
-#   make push-standalone VERSION=v0.5.0      → adds the :standalone-v0.5.0 tag
+#   make push                                → builds AND publishes, multi-arch
+#   make push VERSION=defcon-1               → adds the :defcon-1 tag
 #
 # Configuration follows the server's precedence — arguments > environment >
 # .env > defaults — and the database's data directory is no exception:
@@ -103,35 +145,27 @@ push:
 # This image is not a hardening: it ships a shell and a package manager, and
 # starts as root for the duration of initdb. For a deployment, use `make push`
 # and a separate database.
-DATA     ?= $(PWD)/data
+DATA     ?=
 PORT     ?= 8080
 ENV_FILE ?=
+FULL     ?=
+
+# `docker images` reports a DISK USAGE that counts the build attestations
+# and the cache: it announced 457 MB for an image of 120. This reads the
+# image's own size, the one that travels.
+size = docker image inspect $(1) --format '{{.Size}}' | \
+       awk '{ printf "  $(1)  %.0f MB\n", $$1/1024/1024 }'
 
 image-standalone:
-	docker build --target standalone -t $(IMAGE):standalone .
-	@docker images $(IMAGE):standalone --format '  {{.Repository}}:{{.Tag}}  {{.Size}}'
+	docker build --target standalone -t $(IMAGE):latest -t $(IMAGE):standalone .
+	@$(call size,$(IMAGE):latest)
 
 run-standalone: image-standalone
-	@mkdir -p "$(DATA)"
-	@echo "sandbox → http://localhost:$(PORT)   docs → http://localhost:$(PORT)/swagger.html   data → $(DATA)$(if $(ENV_FILE),   env → $(ENV_FILE),)"
-	docker run --rm -p $(PORT):$(PORT) \
-	  -v "$(DATA):/data" \
+	$(if $(DATA),@mkdir -p "$(DATA)")
+	@echo "sandbox → http://localhost:$(PORT)   docs → http://localhost:$(PORT)/swagger.html$(if $(DATA),   data → $(DATA),)$(if $(ENV_FILE),   env → $(ENV_FILE),)"
+	docker run --rm -p $(PORT):8080 \
+	  $(if $(DATA),-v "$(DATA):/data",) \
 	  $(if $(ENV_FILE),-v "$(abspath $(ENV_FILE)):/app/.env:ro",) \
-	  $(IMAGE):standalone PGDATA=/data PORT=$(PORT)
+	  $(IMAGE):standalone $(if $(DATA),PGDATA=/data,) $(if $(FULL),FULL_NUMBERS=true,)
 
-# Builds and publishes in one pass, like `push`: buildx cannot load a
-# multi-arch manifest into the local daemon, so there is no prior
-# `make image-standalone` — only the build cache is shared.
-push-standalone:
-	@test -z "$(VERSION)" || git diff --quiet HEAD 2>/dev/null || test -n "$(ALLOW_DIRTY)" || \
-	  { echo "modified tree: a version tag must match a commit (ALLOW_DIRTY=1 to override)"; exit 1; }
-	@docker buildx inspect $(BUILDER) >/dev/null 2>&1 || \
-	  docker buildx create --name $(BUILDER) --driver docker-container >/dev/null
-	docker buildx build --builder $(BUILDER) --platform $(PLATFORMS) \
-	  --target standalone \
-	  --tag $(REGISTRY)/$(IMAGE):standalone \
-	  $(if $(VERSION),--tag $(REGISTRY)/$(IMAGE):standalone-$(VERSION),) \
-	  --push .
-	@echo "published: $(REGISTRY)/$(IMAGE):standalone$(if $(VERSION), and :standalone-$(VERSION),)"
-
-.PHONY: up test test-unit run swagger swagger-build image push image-standalone run-standalone push-standalone
+.PHONY: up test test-unit run swagger swagger-build image push push-slim push-all image-standalone run-standalone

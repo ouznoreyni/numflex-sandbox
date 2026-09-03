@@ -32,31 +32,19 @@ func buildRouter(adjust ...func(*config.Config)) *gin.Engine {
 	return web.NewRouter(&web.Deps{Cfg: cfg, DB: &persistence.DB{}})
 }
 
-// Guard on constraint D-4: CORS goes through a global middleware, not
-// through registered OPTIONS routes, and the sandbox exposes exactly the
-// contract's surface — no health, metrics or debug route. Moved from
-// internal/api/cors_test.go (Task 18): that file counted routes on
-// internal/api.NewRouter, the only test in the whole suite that ever
-// asserted a route count; this is the same assertion, unchanged, against
-// web.NewRouter now that it is the router actually served.
-func TestCORSAddsNoRoute(t *testing.T) {
-	without := len(buildRouter().Routes())
-	with := len(buildRouter(func(c *config.Config) {
-		c.CORSAllowedOrigins = []string{"*"}
-	}).Routes())
-
-	require.Equal(t, 35, without, "33 gateway routes plus the two authentication ones")
-	require.Equal(t, without, with, "CORS must register no route")
-}
-
-// Guard on the same constraint, with SANDBOX_ADMIN on: one more route
-// appears — DELETE /api/sandbox/v1/demandes — and none other.
-func TestWithSandboxAdminOneMoreRoute(t *testing.T) {
-	withSandbox := len(buildRouter(func(c *config.Config) {
-		c.SandboxAdmin = true
-	}).Routes())
-
-	require.Equal(t, 36, withSandbox)
+// Guard on constraint D-4: the sandbox exposes exactly the contract's
+// surface — no health, metrics or debug route — plus the two
+// /api/sandbox/v1 routes, which live outside the gateway prefix on purpose.
+// Moved from internal/api/cors_test.go (Task 18): that file counted routes
+// on internal/api.NewRouter, the only test in the whole suite that ever
+// asserted a route count; this is the same assertion against web.NewRouter,
+// now that it is the router actually served.
+//
+// Nothing in the configuration moves this number any more: CORS registers
+// no route of its own, and both sandbox routes are mounted unconditionally.
+func TestRouteTableIsFixed(t *testing.T) {
+	require.Equal(t, 37, len(buildRouter().Routes()),
+		"33 gateway routes, the two authentication ones, and the two sandbox ones")
 }
 
 // The documentation is served by the router itself, on the API's own port,
@@ -104,7 +92,7 @@ func TestMissingDocsDirRegistersNothing(t *testing.T) {
 	with := buildRouter(func(c *config.Config) {
 		c.Docs, c.DocsDir = true, filepath.Join(t.TempDir(), "absent")
 	}).Routes()
-	require.Len(t, with, 35)
+	require.Len(t, with, 37)
 }
 
 // DOCS_ENABLED=false registers nothing even when the folder is right there:
@@ -118,7 +106,7 @@ func TestDocsDisabledRegistersNothing(t *testing.T) {
 	with := buildRouter(func(c *config.Config) {
 		c.Docs, c.DocsDir = false, dir
 	}).Routes()
-	require.Len(t, with, 35)
+	require.Len(t, with, 37)
 }
 
 // Ruling R32: an unauthenticated request to an unknown path under the
@@ -144,7 +132,7 @@ func TestUnknownPathUnderGatewayWithoutTokenReturns401(t *testing.T) {
 // 401 — that surface is not the platform's, and its group middleware only
 // runs for routes actually registered in it.
 func TestUnknownPathUnderSandboxReturns404(t *testing.T) {
-	r := buildRouter(func(c *config.Config) { c.SandboxAdmin = true })
+	r := buildRouter()
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, web.SandboxPrefix+"/route-inexistante", nil)
 	r.ServeHTTP(rec, req)
