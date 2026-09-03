@@ -149,10 +149,10 @@ func TestNoErrorCarriesCodeInRealMode(t *testing.T) {
 		{"/api/gateway/v1/demandes/" + unknown + "/annuler", yas, nil},
 		// Restitution of a number never ported (771000001: ORANGE by origin).
 		{"/api/gateway/v1/demandes/restitution", orange, map[string]any{"numero": "771000001"}},
-		// Restitution of a number ported less than 6 months ago (774000001: 2 months).
-		{"/api/gateway/v1/demandes/restitution", orange, map[string]any{"numero": "774000001"}},
+		// Restitution of a number ported less than 6 months ago (789002001: 2 months).
+		{"/api/gateway/v1/demandes/restitution", orange, map[string]any{"numero": "789002001"}},
 		// Reverse requested by the recipient (YAS) instead of the source (ORANGE).
-		{"/api/gateway/v1/reverse-requests", yas, map[string]any{"numero": "773000001"}},
+		{"/api/gateway/v1/reverse-requests", yas, map[string]any{"numero": "789001001"}},
 		// Verification of an OTP never sent.
 		{"/api/gateway/v1/otp/verify", yas, map[string]any{"numero": "779999999", "otpCode": "123456"}},
 	}

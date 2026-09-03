@@ -385,14 +385,14 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"numero\": \"773000001\"\n}",
+                  "raw": "{\n  \"numero\": \"789001001\"\n}",
                   "options": {
                     "raw": {
                       "language": "json"
                     }
                   }
                 },
-                "description": "Compte orange — seul l'opérateur d'origine du numéro peut demander sa restitution, et il en devient le destinataire. 773000001 vient d'ORANGE et a été porté il y a 8 mois."
+                "description": "Compte orange — seul l'opérateur d'origine du numéro peut demander sa restitution, et il en devient le destinataire. 789001001 vient d'ORANGE et a été porté il y a 8 mois."
               },
               "response": []
             }
@@ -425,7 +425,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"numero\": \"773000001\"\n}",
+                  "raw": "{\n  \"numero\": \"789001001\"\n}",
                   "options": {
                     "raw": {
                       "language": "json"
@@ -1201,6 +1201,71 @@
               "response": []
             }
           ]
+        }
+      ]
+    },
+    {
+      "name": "sandbox",
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{token}}",
+            "type": "string"
+          }
+        ]
+      },
+      "item": [
+        {
+          "name": "GET /numeros/tranches — vivier d'un opérateur",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/sandbox/v1/numeros/tranches?operateur=ORANGE",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "sandbox",
+                "v1",
+                "numeros",
+                "tranches"
+              ],
+              "query": [
+                {
+                  "key": "operateur",
+                  "value": "ORANGE",
+                  "description": "ORANGE, YAS ou EXPRESSO — insensible à la casse"
+                }
+              ]
+            },
+            "description": "Hors contrat ARTP. Les numéros que le sandbox connaît, tranche par tranche : bornes, total et nature (JAMAIS_PORTE = vivier portable, DEJA_PORTE = matériel de rejet). Compte en base, donc ~3 s sur le vivier plein."
+          },
+          "response": []
+        },
+        {
+          "name": "DELETE /demandes — purger ses données de test",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/sandbox/v1/demandes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "sandbox",
+                "v1",
+                "demandes"
+              ]
+            },
+            "description": "Hors contrat ARTP. Supprime les demandes créées par l'opérateur du jeton et restaure le registre pour chaque numéro concerné. Montée par défaut ; SANDBOX_ADMIN=false la retire et elle répond alors 404."
+          },
+          "response": []
         }
       ]
     }

@@ -71,11 +71,6 @@ func CompletionLatency(d time.Duration) func(*config.Config) {
 	return func(c *config.Config) { c.CompletionLatency = d }
 }
 
-// SandboxAdmin opens /api/sandbox/v1 for the harness's router — the same
-// reason ContractFidelity exists: a controller test cannot name
-// internal/framework/config's own SandboxAdmin field directly.
-func SandboxAdmin(c *config.Config) { c.SandboxAdmin = true }
-
 // NewRouterHarness mounts the full router in a deterministic profile.
 // adjust lets a test override a default config value before the router is
 // built.

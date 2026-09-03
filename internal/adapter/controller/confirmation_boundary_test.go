@@ -44,7 +44,7 @@ func TestConfirmationCrossesTheThresholdExactly(t *testing.T) {
 	// A RESTITUTION requires everyone, recipient included (unlike a
 	// PORTAGE) — the case where the threshold count is the least trivial.
 	resp, body := h.Call(http.MethodPost, "/api/gateway/v1/demandes/restitution",
-		h.Token("orange", "orange2026"), map[string]any{"numero": "773000001"})
+		h.Token("orange", "orange2026"), map[string]any{"numero": "789001001"})
 	require.Equal(t, http.StatusCreated, resp.StatusCode, body)
 	id := body["data"].(map[string]any)["id"].(string)
 	advanceTo(h, id, "CONFIRMATION")

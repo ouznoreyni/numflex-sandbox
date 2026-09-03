@@ -148,7 +148,7 @@ func TestInAndOutOnlyContainCompletedPortings(t *testing.T) {
 func TestInExcludesRestitutions(t *testing.T) {
 	h := routerharness.NewRouterHarness(t)
 	resp, body := h.Call(http.MethodPost, "/api/gateway/v1/demandes/restitution",
-		h.Token("orange", "orange2026"), map[string]any{"numero": "773000001"})
+		h.Token("orange", "orange2026"), map[string]any{"numero": "789001001"})
 	require.Equal(t, http.StatusCreated, resp.StatusCode)
 	id := body["data"].(map[string]any)["id"].(string)
 

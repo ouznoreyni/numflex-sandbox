@@ -35,7 +35,9 @@ func NewTestDB(t *testing.T) *persistence.DB {
 	if _, err := db.Pool.Exec(ctx, truncateSQL); err != nil {
 		t.Fatalf("truncate: %v", err)
 	}
-	if err := seed.Run(ctx, db); err != nil {
+	// seed.TestVolumes, not the server's: the pool is reseeded at every
+	// test, and the production volume would make the suite unusable.
+	if err := seed.Run(ctx, db, seed.TestVolumes); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 	return db

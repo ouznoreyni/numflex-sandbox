@@ -18,12 +18,12 @@ func TestCreateRestitutionRequestNominal(t *testing.T) {
 	f := newFixture()
 	portedLongAgo := time.Now().AddDate(0, 0, -240) // well beyond 6 months
 	f.numbers.Seed(entity.NumberState{
-		MSISDN: "773000001", CurrentOperatorID: yasID, OriginOperatorID: orangeID,
+		MSISDN: "789001001", CurrentOperatorID: yasID, OriginOperatorID: orangeID,
 		LastPortingDate: &portedLongAgo,
 	})
 
 	view, fault := restitutionInteractor(f).Execute(ctxCaller(orangeID),
-		creation.CreateRestitutionRequestInput{MSISDN: "773000001"})
+		creation.CreateRestitutionRequestInput{MSISDN: "789001001"})
 	require.Nil(t, fault)
 	require.Equal(t, "RESTITUTION", view.RequestType)
 	// The origin operator (caller) gets the number back: it is the recipient.
@@ -49,13 +49,13 @@ func TestCreateRestitutionRequestReservedToOriginOperator(t *testing.T) {
 	f := newFixture()
 	portedLongAgo := time.Now().AddDate(0, 0, -240)
 	f.numbers.Seed(entity.NumberState{
-		MSISDN: "773000001", CurrentOperatorID: yasID, OriginOperatorID: orangeID,
+		MSISDN: "789001001", CurrentOperatorID: yasID, OriginOperatorID: orangeID,
 		LastPortingDate: &portedLongAgo,
 	})
 
 	// The caller is neither the holder nor the origin of the number.
 	_, fault := restitutionInteractor(f).Execute(ctxCaller("operateur-expresso"),
-		creation.CreateRestitutionRequestInput{MSISDN: "773000001"})
+		creation.CreateRestitutionRequestInput{MSISDN: "789001001"})
 	require.NotNil(t, fault)
 	require.Equal(t, "DEMANDE_ACCES_REFUSE", fault.Code)
 	require.Equal(t, 0, f.requests.RequestCount())
@@ -65,12 +65,12 @@ func TestCreateRestitutionRequestDelayNotRespected(t *testing.T) {
 	f := newFixture()
 	portedRecently := time.Now().AddDate(0, 0, -60) // 60 days < 6 months
 	f.numbers.Seed(entity.NumberState{
-		MSISDN: "774000001", CurrentOperatorID: yasID, OriginOperatorID: orangeID,
+		MSISDN: "789002001", CurrentOperatorID: yasID, OriginOperatorID: orangeID,
 		LastPortingDate: &portedRecently,
 	})
 
 	_, fault := restitutionInteractor(f).Execute(ctxCaller(orangeID),
-		creation.CreateRestitutionRequestInput{MSISDN: "774000001"})
+		creation.CreateRestitutionRequestInput{MSISDN: "789002001"})
 	require.NotNil(t, fault)
 	require.Equal(t, "DELAI_RESTITUTION_NON_RESPECTE", fault.Code)
 }
@@ -79,12 +79,12 @@ func TestCreateRestitutionRequestAlreadyRestituted(t *testing.T) {
 	f := newFixture()
 	portedLongAgo := time.Now().AddDate(0, 0, -240)
 	f.numbers.Seed(entity.NumberState{
-		MSISDN: "775000001", CurrentOperatorID: yasID, OriginOperatorID: orangeID,
+		MSISDN: "789003001", CurrentOperatorID: yasID, OriginOperatorID: orangeID,
 		LastPortingDate: &portedLongAgo, AlreadyRestituted: true,
 	})
 
 	_, fault := restitutionInteractor(f).Execute(ctxCaller(orangeID),
-		creation.CreateRestitutionRequestInput{MSISDN: "775000001"})
+		creation.CreateRestitutionRequestInput{MSISDN: "789003001"})
 	require.NotNil(t, fault)
 	require.Equal(t, "NUMERO_DEJA_RESTITUE", fault.Code)
 }

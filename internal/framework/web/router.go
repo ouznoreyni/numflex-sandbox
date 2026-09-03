@@ -52,9 +52,10 @@ func GuardGatewayPrefix(authenticate gin.HandlerFunc) gin.HandlerFunc {
 // actually served.
 func NewRouter(d *Deps) *gin.Engine {
 	// Before everything else, authentication included: a CORS preflight goes
-	// out without a token. Inert while CORS_ALLOWED_ORIGINS is empty, and
-	// registers no route of its own — see middleware.AllowCORS.
-	r := NewEngine(d.Cfg, middleware.AllowCORS(d.Cfg.CORSAllowedOrigins))
+	// out without a token. Every origin is allowed, with nothing to
+	// configure, and no route of its own is registered — see
+	// middleware.AllowCORS.
+	r := NewEngine(d.Cfg, middleware.AllowCORS())
 
 	// Task 10: both /api/authenticate routes are a controller delegating to
 	// AuthenticateInteractor and DescribeCallerInteractor, and authentication
@@ -157,17 +158,24 @@ func NewRouter(d *Deps) *gin.Engine {
 	g.POST("/reverse-requests", reverseCtrl.Submit)
 	g.GET("/reverse-requests/mes-demandes", reverseCtrl.Own)
 
-	// Outside the gateway, and outside the ARTP contract: purging the test
-	// data. The group is mounted only when SANDBOX_ADMIN asks for it —
-	// otherwise the route does not exist and gin answers 404, revealing
-	// nothing. Authentication here is a group middleware rather than the
-	// prefix guard above: there is no reason to imitate the Spring filter on a
-	// surface the platform does not own, so an unknown path under
-	// /api/sandbox/v1 should indeed answer 404 rather than 401.
-	if d.Cfg.SandboxAdmin {
-		sandboxCtrl := d.sandboxController()
-		r.Group(SandboxPrefix, authenticate).DELETE("/demandes", sandboxCtrl.Purge)
-	}
+	// Outside the gateway, and outside the ARTP contract: reading the
+	// registry's ranges, and purging the test data. Authentication here is a
+	// group middleware rather than the prefix guard above: there is no reason
+	// to imitate the Spring filter on a surface the platform does not own, so
+	// an unknown path under /api/sandbox/v1 should indeed answer 404 rather
+	// than 401.
+	//
+	// The range count answers "which numbers exist", the question the
+	// registry's single rejection message — OPERATEUR_SOURCE_INCORRECT for
+	// an absent number as for a wrong source — cannot answer. The purge is
+	// what makes a scenario replayable, restoring the registry for every
+	// number it frees. Both are mounted unconditionally: a sandbox whose
+	// reset button waits for an environment variable is a sandbox nobody
+	// resets.
+	sandboxCtrl := d.sandboxController()
+	sb := r.Group(SandboxPrefix, authenticate)
+	sb.GET("/numeros/tranches", sandboxCtrl.Ranges)
+	sb.DELETE("/demandes", sandboxCtrl.Purge)
 
 	// The documentation, outside the gateway and outside the contract, like
 	// /api/sandbox/v1 above. No flag gates it: the folder's presence does.

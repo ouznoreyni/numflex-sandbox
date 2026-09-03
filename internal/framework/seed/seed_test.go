@@ -93,10 +93,16 @@ func TestNumberPool(t *testing.T) {
 		{"771000001", seed.OperatorOrangeID, false, false, 0, 0},
 		{"761000001", seed.OperatorYASID, false, false, 0, 0},
 		{"701000001", seed.OperatorExpressoID, false, false, 0, 0},
-		{"772000001", seed.OperatorOrangeID, true, false, 25, 35},
-		{"773000001", seed.OperatorYASID, true, false, 230, 250},
-		{"774000001", seed.OperatorYASID, true, false, 55, 65},
-		{"775000001", seed.OperatorYASID, true, true, 230, 250},
+		{"779000001", seed.OperatorOrangeID, true, false, 25, 35},
+		{"789001001", seed.OperatorYASID, true, false, 230, 250},
+		{"789002001", seed.OperatorYASID, true, false, 55, 65},
+		{"789003001", seed.OperatorYASID, true, true, 230, 250},
+		// Range ends: a range starts at 000000, so the thousandth number
+		// of a thousand-strong range is 000999, and the last block of a
+		// ported range stops at 003999.
+		{"771000000", seed.OperatorOrangeID, false, false, 0, 0},
+		{"771000999", seed.OperatorOrangeID, false, false, 0, 0},
+		{"719003999", seed.OperatorExpressoID, true, true, 230, 250},
 	}
 	for _, c := range cases {
 		var current string
@@ -120,12 +126,46 @@ func TestNumberPool(t *testing.T) {
 	}
 }
 
+func TestNumberPoolVolume(t *testing.T) {
+	db := testsupport.NewTestDB(t)
+	ctx := context.Background()
+
+	// 1000 per range: ORANGE 8 unported + 4 ported blocks, YAS and EXPRESSO
+	// 9 unported each — their historical range included — plus 4 blocks.
+	v := seed.TestVolumes
+	perOperator := map[string]int{
+		seed.OperatorOrangeID: seed.UnportedRangesPerOperator*v.OrangeYAS +
+			seed.PortedScenarioCount*v.PortedBlock,
+		seed.OperatorYASID: seed.UnportedRangesPerOperator*v.OrangeYAS + v.Historical +
+			seed.PortedScenarioCount*v.PortedBlock,
+		seed.OperatorExpressoID: seed.UnportedRangesPerOperator*v.Expresso + v.Historical +
+			seed.PortedScenarioCount*v.PortedBlock,
+	}
+	total := 0
+	for id, expected := range perOperator {
+		var n int
+		require.NoError(t, db.Pool.QueryRow(ctx,
+			"SELECT count(*) FROM numero WHERE operateur_actuel_id = $1", id).Scan(&n))
+		require.Equal(t, expected, n, id)
+		total += expected
+	}
+
+	var n int
+	require.NoError(t, db.Pool.QueryRow(ctx, "SELECT count(*) FROM numero").Scan(&n))
+	require.Equal(t, total, n)
+
+	// A range stops at its size: nothing beyond it.
+	require.NoError(t, db.Pool.QueryRow(ctx,
+		"SELECT count(*) FROM numero WHERE msisdn = '771001000'").Scan(&n))
+	require.Zero(t, n)
+}
+
 func TestSeedIdempotent(t *testing.T) {
 	db := testsupport.NewTestDB(t)
 	ctx := context.Background()
 
-	require.NoError(t, seed.Run(ctx, db))
-	require.NoError(t, seed.Run(ctx, db))
+	require.NoError(t, seed.Run(ctx, db, seed.TestVolumes))
+	require.NoError(t, seed.Run(ctx, db, seed.TestVolumes))
 
 	var n int
 	require.NoError(t, db.Pool.QueryRow(ctx, "SELECT count(*) FROM operateur").Scan(&n))

@@ -15,7 +15,7 @@ func insertReverse(t *testing.T, db *persistence.DB, id string) {
 	t.Helper()
 	_, err := db.Pool.Exec(context.Background(),
 		`INSERT INTO reverse_request (id, numero, operateur_id, statut, date_demande)
-		 VALUES ($1,'773000001',$2,'EN_ATTENTE',now())`, id, seed.OperatorOrangeID)
+		 VALUES ($1,'789001001',$2,'EN_ATTENTE',now())`, id, seed.OperatorOrangeID)
 	require.NoError(t, err)
 }
 

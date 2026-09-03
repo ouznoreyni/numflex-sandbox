@@ -4,8 +4,9 @@ import (
 	"fmt"
 	"os"
 	"strconv"
-	"strings"
 	"time"
+
+	"github.com/ouznoreyni/numflex-sandbox/internal/framework/seed"
 )
 
 type Fidelity string
@@ -32,19 +33,12 @@ type Config struct {
 	OTPMaxAttempts        int
 	ReverseAutoValidation time.Duration
 
-	// SandboxAdmin opens /api/sandbox/v1 — the test-data purge. Outside the
-	// ARTP contract, so false by default: at false the route is not
-	// registered at all and answers 404, like any unknown path. The gateway,
-	// on the other hand, keeps its 33 routes either way.
-	SandboxAdmin bool
-
 	// Docs registers /swagger.html, /openapi.yaml and /openapi.json at the
 	// root — outside /api/gateway/v1, which keeps exactly its 33 routes
 	// either way. True by default so that running the standalone image needs
 	// no argument at all; DOCS_ENABLED=false gives back the platform's exact
-	// surface. It is a boolean rather than an empty DocsDir because in this
-	// configuration an empty value counts as absent everywhere except
-	// CORS_ALLOWED_ORIGINS, and that exception is meant to stay unique.
+	// surface. It is a boolean rather than an empty DocsDir because an empty
+	// value counts as absent everywhere in this configuration.
 	Docs bool
 
 	// DocsDir is where those three files are looked up, walking up from the
@@ -53,15 +47,30 @@ type Config struct {
 	// registers nothing even with Docs true.
 	DocsDir string
 
-	// CORSAllowedOrigins is a sandbox convenience, not a trait of the
-	// contract: it exists only so that a page served on another port —
-	// Swagger, a back-office in development — can call the API from a
-	// browser. The default is `*`, every origin allowed, so it works without
-	// any configuration. The real gateway, consumed server-to-server, emits
-	// no CORS header at all: setting CORS_ALLOWED_ORIGINS to empty restores
-	// that behaviour.
-	CORSAllowedOrigins []string
+	// PoolPerOperator is how many never-ported numbers ORANGE and YAS each
+	// get at seed time, spread over their eight ranges — the pool a porting
+	// consumes, one number per successful cycle. It is the one setting that
+	// costs real time and disk, which is why the default is a hundred
+	// thousand per range rather than a full one: DefaultPoolPerOperator
+	// starts in about twenty seconds, FullNumbers in four and a half
+	// minutes. EXPRESSO and the already-ported ranges keep their fixed size,
+	// being rejection material rather than something to consume.
+	PoolPerOperator int
+
+	// FullNumbers fills every portable range whole — its million numbers,
+	// 000000 to 999999 — so that any well-formed number of a range exists.
+	// It is a shortcut on PoolPerOperator's DEFAULT, not an override: an
+	// explicit POOL_NUMBERS_PER_OPERATOR still wins, so the two can never
+	// contradict each other.
+	FullNumbers bool
 }
+
+// DefaultPoolPerOperator is the pool seeded when nothing is asked: a hundred
+// thousand numbers per range, eight ranges per operator. Enough that no
+// exploration exhausts it, small enough that a container without a
+// persistent volume starts in seconds — FULL_NUMBERS=true is there for the
+// day the whole range is wanted.
+const DefaultPoolPerOperator = 800_000
 
 func Load() (*Config, error) {
 	c := &Config{
@@ -72,15 +81,6 @@ func Load() (*Config, error) {
 		OTPStaticCode: str("OTP_STATIC_CODE", "123456"),
 		DocsDir:       str("DOCS_DIR", "docs"),
 	}
-
-	// The one variable where an empty string differs from being unset,
-	// because here the two carry opposite meanings: not set, CORS is open to
-	// every origin; set empty, it is switched off.
-	origins := "*"
-	if v, ok := os.LookupEnv("CORS_ALLOWED_ORIGINS"); ok {
-		origins = v
-	}
-	c.CORSAllowedOrigins = splitList(origins)
 
 	var err error
 	if c.JWTTTL, err = dur("JWT_TTL_HOURS", 24, time.Hour); err != nil {
@@ -113,10 +113,19 @@ func Load() (*Config, error) {
 	if c.OTPMaxAttempts, err = num("OTP_MAX_ATTEMPTS", 3); err != nil {
 		return nil, err
 	}
-	if c.Docs, err = boolean("DOCS_ENABLED", true); err != nil {
+	// FULL_NUMBERS is read first: it decides the pool's default, which the
+	// line below then lets POOL_NUMBERS_PER_OPERATOR override.
+	if c.FullNumbers, err = boolean("FULL_NUMBERS", false); err != nil {
 		return nil, err
 	}
-	if c.SandboxAdmin, err = boolean("SANDBOX_ADMIN", false); err != nil {
+	pool := DefaultPoolPerOperator
+	if c.FullNumbers {
+		pool = seed.UnportedRangesPerOperator * seed.MaxPerRange
+	}
+	if c.PoolPerOperator, err = num("POOL_NUMBERS_PER_OPERATOR", pool); err != nil {
+		return nil, err
+	}
+	if c.Docs, err = boolean("DOCS_ENABLED", true); err != nil {
 		return nil, err
 	}
 
@@ -130,6 +139,14 @@ func Load() (*Config, error) {
 	if c.ConvergenceMax < c.ConvergenceMin {
 		return nil, fmt.Errorf("CONVERGENCE_MAX_SECONDS ne peut être inférieur à CONVERGENCE_MIN_SECONDS")
 	}
+	if c.PoolPerOperator < seed.UnportedRangesPerOperator {
+		return nil, fmt.Errorf("POOL_NUMBERS_PER_OPERATOR must be at least %d, one per range",
+			seed.UnportedRangesPerOperator)
+	}
+	if c.PoolPerOperator > seed.UnportedRangesPerOperator*seed.MaxPerRange {
+		return nil, fmt.Errorf("POOL_NUMBERS_PER_OPERATOR cannot exceed %d: a range holds %d numbers at most",
+			seed.UnportedRangesPerOperator*seed.MaxPerRange, seed.MaxPerRange)
+	}
 	if c.EngineTick <= 0 {
 		return nil, fmt.Errorf("ENGINE_TICK_SECONDS must be strictly positive")
 	}
@@ -141,18 +158,6 @@ func str(key, def string) string {
 		return v
 	}
 	return def
-}
-
-// splitList splits a comma-separated value, ignoring empty entries — "a, ,b"
-// gives ["a" "b"], "" gives nil.
-func splitList(v string) []string {
-	var out []string
-	for _, part := range strings.Split(v, ",") {
-		if p := strings.TrimSpace(part); p != "" {
-			out = append(out, p)
-		}
-	}
-	return out
 }
 
 func num(key string, def int) (int, error) {

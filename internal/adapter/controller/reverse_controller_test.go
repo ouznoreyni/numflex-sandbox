@@ -30,13 +30,13 @@ func TestSubmitReverseByOriginOperator(t *testing.T) {
 	// Slice 773: YAS currently, ORANGE at origin.
 	h := routerharness.NewRouterHarness(t)
 	resp, body := h.Call(http.MethodPost, "/api/gateway/v1/reverse-requests",
-		h.Token("orange", "orange2026"), map[string]any{"numero": "773000001"})
+		h.Token("orange", "orange2026"), map[string]any{"numero": "789001001"})
 
 	require.Equal(t, http.StatusCreated, resp.StatusCode, body)
 	require.Equal(t, "Demande de reverse soumise avec succès", body["message"])
 
 	data := body["data"].(map[string]any)
-	require.Equal(t, "773000001", data["numero"])
+	require.Equal(t, "789001001", data["numero"])
 	require.Equal(t, "EN_ATTENTE", data["statut"])
 	require.Equal(t, operatorOrange, data["operateur"].(map[string]any)["id"])
 }
@@ -44,14 +44,14 @@ func TestSubmitReverseByOriginOperator(t *testing.T) {
 func TestSubmitReverseByAnotherOperatorRefused(t *testing.T) {
 	h := routerharness.NewRouterHarness(t)
 	resp, _ := h.Call(http.MethodPost, "/api/gateway/v1/reverse-requests",
-		h.Token("yas", "yas2026"), map[string]any{"numero": "773000001"})
+		h.Token("yas", "yas2026"), map[string]any{"numero": "789001001"})
 	require.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 }
 
 func TestOwnReverseRequests(t *testing.T) {
 	h := routerharness.NewRouterHarness(t)
 	h.Call(http.MethodPost, "/api/gateway/v1/reverse-requests",
-		h.Token("orange", "orange2026"), map[string]any{"numero": "773000001"})
+		h.Token("orange", "orange2026"), map[string]any{"numero": "789001001"})
 
 	data := h.List("/api/gateway/v1/reverse-requests/mes-demandes",
 		h.Token("orange", "orange2026"))
@@ -66,7 +66,7 @@ func TestNoCancelEndpointForReverse(t *testing.T) {
 	// §7.6: "There is no endpoint to cancel a reverse request."
 	h := routerharness.NewRouterHarness(t)
 	_, body := h.Call(http.MethodPost, "/api/gateway/v1/reverse-requests",
-		h.Token("orange", "orange2026"), map[string]any{"numero": "773000001"})
+		h.Token("orange", "orange2026"), map[string]any{"numero": "789001001"})
 	id := body["data"].(map[string]any)["id"].(string)
 
 	resp := h.Raw(http.MethodPost, "/api/gateway/v1/reverse-requests/"+id+"/annuler",
@@ -91,7 +91,7 @@ func TestReverseReachesCompletedThroughRealEndpoints(t *testing.T) {
 	// 1. Submission by the origin operator (slice 773: YAS currently,
 	// ORANGE at origin).
 	_, body := h.Call(http.MethodPost, "/api/gateway/v1/reverse-requests",
-		h.Token("orange", "orange2026"), map[string]any{"numero": "773000001"})
+		h.Token("orange", "orange2026"), map[string]any{"numero": "789001001"})
 	reverseID := body["data"].(map[string]any)["id"].(string)
 
 	// 2. An ARTP act, outside the API: validation — creates the REVERSE
@@ -121,7 +121,7 @@ func TestReverseReachesCompletedThroughRealEndpoints(t *testing.T) {
 
 	var currentOperator string
 	require.NoError(t, h.DB.Pool.QueryRow(context.Background(),
-		`SELECT operateur_actuel_id FROM numero WHERE msisdn = '773000001'`).
+		`SELECT operateur_actuel_id FROM numero WHERE msisdn = '789001001'`).
 		Scan(&currentOperator))
 	require.Equal(t, operatorOrange, currentOperator)
 }
@@ -137,7 +137,7 @@ func TestReverseCompletionAlwaysRefusedToOperators(t *testing.T) {
 	h := routerharness.NewRouterHarness(t, routerharness.ContractFidelity)
 
 	_, body := h.Call(http.MethodPost, "/api/gateway/v1/reverse-requests",
-		h.Token("orange", "orange2026"), map[string]any{"numero": "773000001"})
+		h.Token("orange", "orange2026"), map[string]any{"numero": "789001001"})
 	reverseID := body["data"].(map[string]any)["id"].(string)
 	h.ValidateReverse(reverseID)
 

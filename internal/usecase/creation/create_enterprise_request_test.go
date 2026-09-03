@@ -98,13 +98,13 @@ func TestCreateEnterpriseRequestNoEligibleNumber(t *testing.T) {
 	f := newFixture()
 	within3Months := time.Now().AddDate(0, 0, -25) // ported 25 days ago
 	f.numbers.Seed(entity.NumberState{
-		MSISDN: "772000001", CurrentOperatorID: orangeID, OriginOperatorID: orangeID,
+		MSISDN: "779000001", CurrentOperatorID: orangeID, OriginOperatorID: orangeID,
 		LastPortingDate: &within3Months,
 	})
-	seedOTP(t, f, "772000001", "123456")
+	seedOTP(t, f, "779000001", "123456")
 
 	_, fault := enterpriseInteractor(f).Execute(ctxCaller(yasID),
-		validEnterpriseInput("772000001", []string{"772000001"}))
+		validEnterpriseInput("779000001", []string{"779000001"}))
 	require.NotNil(t, fault)
 	require.Equal(t, "AUCUN_NUMERO_ELIGIBLE", fault.Code)
 	require.Equal(t, 0, f.requests.RequestCount())

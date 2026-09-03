@@ -40,7 +40,7 @@ func TestPortingRequestAlreadyInProgress(t *testing.T) {
 }
 
 func TestPortingDelayNotRespected(t *testing.T) {
-	n := NumberState{MSISDN: "772000001", CurrentOperatorID: orange,
+	n := NumberState{MSISDN: "779000001", CurrentOperatorID: orange,
 		OriginOperatorID: yas, LastPortingDate: daysAgo(30)}
 	e := CheckPortingEligibility(n, orange, yas, DelayBetweenPortings)
 	require.NotNil(t, e)
@@ -50,7 +50,7 @@ func TestPortingDelayNotRespected(t *testing.T) {
 }
 
 func TestPortingDelayRespected(t *testing.T) {
-	n := NumberState{MSISDN: "773000001", CurrentOperatorID: yas,
+	n := NumberState{MSISDN: "789001001", CurrentOperatorID: yas,
 		OriginOperatorID: orange, LastPortingDate: daysAgo(240)}
 	require.Nil(t, CheckPortingEligibility(n, yas, expresso, DelayBetweenPortings))
 }
@@ -63,7 +63,7 @@ func TestRestitutionNumberNotPorted(t *testing.T) {
 }
 
 func TestRestitutionAlreadyRestituted(t *testing.T) {
-	n := NumberState{MSISDN: "775000001", CurrentOperatorID: yas, OriginOperatorID: orange,
+	n := NumberState{MSISDN: "789003001", CurrentOperatorID: yas, OriginOperatorID: orange,
 		LastPortingDate: daysAgo(240), AlreadyRestituted: true}
 	e := CheckRestitutionEligibility(n, DelayBeforeRestitution)
 	require.NotNil(t, e)
@@ -71,7 +71,7 @@ func TestRestitutionAlreadyRestituted(t *testing.T) {
 }
 
 func TestRestitutionTooEarly(t *testing.T) {
-	n := NumberState{MSISDN: "774000001", CurrentOperatorID: yas, OriginOperatorID: orange,
+	n := NumberState{MSISDN: "789002001", CurrentOperatorID: yas, OriginOperatorID: orange,
 		LastPortingDate: daysAgo(60)}
 	e := CheckRestitutionEligibility(n, DelayBeforeRestitution)
 	require.NotNil(t, e)
@@ -81,7 +81,7 @@ func TestRestitutionTooEarly(t *testing.T) {
 }
 
 func TestRestitutionNominal(t *testing.T) {
-	n := NumberState{MSISDN: "773000001", CurrentOperatorID: yas, OriginOperatorID: orange,
+	n := NumberState{MSISDN: "789001001", CurrentOperatorID: yas, OriginOperatorID: orange,
 		LastPortingDate: daysAgo(240)}
 	require.Nil(t, CheckRestitutionEligibility(n, DelayBeforeRestitution))
 }

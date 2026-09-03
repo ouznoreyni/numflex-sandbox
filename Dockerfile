@@ -59,11 +59,45 @@ RUN printf 'numflex:x:10001:10001::/app:/sbin/nologin\n' > /out/passwd && \
 # internal/framework/config/env.go, which scripts/standalone-entrypoint.sh
 # reproduces identically rather than inventing a second convention.
 #
-# What it costs, and what must be accepted: ~456 MB instead of ~46, a shell
+# What it costs, and what must be accepted: ~44 MB instead of ~11, a shell
 # and a package manager in the image, a start as root for the duration of
 # initdb. In other words everything `runtime` refuses. It is a demonstration
 # convenience, not a hardening — not to be exposed on an open network.
-FROM postgres:16-alpine AS standalone
+# Two stages for one image, because deleting a file in a layer above the one
+# that carries it saves nothing: the bytes stay in the lower layer, and only
+# a whiteout is added. `pgtrim` strips, then `standalone` copies the result
+# as a single flat layer — that is what actually shrinks the image.
+FROM postgres:16-alpine AS pgtrim
+
+# PostgreSQL's JIT is 180 MB of LLVM for queries this sandbox never runs:
+# every statement here is a point read or one sequential scan, and the
+# planner only reaches for the JIT far above those costs. The bitcode and
+# the module that loads it go with it, and the entrypoint starts the server
+# with `-c jit=off` so nothing ever looks for them.
+#
+# The C headers, the static libraries and the man pages go too: no extension
+# is compiled in this image, and nothing reads a man page in a container.
+RUN rm -rf /usr/lib/libLLVM*.so* \
+           /usr/local/lib/postgresql/bitcode \
+           /usr/local/lib/postgresql/llvmjit*.so \
+           /usr/local/lib/*.a \
+           /usr/local/include \
+           /usr/local/share/doc \
+           /usr/local/share/man
+
+FROM scratch AS standalone
+
+# The whole trimmed filesystem, in one layer. COPY --from preserves
+# ownership and permissions, so the postgres user, /var/run/postgresql and
+# the data directory keep exactly what the official image gave them.
+COPY --from=pgtrim / /
+
+# What the postgres image declared and `scratch` does not inherit. PGDATA is
+# deliberately empty rather than absent — see the comment further down.
+ENV PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+    LANG=en_US.utf8 \
+    PGDATA=""
+STOPSIGNAL SIGTERM
 
 COPY --from=build /out/server /out/artp /usr/local/bin/
 COPY migrations /app/migrations
@@ -77,12 +111,11 @@ COPY scripts/standalone-entrypoint.sh /usr/local/bin/standalone-entrypoint.sh
 # answers 404 there, which is the platform's exact surface.
 COPY docs/swagger.html docs/openapi.yaml docs/openapi.json /app/docs/
 
-# The postgres image sets ENV PGDATA=/var/lib/postgresql/data. We empty it: an
-# environment value wins over the file, so a PGDATA written in a .env would
-# never be used. Empty counts as absent, as everywhere else in the sandbox's
-# configuration; the entrypoint falls back on the same default when nobody
-# decides.
-ENV PGDATA=""
+# PGDATA is set empty above, not left to the postgres image's
+# /var/lib/postgresql/data: an environment value wins over the file, so a
+# PGDATA written in a .env would never be used. Empty counts as absent, as
+# everywhere else in the sandbox's configuration; the entrypoint falls back
+# on the same default when nobody decides.
 
 # The server looks for migrations/ and .env by walking up from the current
 # directory: /app/.env is therefore the file read by default, on the entrypoint
