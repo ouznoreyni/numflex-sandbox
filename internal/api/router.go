@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/ouznoreyni/numflex-sandbox/internal/horodatage"
 )
 
 const prefixeGateway = "/api/gateway/v1"
@@ -34,6 +35,13 @@ func NewRouter(d *Deps) *gin.Engine {
 	// frontalier comme /api/gateway/v1extra ou un futur /api/gateway/v10 —
 	// un filtre Spring Security s'écrit "/api/gateway/v1/**", qui exige la
 	// barre oblique et ne matcherait jamais ces chemins-là non plus.
+	// Chaque requête tient le registre des horodatages qu'elle écrit, pour
+	// que le rendu les restitue à la nanoseconde (paquet horodatage).
+	r.Use(func(c *gin.Context) {
+		c.Set(horodatage.Cle, horodatage.Nouveau())
+		c.Next()
+	})
+
 	authentifieGateway := d.Authentifier()
 	r.Use(func(c *gin.Context) {
 		chemin := c.Request.URL.Path

@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/ouznoreyni/numflex-sandbox/internal/apperr"
+	"github.com/ouznoreyni/numflex-sandbox/internal/horodatage"
 	"github.com/ouznoreyni/numflex-sandbox/internal/oid"
 )
 
@@ -80,6 +81,7 @@ func (d *Deps) declarerIncident(segment string, figeSysteme bool) gin.HandlerFun
 
 		id := oid.New()
 		maintenant := time.Now()
+		horodatage.Marquer(c, maintenant)
 		_, err = d.DB.Pool.Exec(c,
 			`INSERT INTO incident
 			   (id, operateur_id, type_incident_id, fige_systeme, description, statut, date_ouverture)
@@ -279,7 +281,7 @@ func (d *Deps) incidentDTO(ctx context.Context, id string) (map[string]any, erro
 		"figeSysteme":    figeSysteme,
 		"description":    description,
 		"statut":         statut,
-		"dateOuverture":  d.R.Skew(dateOuverture),
+		"dateOuverture":  d.R.Horodatage(ctx, dateOuverture),
 		"operateur":      map[string]any{"id": operateurID, "nom": operateurNom},
 	}, nil
 }

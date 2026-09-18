@@ -8,6 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/ouznoreyni/numflex-sandbox/internal/apperr"
 	"github.com/ouznoreyni/numflex-sandbox/internal/domain"
+	"github.com/ouznoreyni/numflex-sandbox/internal/horodatage"
 	"github.com/ouznoreyni/numflex-sandbox/internal/oid"
 )
 
@@ -75,6 +76,7 @@ func (d *Deps) postDemandeParticulier(c *gin.Context) {
 
 	id := oid.New()
 	maintenant := time.Now()
+	horodatage.Marquer(c, maintenant)
 
 	tx, err2 := d.DB.Pool.Begin(c)
 	if err2 != nil {
@@ -221,8 +223,13 @@ func (d *Deps) postDemandeEntreprise(c *gin.Context) {
 		return
 	}
 
-	etats := make(map[string]domain.EtatNumero, len(req.NumerosFlotte))
-	for _, numero := range req.NumerosFlotte {
+	// La plateforme dédoublonne la flotte reçue : quatre entrées dont trois
+	// identiques donnent deux numéros dans numeros[] (capture du 2026-09-18).
+	// L'ordre de première apparition est conservé.
+	distincts := dedoublonner(req.NumerosFlotte)
+
+	etats := make(map[string]domain.EtatNumero, len(distincts))
+	for _, numero := range distincts {
 		etat, e := d.etatNumero(c, numero)
 		if e != nil {
 			d.R.Fail(c, e)
@@ -230,8 +237,8 @@ func (d *Deps) postDemandeEntreprise(c *gin.Context) {
 		}
 		etats[numero] = etat
 	}
-	for _, numero := range req.NumerosFlotte {
-		if etats[numero].OperateurActuelID != etats[req.NumerosFlotte[0]].OperateurActuelID {
+	for _, numero := range distincts {
+		if etats[numero].OperateurActuelID != etats[distincts[0]].OperateurActuelID {
 			d.R.Fail(c, apperr.FlotteOperateursMixtes())
 			return
 		}
@@ -239,7 +246,7 @@ func (d *Deps) postDemandeEntreprise(c *gin.Context) {
 
 	var retenus []string
 	exclus := []numeroExclu{}
-	for _, numero := range req.NumerosFlotte {
+	for _, numero := range distincts {
 		if e := domain.VerifierEligibilitePortage(etats[numero], req.OperateurSourceID,
 			req.OperateurDestinataireID, domain.DelaiEntrePortages); e != nil {
 			exclus = append(exclus, numeroExclu{Numero: numero, Raison: e.Message, CodeErreur: e.Code})
@@ -254,6 +261,7 @@ func (d *Deps) postDemandeEntreprise(c *gin.Context) {
 
 	id := oid.New()
 	maintenant := time.Now()
+	horodatage.Marquer(c, maintenant)
 
 	tx, err2 := d.DB.Pool.Begin(c)
 	if err2 != nil {
@@ -282,10 +290,10 @@ func (d *Deps) postDemandeEntreprise(c *gin.Context) {
 		return
 	}
 
-	for _, numero := range retenus {
+	for position, numero := range retenus {
 		if _, err := tx.Exec(c,
-			`INSERT INTO demande_numero (demande_id, numero, statut, routage_info)
-			 VALUES ($1,$2,'EN_COURS',$3)`, id, numero, prefixeSource); err != nil {
+			`INSERT INTO demande_numero (demande_id, numero, statut, routage_info, position)
+			 VALUES ($1,$2,'EN_COURS',$3,$4)`, id, numero, prefixeSource, position); err != nil {
 			d.R.Fail(c, apperr.ErreurInterne("enregistrement du numéro"))
 			return
 		}
@@ -322,22 +330,43 @@ func (d *Deps) postDemandeEntreprise(c *gin.Context) {
 		return
 	}
 
+	// Capture du 2026-09-18 : data.demande est la demande complète, au même
+	// format que les files et les autres réponses — pas un résumé.
+	dto, err3 := d.demandeDTO(c, id)
+	if err3 != nil {
+		d.R.Fail(c, apperr.ErreurInterne("relecture de la demande"))
+		return
+	}
+
+	// numerosPortesCount suit la liste reçue, doublons compris : la capture
+	// rend 4 pour quatre entrées dont trois identiques, alors que numeros[] n'en
+	// porte que deux. Reproduit tel quel — un client qui compare ce compte à la
+	// longueur de numeros[] doit voir l'écart ici comme en recette.
 	data := gin.H{
-		"demande": gin.H{
-			"id":            id,
-			"typeDemande":   "PORTAGE",
-			"typeAbonne":    "ENTREPRISE",
-			"statutDemande": "EN_COURS",
-			"etapeActuelle": "ACCEPTATION",
-		},
-		"numerosPortesCount": len(retenus),
+		"demande":            dto,
+		"numerosPortesCount": len(req.NumerosFlotte) - len(exclus),
 		"numerosExclusCount": len(exclus),
 		"numerosExclus":      exclus,
 	}
 	if len(exclus) > 0 {
 		data["avertissement"] = fmt.Sprintf("%d numéro(s) exclu(s) de la demande.", len(exclus))
 	}
-	d.R.OK(c, http.StatusCreated, "Demande flotte créée", data)
+	d.R.OK(c, http.StatusCreated, "Demande entreprise créée avec succès", data)
+}
+
+// dedoublonner rend les numéros distincts d'une flotte, dans l'ordre de leur
+// première apparition.
+func dedoublonner(numeros []string) []string {
+	vus := make(map[string]struct{}, len(numeros))
+	out := make([]string, 0, len(numeros))
+	for _, n := range numeros {
+		if _, deja := vus[n]; deja {
+			continue
+		}
+		vus[n] = struct{}{}
+		out = append(out, n)
+	}
+	return out
 }
 
 // validerEntreprise reproduit la validation de forme d'une demande flotte : les
@@ -424,6 +453,7 @@ func (d *Deps) postDemandeRestitution(c *gin.Context) {
 
 	id := oid.New()
 	maintenant := time.Now()
+	horodatage.Marquer(c, maintenant)
 
 	tx, err2 := d.DB.Pool.Begin(c)
 	if err2 != nil {

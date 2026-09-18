@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/ouznoreyni/numflex-sandbox/internal/horodatage"
 	"github.com/ouznoreyni/numflex-sandbox/internal/oid"
 	"github.com/ouznoreyni/numflex-sandbox/internal/store"
 )
@@ -37,6 +38,7 @@ func ValiderReverse(ctx context.Context, db *store.DB, reverseID string) error {
 
 	id := oid.New()
 	maintenant := time.Now()
+	horodatage.Marquer(ctx, maintenant)
 	if _, err := tx.Exec(ctx,
 		`INSERT INTO demande
 		   (id, numero, type_abonne, type_demande, statut_demande, etape_actuelle,

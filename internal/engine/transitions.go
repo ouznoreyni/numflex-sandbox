@@ -7,6 +7,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/ouznoreyni/numflex-sandbox/internal/domain"
+	"github.com/ouznoreyni/numflex-sandbox/internal/horodatage"
 )
 
 // AppliquerTransition solde l'étape courante et fait passer la demande à la
@@ -39,6 +40,9 @@ func (e *Engine) AppliquerTransition(ctx context.Context, demandeID, origine str
 	courante := domain.Etape(etape)
 	typeDemande := domain.TypeDemande(typeDem)
 	maintenant := time.Now()
+	// Dans la requête (fenêtre de convergence nulle), la dateFinalisation posée
+	// ici sort à la nanoseconde — « 2_yas_confirmer-a COMPLETION » le montre.
+	horodatage.Marquer(ctx, maintenant)
 
 	// Une étape soldée par une action porte TERMINE, y compris la COMPLETION :
 	// c'est ce que rendent les captures « in » et « 2_yas_confirmer-a

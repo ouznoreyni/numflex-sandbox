@@ -7,6 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/ouznoreyni/numflex-sandbox/internal/apperr"
+	"github.com/ouznoreyni/numflex-sandbox/internal/horodatage"
 	"github.com/ouznoreyni/numflex-sandbox/internal/oid"
 )
 
@@ -62,6 +63,7 @@ func (d *Deps) postReverseRequest(c *gin.Context) {
 
 	id := oid.New()
 	maintenant := time.Now()
+	horodatage.Marquer(c, maintenant)
 	if _, err := d.DB.Pool.Exec(c,
 		`INSERT INTO reverse_request (id, numero, operateur_id, statut, date_demande)
 		 VALUES ($1,$2,$3,'EN_ATTENTE',$4)`,
@@ -147,7 +149,7 @@ func (d *Deps) reverseRequestDTO(ctx context.Context, id string) (map[string]any
 		"id":          id,
 		"numero":      numero,
 		"statut":      statut,
-		"dateDemande": d.R.Skew(dateDemande),
+		"dateDemande": d.R.Horodatage(ctx, dateDemande),
 		"operateur":   map[string]any{"id": operateurID, "nom": operateurNom},
 	}, nil
 }

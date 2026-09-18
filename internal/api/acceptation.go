@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/ouznoreyni/numflex-sandbox/internal/apperr"
 	"github.com/ouznoreyni/numflex-sandbox/internal/domain"
+	"github.com/ouznoreyni/numflex-sandbox/internal/horodatage"
 )
 
 func (d *Deps) routesAcceptation(g *gin.RouterGroup) {
@@ -302,6 +303,7 @@ func (d *Deps) traiterAcceptationDemande(c *gin.Context, id, commentaire string)
 // demande, dans la même transaction que l'appelant a ouverte.
 func (d *Deps) rejeterDemande(c *gin.Context, tx pgx.Tx, id, operateurID, motifRejetID,
 	commentaire string, maintenant time.Time) error {
+	horodatage.Marquer(c, maintenant)
 
 	if _, err := tx.Exec(c,
 		`INSERT INTO etape_historique

@@ -385,7 +385,7 @@ const spec = {
      "Création de demande"
     ],
     "summary": "Créer une demande de portage — entreprise / flotte (§7.4)",
-    "description": "Un seul OTP, vérifié sur `numeroPorteurFlotte`, couvre tous les numéros.\n\n**Une flotte peut réussir en portant moins de numéros que demandé.** Les numéros\ninéligibles sont *exclus*, pas rejetés : ils ressortent dans `numerosExclus`, avec\n`numerosExclusCount` et `avertissement` (BR-006). Si **tous** sont exclus, la demande\nn'est pas créée et l'appel échoue en `AUCUN_NUMERO_ELIGIBLE`.\n",
+    "description": "Un seul OTP, vérifié sur `numeroPorteurFlotte`, couvre tous les numéros.\n\n**Une flotte peut réussir en portant moins de numéros que demandé.** Les numéros\ninéligibles sont *exclus*, pas rejetés : ils ressortent dans `numerosExclus`, avec\n`numerosExclusCount` et `avertissement` (BR-006). Si **tous** sont exclus, la demande\nn'est pas créée et l'appel échoue en `AUCUN_NUMERO_ELIGIBLE`.\n\nCapturé le 2026-09-18 contre `rec-numflex.artp.sn` : `data.demande` est la demande\ncomplète, au même format que les files (`numeros[]` à la place de `numero`, client à\nsept champs). `numerosFlotte` est dédoublonné — mais `numerosPortesCount` compte la\nliste **reçue**, doublons compris : quatre entrées dont trois identiques donnent deux\nnuméros dans `numeros` et `numerosPortesCount: 4`. Reproduit tel quel.\n",
     "requestBody": {
      "required": true,
      "content": {
@@ -440,14 +440,39 @@ const spec = {
         "example": {
          "success": true,
          "code": "SUCCESS",
-         "message": "Demande flotte créée",
+         "message": "Demande entreprise créée avec succès",
          "data": {
           "demande": {
            "id": "6a96de1e226392f964941953",
-           "typeDemande": "PORTAGE",
+           "numeros": [
+            "771000002",
+            "771000003"
+           ],
            "typeAbonne": "ENTREPRISE",
+           "typeDemande": "PORTAGE",
            "statutDemande": "EN_COURS",
-           "etapeActuelle": "ACCEPTATION"
+           "etapeActuelle": "ACCEPTATION",
+           "statutEtapeActuel": "EN_COURS",
+           "operateurSource": {
+            "id": "6a21745ce6c37b5b5b487ec1",
+            "nom": "ORANGE"
+           },
+           "operateurDestinataire": {
+            "id": "6a2174c3e6c37b5b5b487ec4",
+            "nom": "YAS"
+           },
+           "dateDemande": "2026-09-18T13:13:50.137Z",
+           "processus": "POSTPAID",
+           "routageInfo": "191",
+           "client": {
+            "nom": "Diallo",
+            "prenom": "Ousmane",
+            "dateNaissance": "1975-03-20",
+            "typePiece": "CNI",
+            "numeroPiece": "1234567890123",
+            "raisonSociale": "Entreprise SARL",
+            "numRC": "123456789"
+           }
           },
           "numerosPortesCount": 2,
           "numerosExclusCount": 1,
@@ -1388,7 +1413,19 @@ const spec = {
      },
      "numero": {
       "type": "string",
-      "example": "771000001"
+      "example": "771000001",
+      "description": "Le numéro porté. **Particulier et restitution seulement** — une flotte porte `numeros`."
+     },
+     "numeros": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "example": [
+       "771000002",
+       "771000003"
+      ],
+      "description": "**Flotte seulement** (`typeAbonne: ENTREPRISE`), à la place de `numero` : les numéros\nde la demande, dédoublonnés, dans l'ordre déclaré, sans ceux exclus à la création.\nCapturé le 2026-09-18.\n"
      },
      "typeAbonne": {
       "type": "string",
@@ -1441,13 +1478,14 @@ const spec = {
      },
      "dateDemande": {
       "type": "string",
-      "format": "date-time"
+      "format": "date-time",
+      "description": "**Précision variable, mesurée.** La réponse de la création rend l'horodatage à la\nnanoseconde (`2026-09-18T13:13:50.137967145Z`) : la plateforme sérialise l'objet\nqu'elle vient de construire. Toute relecture le rend à la milliseconde\n(`2026-09-18T13:13:50.137Z`), précision de son stockage. Fraction par groupes de\ntrois chiffres, comme `java.time.Instant`.\n"
      },
      "dateFinalisation": {
       "type": "string",
       "format": "date-time",
       "nullable": true,
-      "description": "Renseignée à la clôture — TERMINE, REJETE ou ANNULE."
+      "description": "Renseignée à la clôture — TERMINE, REJETE ou ANNULE. Même règle de précision que\n`dateDemande` : nanoseconde sur la réponse qui clôt la demande (le `traitement` de la\nCOMPLETION, `2026-09-18T13:26:56.488082853Z`), milliseconde ensuite (`in`, `out`).\n"
      },
      "processus": {
       "type": "string",
@@ -1458,12 +1496,15 @@ const spec = {
       "nullable": true
      },
      "client": {
-      "allOf": [
+      "oneOf": [
        {
         "$ref": "#/components/schemas/ClientRendu"
+       },
+       {
+        "$ref": "#/components/schemas/ClientEntrepriseRendu"
        }
       ],
-      "description": "Rendu sur la création, l'acceptation, le traitement, `a-traiter` et `in`.\n**Absent des trois endpoints de confirmation** — la file, son détail et le POST —\nasymétrie mesurée sur les captures du 2026-08-27.\n"
+      "description": "Rendu sur la création, l'acceptation, le traitement, `a-traiter` et `in`.\n**Absent des trois endpoints de confirmation** — la file, son détail et le POST —\nasymétrie mesurée sur les captures du 2026-08-27. Six champs pour un particulier,\nsept pour une flotte (`ClientEntrepriseRendu`).\n"
      },
      "routageInfo": {
       "type": "string",
@@ -1475,7 +1516,7 @@ const spec = {
    },
    "ClientRendu": {
     "type": "object",
-    "description": "L'identité de l'abonné telle que la plateforme la rend : exactement ces six champs,\nsans `raisonSociale` ni `numRC`, y compris sur une demande de flotte.\n",
+    "description": "L'identité d'un abonné **particulier** telle que la plateforme la rend : exactement ces\nsix champs (captures du 2026-08-27).\n",
     "properties": {
      "nom": {
       "type": "string",
@@ -1503,6 +1544,40 @@ const spec = {
      }
     }
    },
+   "ClientEntrepriseRendu": {
+    "type": "object",
+    "description": "Le client d'une **flotte** tel que la plateforme le rend : le représentant et\nl'entreprise, sans `lieuNaissance` — la création entreprise ne le reçoit pas\n(captures du 2026-09-18).\n",
+    "properties": {
+     "nom": {
+      "type": "string",
+      "example": "Diallo"
+     },
+     "prenom": {
+      "type": "string",
+      "example": "Ousmane"
+     },
+     "dateNaissance": {
+      "type": "string",
+      "example": "1975-03-20"
+     },
+     "typePiece": {
+      "type": "string",
+      "example": "CNI"
+     },
+     "numeroPiece": {
+      "type": "string",
+      "example": "1234567890123"
+     },
+     "raisonSociale": {
+      "type": "string",
+      "example": "Entreprise SARL"
+     },
+     "numRC": {
+      "type": "string",
+      "example": "123456789"
+     }
+    }
+   },
    "NumeroExclu": {
     "type": "object",
     "properties": {
@@ -1524,32 +1599,17 @@ const spec = {
     "type": "object",
     "properties": {
      "demande": {
-      "type": "object",
-      "properties": {
-       "id": {
-        "type": "string"
-       },
-       "typeDemande": {
-        "type": "string",
-        "example": "PORTAGE"
-       },
-       "typeAbonne": {
-        "type": "string",
-        "example": "ENTREPRISE"
-       },
-       "statutDemande": {
-        "type": "string",
-        "example": "EN_COURS"
-       },
-       "etapeActuelle": {
-        "type": "string",
-        "example": "ACCEPTATION"
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Demande"
        }
-      }
+      ],
+      "description": "La demande complète, au même format que les files — avec `numeros` et `client`."
      },
      "numerosPortesCount": {
       "type": "integer",
-      "example": 2
+      "example": 2,
+      "description": "Taille de `numerosFlotte` **telle que reçue**, doublons compris, moins les exclus —\npas la longueur de `demande.numeros`. Comportement mesuré, reproduit.\n"
      },
      "numerosExclusCount": {
       "type": "integer",

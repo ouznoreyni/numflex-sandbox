@@ -1,6 +1,7 @@
 package httpx
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,6 +13,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/ouznoreyni/numflex-sandbox/internal/apperr"
 	"github.com/ouznoreyni/numflex-sandbox/internal/config"
+	"github.com/ouznoreyni/numflex-sandbox/internal/horodatage"
 	"github.com/stretchr/testify/require"
 )
 
@@ -150,13 +152,28 @@ func TestOKSansDataRendDataNullEnContrat(t *testing.T) {
 	require.Contains(t, rec.Body.String(), `"data":null`)
 }
 
-func TestSkew(t *testing.T) {
+func TestHorodatageAppliqueLaDerive(t *testing.T) {
 	r := NewRenderer(config.FidelityReal, 540*time.Second)
-	base := time.Date(2026, 8, 21, 11, 0, 0, 0, time.UTC)
-	require.Equal(t, base.Add(9*time.Minute), r.Skew(base))
+	base := time.Date(2026, 8, 21, 11, 0, 0, 583_043_000, time.UTC)
+	ctx := context.Background()
+	require.Equal(t, "2026-08-21T11:09:00.583Z", horodatage.Format(time.Time(r.Horodatage(ctx, base))))
 
 	sans := NewRenderer(config.FidelityReal, 0)
-	require.Equal(t, base, sans.Skew(base))
+	require.Equal(t, "2026-08-21T11:00:00.583Z", horodatage.Format(time.Time(sans.Horodatage(ctx, base))))
+}
+
+// Un horodatage relu sort à la milliseconde ; celui que la requête vient
+// d'écrire sort tel quel, à la nanoseconde (captures 2026-08-27 et 2026-09-18).
+func TestHorodatageFraisGardeLaNanoseconde(t *testing.T) {
+	r := NewRenderer(config.FidelityReal, 0)
+	ecrit := time.Date(2026, 8, 27, 22, 39, 23, 583_043_149, time.UTC)
+	relu := ecrit.Truncate(time.Microsecond) // ce que Postgres rend
+
+	ctx := context.WithValue(context.Background(), horodatage.Cle, horodatage.Nouveau())
+	require.Equal(t, "2026-08-27T22:39:23.583Z", horodatage.Format(time.Time(r.Horodatage(ctx, relu))))
+
+	horodatage.Marquer(ctx, ecrit)
+	require.Equal(t, "2026-08-27T22:39:23.583043149Z", horodatage.Format(time.Time(r.Horodatage(ctx, relu))))
 }
 
 func TestRealValidationAvecChampsGardeConstraintViolation(t *testing.T) {

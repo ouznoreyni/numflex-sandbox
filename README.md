@@ -16,9 +16,15 @@ ARTP.
 - Un **registre national de numéros** en PostgreSQL : le portage change réellement l'opérateur
   détenteur, et les contrôles d'éligibilité s'appuient dessus.
 - Les **anomalies mesurées en recette**, reproduites à l'identique (voir plus bas).
-- Les **réponses capturées** contre la plateforme le 2026-08-27 (collection *Num Flex API*),
-  reproduites champ pour champ — sous-objet `client`, messages, `statutEtapeActuel`, précision des
-  horodatages. Basculer `baseUrl` du sandbox vers l'ARTP ne doit rien changer pour un client.
+- Les **réponses capturées** contre la plateforme — particulier le 2026-08-27 (collection
+  *Num Flex API*), entreprise le 2026-09-18 (`rec-numflex.artp.sn`) — reproduites champ pour
+  champ : sous-objet `client`, messages, `statutEtapeActuel`, et pour une flotte `numeros[]` à la
+  place de `numero`, un client à sept champs, `numerosPortesCount` compté sur la liste reçue
+  doublons compris. Les horodatages suivent la précision mesurée : nanoseconde sur la réponse
+  qui vient de les écrire (`dateDemande` à la création, `dateFinalisation` à la COMPLETION),
+  milliseconde à toute relecture, fraction par groupes de trois chiffres comme
+  `java.time.Instant`. Basculer `baseUrl` du sandbox vers l'ARTP ne doit rien changer pour un
+  client.
 
 ## Ce que ce n'est pas
 

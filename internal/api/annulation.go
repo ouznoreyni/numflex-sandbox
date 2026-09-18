@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/ouznoreyni/numflex-sandbox/internal/apperr"
 	"github.com/ouznoreyni/numflex-sandbox/internal/domain"
+	"github.com/ouznoreyni/numflex-sandbox/internal/horodatage"
 )
 
 func (d *Deps) routesAnnulation(g *gin.RouterGroup) {
@@ -43,6 +44,7 @@ func (d *Deps) postAnnuler(c *gin.Context) {
 	defer tx.Rollback(c)
 
 	maintenant := time.Now()
+	horodatage.Marquer(c, maintenant)
 	if _, err := tx.Exec(c,
 		`INSERT INTO etape_historique
 		   (demande_id, etape, statut, operateur_id, origine, commentaire, date_debut, date_fin)

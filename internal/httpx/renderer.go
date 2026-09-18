@@ -1,6 +1,7 @@
 package httpx
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"time"
@@ -8,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/ouznoreyni/numflex-sandbox/internal/apperr"
 	"github.com/ouznoreyni/numflex-sandbox/internal/config"
+	"github.com/ouznoreyni/numflex-sandbox/internal/horodatage"
 )
 
 type Renderer struct {
@@ -21,17 +23,18 @@ func NewRenderer(fid config.Fidelity, skew time.Duration) *Renderer {
 
 func (r *Renderer) Fidelity() config.Fidelity { return r.fid }
 
-// Skew applique la dérive d'horloge serveur mesurée en recette (ANO-015, ~9 min),
-// et tronque à la milliseconde. Elle ne touche que les horodatages rendus ; ceux
-// stockés en base restent justes et à leur pleine précision.
-//
-// La troncature vient des captures du 2026-08-27 : la plateforme relit ses
-// documents depuis Mongo, dont l'horodatage est milliseconde, et rend donc
-// « 2026-08-27T22:39:23.583Z ». Postgres stocke à la microseconde ; sans
-// troncature le sandbox rendrait un champ plus précis que l'original, et un
-// client qui compare des horodatages au format exact verrait la différence.
-func (r *Renderer) Skew(t time.Time) time.Time {
-	return t.Add(r.skew).Truncate(time.Millisecond)
+// Horodatage rend un horodatage relu en base tel que la plateforme le rend :
+// la dérive d'horloge serveur mesurée en recette (ANO-015, ~9 min) s'applique
+// au rendu seul, jamais en base ; la précision suit la règle du paquet
+// horodatage — nanoseconde si la requête en cours vient de l'écrire
+// (« 2026-08-27T22:39:23.583043149Z » sur la création), milliseconde sinon
+// (« 2026-08-27T22:39:23.583Z » à la relecture, précision de Mongo). La
+// fraction s'écrit par groupes de trois chiffres, comme java.time.Instant.
+func (r *Renderer) Horodatage(ctx context.Context, t time.Time) horodatage.Instant {
+	if frais, ok := horodatage.Frais(ctx, t); ok {
+		return horodatage.Instant(frais.Add(r.skew))
+	}
+	return horodatage.Instant(t.Add(r.skew).Truncate(time.Millisecond))
 }
 
 func (r *Renderer) OK(c *gin.Context, status int, message string, data any) {

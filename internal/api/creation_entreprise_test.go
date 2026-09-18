@@ -36,7 +36,7 @@ func TestFlotteNominale(t *testing.T) {
 		corpsEntreprise("771000001", []string{"771000001", "771000002", "771000003"}))
 
 	require.Equal(t, http.StatusCreated, rep.StatusCode, corps)
-	require.Equal(t, "Demande flotte créée", corps["message"])
+	require.Equal(t, "Demande entreprise créée avec succès", corps["message"])
 
 	data := corps["data"].(map[string]any)
 	demande := data["demande"].(map[string]any)
@@ -44,6 +44,69 @@ func TestFlotteNominale(t *testing.T) {
 	require.Equal(t, "ACCEPTATION", demande["etapeActuelle"])
 	require.Equal(t, float64(3), data["numerosPortesCount"])
 	require.Equal(t, float64(0), data["numerosExclusCount"])
+	require.Equal(t, []any{}, data["numerosExclus"])
+	require.NotContains(t, data, "avertissement")
+
+	// Capture du 2026-09-18 : data.demande est la demande complète, au même
+	// format que les files — pas un résumé à cinq champs.
+	require.Equal(t, []any{"771000001", "771000002", "771000003"}, demande["numeros"])
+	require.NotContains(t, demande, "numero")
+	require.Equal(t, "PORTAGE", demande["typeDemande"])
+	require.Equal(t, "EN_COURS", demande["statutDemande"])
+	require.Equal(t, "EN_COURS", demande["statutEtapeActuel"])
+	require.Equal(t, "POSTPAID", demande["processus"])
+	require.Equal(t, "191", demande["routageInfo"])
+	require.Contains(t, demande, "dateDemande")
+	require.Equal(t, "ORANGE", demande["operateurSource"].(map[string]any)["nom"])
+	require.Equal(t, "YAS", demande["operateurDestinataire"].(map[string]any)["nom"])
+	exigeClientEntreprise(t, demande)
+}
+
+// creerFlotte crée une demande entreprise YAS ← ORANGE et rend son id.
+func (h *harnais) creerFlotte(porteur string, flotte []string) string {
+	h.t.Helper()
+	jeton := h.jeton("yas", "yas2026")
+	h.appel(http.MethodPost, "/api/gateway/v1/otp/send", jeton, map[string]any{"numero": porteur})
+
+	rep, corps := h.appel(http.MethodPost, "/api/gateway/v1/demandes/entreprise", jeton,
+		corpsEntreprise(porteur, flotte))
+	require.Equal(h.t, http.StatusCreated, rep.StatusCode, corps)
+
+	demande := corps["data"].(map[string]any)["demande"].(map[string]any)
+	return demande["id"].(string)
+}
+
+// TestFlotteDoublonsDedoublonnes — capture du 2026-09-18 : numerosFlotte
+// portait quatre entrées dont trois fois le même numéro ; la plateforme a rendu
+// deux numéros distincts dans numeros mais numerosPortesCount: 4. Le compte suit
+// la liste reçue, pas la flotte retenue — reproduit, pas corrigé.
+func TestFlotteDoublonsDedoublonnes(t *testing.T) {
+	h := nouveauHarnais(t)
+	jeton := h.jeton("yas", "yas2026")
+	h.appel(http.MethodPost, "/api/gateway/v1/otp/send", jeton,
+		map[string]any{"numero": "771000001"})
+
+	rep, corps := h.appel(http.MethodPost, "/api/gateway/v1/demandes/entreprise", jeton,
+		corpsEntreprise("771000001", []string{"771000002", "771000003", "771000003", "771000003"}))
+
+	require.Equal(t, http.StatusCreated, rep.StatusCode, corps)
+	data := corps["data"].(map[string]any)
+	demande := data["demande"].(map[string]any)
+	require.Equal(t, []any{"771000002", "771000003"}, demande["numeros"])
+	require.Equal(t, float64(4), data["numerosPortesCount"])
+	require.Equal(t, float64(0), data["numerosExclusCount"])
+}
+
+// Les numéros sortent dans l'ordre où la flotte les a déclarés, pas dans
+// l'ordre lexicographique.
+func TestFlotteNumerosDansLOrdreDeclare(t *testing.T) {
+	h := nouveauHarnais(t)
+	id := h.creerFlotte("771000001", []string{"771000003", "771000001", "771000002"})
+
+	_, corps := h.appel(http.MethodGet, "/api/gateway/v1/demandes/a-accepter/"+id,
+		h.jeton("orange", "orange2026"), nil)
+	demande := corps["data"].(map[string]any)
+	require.Equal(t, []any{"771000003", "771000001", "771000002"}, demande["numeros"])
 }
 
 func TestFlotteExclusionPartielle(t *testing.T) {
@@ -63,6 +126,10 @@ func TestFlotteExclusionPartielle(t *testing.T) {
 	require.Equal(t, float64(2), data["numerosPortesCount"])
 	require.Equal(t, float64(1), data["numerosExclusCount"])
 	require.Equal(t, "1 numéro(s) exclu(s) de la demande.", data["avertissement"])
+
+	// Un numéro exclu ne fait pas partie de la flotte rendue.
+	demande := data["demande"].(map[string]any)
+	require.Equal(t, []any{"771000001", "771000002"}, demande["numeros"])
 
 	exclus := data["numerosExclus"].([]any)
 	require.Len(t, exclus, 1)
