@@ -32,7 +32,7 @@ func ValidateReverse(ctx context.Context, uow port.UnitOfWork, ids port.IDGenera
 		}
 
 		id := ids.NewID()
-		now := clock.Now()
+		now := port.NowWritten(ctx, clock)
 		if err := repos.Requests.CreateAtConfirmation(ctx, port.CreateRequestInput{
 			ID:                  id,
 			MSISDN:              msisdn,

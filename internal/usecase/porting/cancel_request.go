@@ -60,7 +60,7 @@ func (i *CancelRequestInteractor) Execute(
 	}
 
 	err = i.uow.Do(ctx, func(repos port.Repositories) error {
-		err := repos.Requests.Cancel(ctx, dm.ID, caller.OperatorID, dm.CurrentStep, i.clock.Now())
+		err := repos.Requests.Cancel(ctx, dm.ID, caller.OperatorID, dm.CurrentStep, port.NowWritten(ctx, i.clock))
 		if errors.Is(err, port.ErrCancelStepChanged) {
 			return entity.InvalidStep(
 				"Cette demande ne peut plus être annulée : son étape a changé depuis l'autorisation.")

@@ -57,9 +57,9 @@ func (g *RequestGateway) Create(ctx context.Context, in port.CreateRequestInput)
 
 func (g *RequestGateway) AddNumber(ctx context.Context, in port.RequestNumberInput) error {
 	_, err := g.db.Exec(ctx,
-		`INSERT INTO demande_numero (demande_id, numero, statut, routage_info)
-		 VALUES ($1,$2,'EN_COURS',$3)`,
-		in.RequestID, in.MSISDN, in.RoutingInfo)
+		`INSERT INTO demande_numero (demande_id, numero, statut, routage_info, position)
+		 VALUES ($1,$2,'EN_COURS',$3,$4)`,
+		in.RequestID, in.MSISDN, in.RoutingInfo, in.Position)
 	return err
 }
 
@@ -97,6 +97,7 @@ func (g *RequestGateway) Get(ctx context.Context, id string) (port.RequestView, 
 		process, routingInfo                                             sql.NullString
 		completionDate                                                   sql.NullTime
 		cliLastName, cliFirstName, cliBirthPlace, cliIDType, cliIDNumber sql.NullString
+		cliCompanyName, cliRCNumber                                      sql.NullString
 		cliBirthDate                                                     sql.NullTime
 	)
 
@@ -106,7 +107,7 @@ func (g *RequestGateway) Get(ctx context.Context, id string) (port.RequestView, 
 		       src.id, src.nom, dst.id, dst.nom,
 		       dem.date_demande, dem.processus, dem.routage_info, dem.date_finalisation,
 		       cli.nom, cli.prenom, cli.date_naissance, cli.lieu_naissance,
-		       cli.type_piece, cli.numero_piece
+		       cli.type_piece, cli.numero_piece, cli.raison_sociale, cli.num_rc
 		  FROM demande dem
 		  JOIN operateur src ON src.id = dem.operateur_source_id
 		  JOIN operateur dst ON dst.id = dem.operateur_destinataire_id
@@ -116,7 +117,8 @@ func (g *RequestGateway) Get(ctx context.Context, id string) (port.RequestView, 
 		&currentStep, &currentStepStatus,
 		&srcID, &srcName, &dstID, &dstName,
 		&requestDate, &process, &routingInfo, &completionDate,
-		&cliLastName, &cliFirstName, &cliBirthDate, &cliBirthPlace, &cliIDType, &cliIDNumber)
+		&cliLastName, &cliFirstName, &cliBirthDate, &cliBirthPlace, &cliIDType, &cliIDNumber,
+		&cliCompanyName, &cliRCNumber)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return port.RequestView{}, false, nil
 	}
@@ -144,13 +146,21 @@ func (g *RequestGateway) Get(ctx context.Context, id string) (port.RequestView, 
 		v := completionDate.Time
 		view.CompletionDate = &v
 	}
+	if subscriberType == string(entity.SubscriberEnterprise) {
+		numbers, err := g.fleetNumbers(ctx, id)
+		if err != nil {
+			return port.RequestView{}, false, err
+		}
+		view.Numbers = numbers
+	}
 	// The client renders in every capture — creation, acceptance,
-	// processing, a-traiter, in — with exactly these six fields. Its
-	// presence is decided on these three columns, as demandeDTO used to.
+	// processing, a-traiter, in. Its presence is decided on these three
+	// columns, as demandeDTO used to.
 	if cliLastName.Valid || cliFirstName.Valid || cliIDNumber.Valid {
 		client := &port.ClientView{
 			LastName: cliLastName.String, FirstName: cliFirstName.String,
 			BirthPlace: cliBirthPlace.String, IDType: cliIDType.String, IDNumber: cliIDNumber.String,
+			CompanyName: cliCompanyName.String, RCNumber: cliRCNumber.String,
 		}
 		if cliBirthDate.Valid {
 			t := cliBirthDate.Time
@@ -159,6 +169,31 @@ func (g *RequestGateway) Get(ctx context.Context, id string) (port.RequestView, 
 		view.Client = client
 	}
 	return view, true, nil
+}
+
+// fleetNumbers lists the members of a fleet that were not excluded at
+// creation, in the order the request declared them. A number rejected at
+// acceptance stays listed: it is still part of the request, even though it
+// will not be ported.
+func (g *RequestGateway) fleetNumbers(ctx context.Context, id string) ([]string, error) {
+	rows, err := g.db.Query(ctx,
+		`SELECT numero FROM demande_numero
+		  WHERE demande_id = $1 AND NOT exclu
+		  ORDER BY position, numero`, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	numbers := []string{}
+	for rows.Next() {
+		var n string
+		if err := rows.Scan(&n); err != nil {
+			return nil, err
+		}
+		numbers = append(numbers, n)
+	}
+	return numbers, rows.Err()
 }
 
 // ByID reads a request's authorization-relevant shape — moved verbatim from

@@ -55,7 +55,7 @@ func NewRouter(d *Deps) *gin.Engine {
 	// out without a token. Every origin is allowed, with nothing to
 	// configure, and no route of its own is registered — see
 	// middleware.AllowCORS.
-	r := NewEngine(d.Cfg, middleware.AllowCORS())
+	r := NewEngine(d.Cfg, middleware.AllowCORS(), middleware.TrackWrittenTimestamps())
 
 	// Task 10: both /api/authenticate routes are a controller delegating to
 	// AuthenticateInteractor and DescribeCallerInteractor, and authentication

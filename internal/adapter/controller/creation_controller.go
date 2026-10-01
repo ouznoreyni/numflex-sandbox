@@ -96,7 +96,7 @@ func (ctl *CreationController) Individual(c *gin.Context) {
 	}
 
 	render(c, ctl.pres.Success(http.StatusCreated, "Demande particulier créée avec succès",
-		requestViewDTO(ctl.clock, view)))
+		requestViewDTO(c.Request.Context(), ctl.clock, view)))
 }
 
 // validateIndividual reproduces the platform's validation, including its
@@ -187,14 +187,10 @@ func (ctl *CreationController) Enterprise(c *gin.Context) {
 	for _, ex := range out.Excluded {
 		excluded = append(excluded, excludedNumberDTO{MSISDN: ex.MSISDN, Reason: ex.Reason, ErrorCode: ex.ErrorCode})
 	}
+	// 2026-09-18 capture: data.demande is the full request, in the same
+	// shape as the queues and every other response — not a summary.
 	data := gin.H{
-		"demande": gin.H{
-			"id":            out.ID,
-			"typeDemande":   "PORTAGE",
-			"typeAbonne":    "ENTREPRISE",
-			"statutDemande": "EN_COURS",
-			"etapeActuelle": "ACCEPTATION",
-		},
+		"demande":            requestViewDTO(c.Request.Context(), ctl.clock, out.View),
 		"numerosPortesCount": out.RetainedCount,
 		"numerosExclusCount": len(out.Excluded),
 		"numerosExclus":      excluded,
@@ -202,7 +198,7 @@ func (ctl *CreationController) Enterprise(c *gin.Context) {
 	if len(excluded) > 0 {
 		data["avertissement"] = fmt.Sprintf("%d numéro(s) exclu(s) de la demande.", len(excluded))
 	}
-	render(c, ctl.pres.Success(http.StatusCreated, "Demande flotte créée", data))
+	render(c, ctl.pres.Success(http.StatusCreated, "Demande entreprise créée avec succès", data))
 }
 
 // validateEnterprise reproduces the shape validation of a fleet request: the
@@ -274,5 +270,5 @@ func (ctl *CreationController) Restitution(c *gin.Context) {
 	}
 
 	render(c, ctl.pres.Success(http.StatusCreated, "Demande de restitution créée avec succès",
-		requestViewDTO(ctl.clock, view)))
+		requestViewDTO(c.Request.Context(), ctl.clock, view)))
 }

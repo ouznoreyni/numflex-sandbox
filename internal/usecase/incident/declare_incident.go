@@ -71,7 +71,7 @@ func (i *DeclareIncidentInteractor) Execute(
 	}
 
 	id := i.ids.NewID()
-	now := i.clock.Now()
+	now := port.NowWritten(ctx, i.clock)
 	err = i.uow.Do(ctx, func(repos port.Repositories) error {
 		err := repos.Incidents.Create(ctx, port.IncidentCreateInput{
 			ID: id, OperatorID: caller.OperatorID, TypeID: typeID,

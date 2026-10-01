@@ -82,11 +82,15 @@ type CreateRequestInput struct {
 
 // RequestNumberInput carries one retained number of a request — the sole
 // number of a particulier/restitution request, or one member of a fleet.
-// RoutingInfo is nil for a restitution.
+// RoutingInfo is nil for a restitution. Position is the number's rank in the
+// fleet as declared: the platform renders numeros[] in the order it received
+// them (2026-09-18 capture), which the (demande_id, numero) key alone does
+// not keep. Always 0 outside a fleet.
 type RequestNumberInput struct {
 	RequestID   string
 	MSISDN      string
 	RoutingInfo *string
+	Position    int
 }
 
 // ExcludedNumberInput carries one fleet number rejected at creation time —
@@ -114,19 +118,23 @@ type ClientInput struct {
 }
 
 // ClientView is the identity attached to a request, as read back right after
-// its creation.
+// its creation. CompanyName and RCNumber are empty outside an ENTREPRISE
+// request.
 type ClientView struct {
 	LastName, FirstName, BirthPlace, IDType, IDNumber string
+	CompanyName, RCNumber                             string
 	BirthDate                                         *time.Time
 }
 
-// RequestView is a request as read back right after its creation, in the
-// shape the particulier and restitution endpoints render (guide §7.3). The
-// fleet endpoint needs no read-back: its response is built entirely from
-// what the interactor already knows.
+// RequestView is a request as read back, in the shape every endpoint that
+// renders a request shares (guide §7.3). Numbers is set for a fleet only:
+// the members not excluded at creation, in declared order — the 2026-09-18
+// captures render them as numeros[] in place of numero. MSISDN stays the
+// fleet's carrier number, the one that received the OTP.
 type RequestView struct {
 	ID                                         string
 	MSISDN                                     string
+	Numbers                                    []string
 	SubscriberType, RequestType, Status        string
 	CurrentStep, CurrentStepStatus             string
 	SourceOperatorID, SourceOperatorName       string

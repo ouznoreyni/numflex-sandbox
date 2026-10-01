@@ -353,6 +353,19 @@ le vérifie à chaque build.
 | Incidents (§7.12) | `/incidents/gateway`, `/incidents/interne`, leurs `/:id/resoudre` et `/mes-incidents` |
 | **Hors contrat** | `/api/sandbox/v1/numeros/tranches`, `/api/sandbox/v1/demandes` |
 
+### Forme des réponses capturées
+
+Les réponses reproduisent champ pour champ celles capturées contre la plateforme — particulier le
+2026-08-27 (collection *Num Flex API*), entreprise le 2026-09-18 (`rec-numflex.artp.sn`).
+
+- **Une flotte** porte `numeros[]` à la place de `numero` sur toutes les réponses : les numéros
+  dédoublonnés, dans l'ordre déclaré, sans ceux exclus à la création. Son `client` a sept champs —
+  `raisonSociale` et `numRC`, sans `lieuNaissance`. `POST /demandes/entreprise` rend la demande
+  complète dans `data.demande`, et `numerosPortesCount` compte la liste **reçue**, doublons compris.
+- **Les horodatages** sortent à la nanoseconde sur la réponse qui vient de les écrire (`dateDemande`
+  à la création, `dateFinalisation` à la COMPLETION), à la milliseconde à toute relecture, la
+  fraction par groupes de trois chiffres comme `java.time.Instant` (`.580Z`, jamais `.58Z`).
+
 ### Comptes
 
 | username | mot de passe | opérateur | rôles |

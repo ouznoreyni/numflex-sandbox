@@ -32,11 +32,16 @@ type ExcludedNumber struct {
 	ErrorCode string
 }
 
-// CreateEnterpriseRequestOutput needs no read-back: unlike the particulier
-// and restitution endpoints, the fleet response is built entirely from what
-// the interactor already knows, exactly as the legacy handler did.
+// CreateEnterpriseRequestOutput carries the request read back after commit —
+// the 2026-09-18 capture renders data.demande in full, in the same shape as
+// the queues, not a five-field summary — plus the fleet's counts.
+//
+// RetainedCount follows the list received, duplicates included: the capture
+// answers 4 for four entries of which three are identical, while numeros[]
+// carries only two. Reproduced as is — a client comparing this count with
+// the length of numeros[] must see the gap here as it does on the platform.
 type CreateEnterpriseRequestOutput struct {
-	ID            string
+	View          port.RequestView
 	RetainedCount int
 	Excluded      []ExcludedNumber
 }
@@ -48,11 +53,12 @@ type CreateEnterpriseRequestBoundary interface {
 
 // CreateEnterpriseRequestInteractor implements CreateEnterpriseRequestBoundary.
 type CreateEnterpriseRequestInteractor struct {
-	verify  otp.VerifyOTPBoundary
-	numbers port.NumberGateway
-	uow     port.UnitOfWork
-	ids     port.IDGenerator
-	clock   port.Clock
+	verify   otp.VerifyOTPBoundary
+	numbers  port.NumberGateway
+	uow      port.UnitOfWork
+	requests port.RequestGateway // pool-bound: only Get, after commit
+	ids      port.IDGenerator
+	clock    port.Clock
 }
 
 // NewCreateEnterpriseRequest wires an interactor against its dependencies.
@@ -60,11 +66,12 @@ func NewCreateEnterpriseRequest(
 	verify otp.VerifyOTPBoundary,
 	numbers port.NumberGateway,
 	uow port.UnitOfWork,
+	requests port.RequestGateway,
 	ids port.IDGenerator,
 	clock port.Clock,
 ) *CreateEnterpriseRequestInteractor {
 	return &CreateEnterpriseRequestInteractor{
-		verify: verify, numbers: numbers, uow: uow, ids: ids, clock: clock,
+		verify: verify, numbers: numbers, uow: uow, requests: requests, ids: ids, clock: clock,
 	}
 }
 
@@ -94,8 +101,14 @@ func (i *CreateEnterpriseRequestInteractor) Execute(
 		return CreateEnterpriseRequestOutput{}, f
 	}
 
-	states := make(map[string]entity.NumberState, len(in.FleetNumbers))
-	for _, number := range in.FleetNumbers {
+	// The platform deduplicates the fleet it receives: four entries of which
+	// three are identical give two numbers in numeros[] (2026-09-18 capture).
+	// Order of first appearance is kept. Without this, a duplicate would
+	// break demande_numero's primary key.
+	distinct := deduplicate(in.FleetNumbers)
+
+	states := make(map[string]entity.NumberState, len(distinct))
+	for _, number := range distinct {
 		state, found, err := i.numbers.State(ctx, number)
 		if err != nil {
 			return CreateEnterpriseRequestOutput{}, entity.InternalError("reading the number")
@@ -105,15 +118,15 @@ func (i *CreateEnterpriseRequestInteractor) Execute(
 		}
 		states[number] = state
 	}
-	for _, number := range in.FleetNumbers {
-		if states[number].CurrentOperatorID != states[in.FleetNumbers[0]].CurrentOperatorID {
+	for _, number := range distinct {
+		if states[number].CurrentOperatorID != states[distinct[0]].CurrentOperatorID {
 			return CreateEnterpriseRequestOutput{}, entity.FleetMixedOperators()
 		}
 	}
 
 	var retained []string
 	excluded := []ExcludedNumber{}
-	for _, number := range in.FleetNumbers {
+	for _, number := range distinct {
 		if f := entity.CheckPortingEligibility(states[number], in.SourceOperatorID,
 			in.RecipientOperatorID, entity.DelayBetweenPortings); f != nil {
 			excluded = append(excluded, ExcludedNumber{MSISDN: number, Reason: f.Message, ErrorCode: f.Code})
@@ -126,7 +139,7 @@ func (i *CreateEnterpriseRequestInteractor) Execute(
 	}
 
 	id := i.ids.NewID()
-	now := i.clock.Now()
+	now := port.NowWritten(ctx, i.clock)
 	process := in.Process
 	var companyName, rcNumber *string
 	if in.Client.CompanyName != "" {
@@ -153,9 +166,9 @@ func (i *CreateEnterpriseRequestInteractor) Execute(
 		}); err != nil {
 			return entity.InternalError("creating the request")
 		}
-		for _, number := range retained {
+		for position, number := range retained {
 			if err := repos.Requests.AddNumber(ctx, port.RequestNumberInput{
-				RequestID: id, MSISDN: number, RoutingInfo: &prefix,
+				RequestID: id, MSISDN: number, RoutingInfo: &prefix, Position: position,
 			}); err != nil {
 				return entity.InternalError("saving the number")
 			}
@@ -184,5 +197,28 @@ func (i *CreateEnterpriseRequestInteractor) Execute(
 		return CreateEnterpriseRequestOutput{}, entity.FaultFrom(err)
 	}
 
-	return CreateEnterpriseRequestOutput{ID: id, RetainedCount: len(retained), Excluded: excluded}, nil
+	view, found, err := i.requests.Get(ctx, id)
+	if err != nil || !found {
+		return CreateEnterpriseRequestOutput{}, entity.InternalError("re-reading the request")
+	}
+	return CreateEnterpriseRequestOutput{
+		View:          view,
+		RetainedCount: len(in.FleetNumbers) - len(excluded),
+		Excluded:      excluded,
+	}, nil
+}
+
+// deduplicate returns a fleet's distinct numbers, in order of first
+// appearance.
+func deduplicate(numbers []string) []string {
+	seen := make(map[string]struct{}, len(numbers))
+	out := make([]string, 0, len(numbers))
+	for _, n := range numbers {
+		if _, dup := seen[n]; dup {
+			continue
+		}
+		seen[n] = struct{}{}
+		out = append(out, n)
+	}
+	return out
 }

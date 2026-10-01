@@ -205,6 +205,38 @@ func individualBody(number string) map[string]any {
 	}
 }
 
+// enterpriseBody builds a nominal fleet request body ORANGE → YAS.
+func enterpriseBody(carrier string, fleet []string) map[string]any {
+	return map[string]any{
+		"numeroPorteurFlotte":     carrier,
+		"otpCode":                 "123456",
+		"operateurSourceId":       seed.OperatorOrangeID,
+		"operateurDestinataireId": seed.OperatorYASID,
+		"typePortabilite":         "POSTPAID",
+		"numerosFlotte":           fleet,
+		"client": map[string]any{
+			"raisonSociale": "ABC SARL", "numRC": "SN-DKR-2026-A-0001",
+			"prenom": "Ali", "nom": "DIALLO", "dateNaissance": "1975-03-20",
+			"typePiece": "CNI", "numeroPiece": "1234567890123",
+		},
+	}
+}
+
+// createFleet sends the OTP then creates a fleet request ORANGE → YAS through
+// the live router, and returns its id.
+func (h *harness) createFleet(carrier string, fleet []string) string {
+	h.t.Helper()
+	tok := h.token("yas", "yas2026")
+	h.call(http.MethodPost, "/api/gateway/v1/otp/send", tok, map[string]any{"numero": carrier})
+
+	resp, body := h.call(http.MethodPost, "/api/gateway/v1/demandes/entreprise",
+		tok, enterpriseBody(carrier, fleet))
+	require.Equal(h.t, http.StatusCreated, resp.StatusCode, body)
+
+	request := body["data"].(map[string]any)["demande"].(map[string]any)
+	return request["id"].(string)
+}
+
 // advanceTo walks a request forward to the wanted step by writing to the
 // database directly — the processing endpoints are tested elsewhere. Moved
 // from internal/api/testutil_test.go (Task 18, alongside

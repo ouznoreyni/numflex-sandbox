@@ -351,6 +351,21 @@ be exactly the real platform's, and a route-table test checks it on every build.
 | Incidents (§7.12) | `/incidents/gateway`, `/incidents/interne`, their `/:id/resoudre` and `/mes-incidents` |
 | **Off contract** | `/api/sandbox/v1/numeros/tranches`, `/api/sandbox/v1/demandes` |
 
+### Shape of the captured responses
+
+Responses reproduce, field for field, those captured against the platform — individual on
+2026-08-27 (*Num Flex API* collection), enterprise on 2026-09-18 (`rec-numflex.artp.sn`).
+
+- **A fleet** carries `numeros[]` in place of `numero` on every response: the numbers deduplicated,
+  in declared order, without those excluded at creation. Its `client` has seven fields —
+  `raisonSociale` and `numRC`, no `lieuNaissance`. `POST /demandes/entreprise` returns the full
+  request in `data.demande`, and `numerosPortesCount` counts the list **received**, duplicates
+  included.
+- **Timestamps** come out to the nanosecond on the response that has just written them
+  (`dateDemande` on creation, `dateFinalisation` on COMPLETION), to the millisecond on any
+  read-back, the fraction in groups of three digits as `java.time.Instant` writes it (`.580Z`,
+  never `.58Z`).
+
 ### Accounts
 
 | username | password | operator | roles |

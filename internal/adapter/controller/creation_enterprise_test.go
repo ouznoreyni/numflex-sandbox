@@ -38,7 +38,7 @@ func TestFleetNominal(t *testing.T) {
 		enterpriseBody("771000001", []string{"771000001", "771000002", "771000003"}))
 
 	require.Equal(t, http.StatusCreated, resp.StatusCode, body)
-	require.Equal(t, "Demande flotte créée", body["message"])
+	require.Equal(t, "Demande entreprise créée avec succès", body["message"])
 
 	data := body["data"].(map[string]any)
 	request := data["demande"].(map[string]any)
