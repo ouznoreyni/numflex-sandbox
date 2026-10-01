@@ -54,7 +54,7 @@ func NewAcceptanceController(
 // duplicates into — under the exact message the contract carries.
 func (ctl *AcceptanceController) respond(c *gin.Context, view port.RequestView) {
 	render(c, ctl.pres.Success(http.StatusOK, "Décision d'acceptation enregistrée",
-		requestViewDTO(ctl.clock, view)))
+		requestViewDTO(c.Request.Context(), ctl.clock, view)))
 }
 
 // --- Individual / restitution ----------------------------------------------

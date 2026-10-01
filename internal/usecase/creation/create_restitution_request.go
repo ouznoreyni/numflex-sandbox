@@ -71,7 +71,7 @@ func (i *CreateRestitutionRequestInteractor) Execute(
 	}
 
 	id := i.ids.NewID()
-	now := i.clock.Now()
+	now := port.NowWritten(ctx, i.clock)
 
 	err = i.uow.Do(ctx, func(repos port.Repositories) error {
 		// operateur_source_id = current holder (it gives back the number);

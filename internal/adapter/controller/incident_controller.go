@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -41,7 +42,7 @@ func NewIncidentController(
 // incidentViewDTO serializes an incident per guide §7.12: {id,
 // typeIncidentId, type, figeSysteme, description, statut, dateOuverture,
 // operateur{id,name}}.
-func incidentViewDTO(clk port.Clock, v port.IncidentView) map[string]any {
+func incidentViewDTO(ctx context.Context, clk port.Clock, v port.IncidentView) map[string]any {
 	return map[string]any{
 		"id":             v.ID,
 		"typeIncidentId": v.TypeID,
@@ -49,7 +50,7 @@ func incidentViewDTO(clk port.Clock, v port.IncidentView) map[string]any {
 		"figeSysteme":    v.SystemLocked,
 		"description":    v.Description,
 		"statut":         v.Status,
-		"dateOuverture":  clk.Rendered(v.OpenedAt),
+		"dateOuverture":  renderedInstant(ctx, clk, v.OpenedAt),
 		"operateur":      map[string]any{"id": v.OperatorID, "nom": v.OperatorName},
 	}
 }
@@ -77,7 +78,7 @@ func (ctl *IncidentController) declareIncident(c *gin.Context, systemLocked bool
 		return
 	}
 	render(c, ctl.pres.Success(http.StatusCreated, "Incident déclaré avec succès",
-		incidentViewDTO(ctl.clock, view)))
+		incidentViewDTO(c.Request.Context(), ctl.clock, view)))
 }
 
 // DeclareGateway handles POST /incidents/gateway.
@@ -101,7 +102,7 @@ func (ctl *IncidentController) resolveIncident(c *gin.Context, systemLocked bool
 		return
 	}
 	render(c, ctl.pres.Success(http.StatusOK, "Incident résolu avec succès",
-		incidentViewDTO(ctl.clock, view)))
+		incidentViewDTO(c.Request.Context(), ctl.clock, view)))
 }
 
 // ResolveGateway handles POST /incidents/gateway/:id/resoudre.
@@ -123,7 +124,7 @@ func (ctl *IncidentController) own(c *gin.Context, systemLocked bool) {
 
 	out := make([]map[string]any, 0, len(views))
 	for _, v := range views {
-		out = append(out, incidentViewDTO(ctl.clock, v))
+		out = append(out, incidentViewDTO(c.Request.Context(), ctl.clock, v))
 	}
 	render(c, ctl.pres.Success(http.StatusOK, "Incidents récupérés avec succès", out))
 }

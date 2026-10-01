@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -35,12 +36,12 @@ func NewReverseController(
 
 // reverseViewDTO serializes a reverse request per guide §6:
 // {id, numero, statut, dateDemande, operateur{id,name}}.
-func reverseViewDTO(clk port.Clock, v port.ReverseView) map[string]any {
+func reverseViewDTO(ctx context.Context, clk port.Clock, v port.ReverseView) map[string]any {
 	return map[string]any{
 		"id":          v.ID,
 		"numero":      v.MSISDN,
 		"statut":      v.Status,
-		"dateDemande": clk.Rendered(v.RequestDate),
+		"dateDemande": renderedInstant(ctx, clk, v.RequestDate),
 		"operateur":   map[string]any{"id": v.OperatorID, "nom": v.OperatorName},
 	}
 }
@@ -72,7 +73,7 @@ func (ctl *ReverseController) Submit(c *gin.Context) {
 		return
 	}
 	render(c, ctl.pres.Success(http.StatusCreated, "Demande de reverse soumise avec succès",
-		reverseViewDTO(ctl.clock, view)))
+		reverseViewDTO(c.Request.Context(), ctl.clock, view)))
 }
 
 // Own handles GET /reverse-requests/mes-demandes.
@@ -89,7 +90,7 @@ func (ctl *ReverseController) Own(c *gin.Context) {
 
 	out := make([]map[string]any, 0, len(views))
 	for _, v := range views {
-		out = append(out, reverseViewDTO(ctl.clock, v))
+		out = append(out, reverseViewDTO(c.Request.Context(), ctl.clock, v))
 	}
 	render(c, ctl.pres.Success(http.StatusOK, "Demandes de reverse récupérées avec succès", out))
 }

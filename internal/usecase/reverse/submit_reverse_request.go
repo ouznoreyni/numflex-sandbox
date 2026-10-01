@@ -65,7 +65,7 @@ func (i *SubmitReverseRequestInteractor) Execute(
 	}
 
 	id := i.ids.NewID()
-	now := i.clock.Now()
+	now := port.NowWritten(ctx, i.clock)
 	err = i.uow.Do(ctx, func(repos port.Repositories) error {
 		if err := repos.Reverse.Create(ctx, port.ReverseCreateInput{
 			ID: id, MSISDN: in.MSISDN, OperatorID: caller.OperatorID, RequestDate: now,

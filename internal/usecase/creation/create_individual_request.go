@@ -82,7 +82,7 @@ func (i *CreateIndividualRequestInteractor) Execute(
 	}
 
 	id := i.ids.NewID()
-	now := i.clock.Now()
+	now := port.NowWritten(ctx, i.clock)
 	process := in.Process
 
 	err = i.uow.Do(ctx, func(repos port.Repositories) error {

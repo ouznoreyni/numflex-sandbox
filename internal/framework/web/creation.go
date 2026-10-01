@@ -27,7 +27,7 @@ func (d *Deps) creationController() *controller.CreationController {
 	verify := otp.NewVerifyOTP(postgres.NewOTPGateway(d.DB.Pool), clk, d.Cfg.OTPMaxAttempts)
 
 	individual := creation.NewCreateIndividualRequest(verify, numbers, uow, requestsRead, ids, clk)
-	enterprise := creation.NewCreateEnterpriseRequest(verify, numbers, uow, ids, clk)
+	enterprise := creation.NewCreateEnterpriseRequest(verify, numbers, uow, requestsRead, ids, clk)
 	restitution := creation.NewCreateRestitutionRequest(numbers, uow, requestsRead, ids, clk)
 
 	return controller.NewCreationController(individual, enterprise, restitution, d.presenter(), clk)

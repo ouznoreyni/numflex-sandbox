@@ -14,7 +14,7 @@ import (
 
 func enterpriseInteractor(f *fixture) *creation.CreateEnterpriseRequestInteractor {
 	verify := otp.NewVerifyOTP(f.otp, f.clock, 3)
-	return creation.NewCreateEnterpriseRequest(verify, f.numbers, f.uow, f.ids, f.clock)
+	return creation.NewCreateEnterpriseRequest(verify, f.numbers, f.uow, f.requests, f.ids, f.clock)
 }
 
 func validEnterpriseInput(fleetMSISDN string, fleet []string) creation.CreateEnterpriseRequestInput {
@@ -43,12 +43,34 @@ func TestCreateEnterpriseRequestNominal(t *testing.T) {
 	require.Nil(t, fault)
 	require.Equal(t, 3, out.RetainedCount)
 	require.Empty(t, out.Excluded)
-	require.Len(t, f.requests.Numbers(out.ID), 3)
+	require.Len(t, f.requests.Numbers(out.View.ID), 3)
 
 	stored, found, err := f.otp.Find(context.Background(), "771000001")
 	require.NoError(t, err)
 	require.True(t, found)
 	require.True(t, stored.Consumed)
+}
+
+// TestCreateEnterpriseRequestDeduplicatesAndKeepsOrder reproduces the
+// 2026-09-18 capture: four entries of which three are identical give two
+// numbers, in declared order, while numerosPortesCount still counts four.
+func TestCreateEnterpriseRequestDeduplicatesAndKeepsOrder(t *testing.T) {
+	f := newFixture()
+	f.requests.SeedPrefix(orangeID, "191")
+	for _, n := range []string{"771000003", "771000002"} {
+		f.numbers.Seed(entity.NumberState{MSISDN: n, CurrentOperatorID: orangeID, OriginOperatorID: orangeID})
+	}
+	seedOTP(t, f, "771000003", "123456")
+
+	out, fault := enterpriseInteractor(f).Execute(ctxCaller(yasID),
+		validEnterpriseInput("771000003", []string{"771000003", "771000002", "771000002", "771000002"}))
+	require.Nil(t, fault)
+	require.Equal(t, 4, out.RetainedCount, "counted on the list received, duplicates included")
+	require.Equal(t, []string{"771000003", "771000002"}, out.View.Numbers)
+	require.Equal(t, "ENTREPRISE", out.View.SubscriberType)
+	require.NotNil(t, out.View.Client)
+	require.Equal(t, "Entreprise SARL", out.View.Client.CompanyName)
+	require.Equal(t, "RC-1", out.View.Client.RCNumber)
 }
 
 func TestCreateEnterpriseRequestEmptyFleet(t *testing.T) {
@@ -91,7 +113,7 @@ func TestCreateEnterpriseRequestPartialExclusion(t *testing.T) {
 	require.Len(t, out.Excluded, 1)
 	require.Equal(t, "771000002", out.Excluded[0].MSISDN)
 	require.Equal(t, "DEMANDE_EN_COURS_POUR_NUMERO", out.Excluded[0].ErrorCode)
-	require.Len(t, f.requests.Excluded(out.ID), 1)
+	require.Len(t, f.requests.Excluded(out.View.ID), 1)
 }
 
 func TestCreateEnterpriseRequestNoEligibleNumber(t *testing.T) {

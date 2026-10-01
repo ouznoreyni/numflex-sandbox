@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -58,10 +59,10 @@ func NewQueryController(
 // an empty views slice yields a non-nil, zero-length slice, so the caller's
 // JSON "data" field renders as [] — never null — exactly as
 // Deps.rendreListe was written to guarantee.
-func (ctl *QueryController) dtoList(views []port.RequestView, transform func(map[string]any) map[string]any) []map[string]any {
+func (ctl *QueryController) dtoList(ctx context.Context, views []port.RequestView, transform func(map[string]any) map[string]any) []map[string]any {
 	out := make([]map[string]any, 0, len(views))
 	for _, v := range views {
-		out = append(out, transform(requestViewDTO(ctl.clock, v)))
+		out = append(out, transform(requestViewDTO(ctx, ctl.clock, v)))
 	}
 	return out
 }
@@ -79,7 +80,7 @@ func (ctl *QueryController) Own(c *gin.Context) {
 		return
 	}
 	render(c, ctl.pres.Success(http.StatusOK, "Demandes récupérées avec succès",
-		ctl.dtoList(views, identity)))
+		ctl.dtoList(c.Request.Context(), views, identity)))
 }
 
 // --- a-accepter ---------------------------------------------------------------
@@ -93,7 +94,7 @@ func (ctl *QueryController) ToAccept(c *gin.Context) {
 		return
 	}
 	render(c, ctl.pres.Success(http.StatusOK, "Demandes à accepter récupérées avec succès",
-		ctl.dtoList(views, identity)))
+		ctl.dtoList(c.Request.Context(), views, identity)))
 }
 
 // ToAcceptDetail handles GET /demandes/a-accepter/:id.
@@ -105,7 +106,7 @@ func (ctl *QueryController) ToAcceptDetail(c *gin.Context) {
 		return
 	}
 	render(c, ctl.pres.Success(http.StatusOK, "Demande récupérée avec succès",
-		requestViewDTO(ctl.clock, view)))
+		requestViewDTO(c.Request.Context(), ctl.clock, view)))
 }
 
 // --- a-traiter ------------------------------------------------------------
@@ -119,7 +120,7 @@ func (ctl *QueryController) ToProcess(c *gin.Context) {
 		return
 	}
 	render(c, ctl.pres.Success(http.StatusOK, "Demandes à traiter récupérées avec succès",
-		ctl.dtoList(views, identity)))
+		ctl.dtoList(c.Request.Context(), views, identity)))
 }
 
 // ToProcessDetail handles GET /demandes/a-traiter/:id.
@@ -131,7 +132,7 @@ func (ctl *QueryController) ToProcessDetail(c *gin.Context) {
 		return
 	}
 	render(c, ctl.pres.Success(http.StatusOK, "Demande récupérée avec succès",
-		requestViewDTO(ctl.clock, view)))
+		requestViewDTO(c.Request.Context(), ctl.clock, view)))
 }
 
 // --- a-confirmer ------------------------------------------------------------
@@ -145,7 +146,7 @@ func (ctl *QueryController) ToConfirm(c *gin.Context) {
 		return
 	}
 	render(c, ctl.pres.Success(http.StatusOK, "Demandes à confirmer récupérées avec succès",
-		ctl.dtoList(views, sansClient)))
+		ctl.dtoList(c.Request.Context(), views, sansClient)))
 }
 
 // ToConfirmDetail handles GET /demandes/a-confirmer/:id.
@@ -157,7 +158,7 @@ func (ctl *QueryController) ToConfirmDetail(c *gin.Context) {
 		return
 	}
 	render(c, ctl.pres.Success(http.StatusOK, "Demande récupérée avec succès",
-		sansClient(requestViewDTO(ctl.clock, view))))
+		sansClient(requestViewDTO(c.Request.Context(), ctl.clock, view))))
 }
 
 // --- deja-confirmees --------------------------------------------------------
@@ -171,7 +172,7 @@ func (ctl *QueryController) AlreadyConfirmed(c *gin.Context) {
 		return
 	}
 	render(c, ctl.pres.Success(http.StatusOK, "Demandes déjà confirmées récupérées avec succès",
-		ctl.dtoList(views, identity)))
+		ctl.dtoList(c.Request.Context(), views, identity)))
 }
 
 // --- in / out -----------------------------------------------------------------
@@ -185,7 +186,7 @@ func (ctl *QueryController) In(c *gin.Context) {
 		return
 	}
 	render(c, ctl.pres.Success(http.StatusOK, "Demandes IN récupérées avec succès",
-		ctl.dtoList(views, identity)))
+		ctl.dtoList(c.Request.Context(), views, identity)))
 }
 
 // Out handles GET /demandes/out.
@@ -197,5 +198,5 @@ func (ctl *QueryController) Out(c *gin.Context) {
 		return
 	}
 	render(c, ctl.pres.Success(http.StatusOK, "Demandes OUT récupérées avec succès",
-		ctl.dtoList(views, identity)))
+		ctl.dtoList(c.Request.Context(), views, identity)))
 }

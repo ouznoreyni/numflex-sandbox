@@ -3,6 +3,7 @@ package inmemory
 import (
 	"context"
 	"errors"
+	"sort"
 	"sync"
 	"time"
 
@@ -140,10 +141,24 @@ func (g *RequestGateway) Get(_ context.Context, id string) (port.RequestView, bo
 		RecipientOperatorID: req.RecipientOperatorID, RecipientOperatorName: req.RecipientOperatorID,
 		RequestDate: req.RequestDate, Process: req.Process, RoutingInfo: req.RoutingInfo,
 	}
+	if req.SubscriberType == string(entity.SubscriberEnterprise) {
+		numbers := append([]port.RequestNumberInput(nil), g.numbers[id]...)
+		sort.SliceStable(numbers, func(a, b int) bool { return numbers[a].Position < numbers[b].Position })
+		view.Numbers = make([]string, 0, len(numbers))
+		for _, n := range numbers {
+			view.Numbers = append(view.Numbers, n.MSISDN)
+		}
+	}
 	if c, ok := g.clients[id]; ok {
 		view.Client = &port.ClientView{
 			LastName: c.LastName, FirstName: c.FirstName,
 			BirthPlace: c.BirthPlace, IDType: c.IDType, IDNumber: c.IDNumber,
+		}
+		if c.CompanyName != nil {
+			view.Client.CompanyName = *c.CompanyName
+		}
+		if c.RCNumber != nil {
+			view.Client.RCNumber = *c.RCNumber
 		}
 	}
 	return view, true, nil

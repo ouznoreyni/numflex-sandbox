@@ -91,7 +91,7 @@ func (ctl *PortingController) Confirmation(c *gin.Context) {
 	// No client: the captures of the two confirmations, orange then
 	// expresso, carry none, whereas every other response carries one.
 	render(c, ctl.pres.Success(http.StatusOK, "Étape traitée avec succès",
-		sansClient(requestViewDTO(ctl.clock, view))))
+		sansClient(requestViewDTO(c.Request.Context(), ctl.clock, view))))
 }
 
 // --- Processing ------------------------------------------------------------
@@ -131,7 +131,7 @@ func (ctl *PortingController) Process(c *gin.Context) {
 		return
 	}
 	render(c, ctl.pres.Success(http.StatusOK, "Étape traitée avec succès",
-		requestViewDTO(ctl.clock, view)))
+		requestViewDTO(c.Request.Context(), ctl.clock, view)))
 }
 
 // --- Cancellation --------------------------------------------------------------
@@ -145,5 +145,5 @@ func (ctl *PortingController) Cancel(c *gin.Context) {
 		return
 	}
 	render(c, ctl.pres.Success(http.StatusOK, "Demande annulée avec succès",
-		requestViewDTO(ctl.clock, view)))
+		requestViewDTO(c.Request.Context(), ctl.clock, view)))
 }

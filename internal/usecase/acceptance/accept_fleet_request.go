@@ -102,7 +102,7 @@ func (i *AcceptFleetRequestInteractor) Execute(
 		}
 		err := i.uow.Do(ctx, func(repos port.Repositories) error {
 			if err := repos.Requests.Reject(ctx, dm.ID, caller.OperatorID,
-				in.RejectionReasonID, in.Comment, i.clock.Now()); err != nil {
+				in.RejectionReasonID, in.Comment, port.NowWritten(ctx, i.clock)); err != nil {
 				return entity.InternalError("rejecting the request")
 			}
 			return nil
@@ -146,7 +146,7 @@ func (i *AcceptFleetRequestInteractor) Execute(
 		if !active {
 			fleetExhausted = true
 			if err := repos.Requests.Reject(ctx, dm.ID, caller.OperatorID, "",
-				in.Comment, i.clock.Now()); err != nil {
+				in.Comment, port.NowWritten(ctx, i.clock)); err != nil {
 				return entity.InternalError("rejecting the request")
 			}
 			return nil

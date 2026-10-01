@@ -38,7 +38,7 @@ func applyTransitionLocked(ctx context.Context, requests port.RequestGateway, cl
 		return nil
 	}
 
-	now := clock.Now()
+	now := port.NowWritten(ctx, clock)
 	current := dm.CurrentStep
 
 	// A step closed by an action carries TERMINE, COMPLETION included: that
