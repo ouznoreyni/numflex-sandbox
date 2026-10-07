@@ -56,15 +56,10 @@ sert l'API **et** sa documentation sur un seul port.
 | Documentation | <http://localhost:8080/swagger.html> |
 | Premier `200` | **~25 s** après le lancement — `--rm` le refait à chaque fois |
 
-Le vivier par défaut donne **cent mille numéros par tranche**, huit cent mille par opérateur. Pour
-que *tout* numéro bien formé d'une tranche existe — `771000000` à `771999999` — ajoutez
-`FULL_NUMBERS=true` ; comptez alors 4 min 20 s de démarrage, à ne payer qu'une fois grâce à un
-volume :
-
-```bash
-docker run -d -p 8080:8080 -v "$PWD/data:/data" \
-  ouzdiop268/numflex-sandbox:latest PGDATA=/data FULL_NUMBERS=true
-```
+Par défaut, **tout numéro bien formé d'une tranche d'opérateur est portable** — `771…` à
+`779…` pour ORANGE, `781…` à `789…` pour YAS, `711…` à `719…` pour EXPRESSO : neuf millions
+par opérateur, sans rien configurer. Un numéro porté n'est plus portable avant trois mois, mais il
+en reste toujours un neuf à côté. Voir le [vivier de numéros](#vivier-de-numéros).
 
 ### Images publiées
 
@@ -188,8 +183,8 @@ Tout se règle par variables d'environnement, et rien d'autre.
 | `OTP_TTL_SECONDS` | `300` | Validité de l'OTP |
 | `OTP_MAX_ATTEMPTS` | `3` | Tentatives de saisie |
 | `REVERSE_AUTO_VALIDATION_SECONDS` | `0` | `0` = validation par le CLI `artp` uniquement |
-| `FULL_NUMBERS` | `false` | Remplit chaque tranche portable entière, `000000` à `999999` |
-| `POOL_NUMBERS_PER_OPERATOR` | `800000` | Numéros jamais portés par opérateur, entre `8` et `8000000`. Absente, suit `FULL_NUMBERS` ; posée, l'emporte sur lui |
+| `FULL_NUMBERS` | `false` | Écrit d'avance chaque tranche entière, `000000` à `999999`. Ne change pas ce qui est portable — tout l'est déjà |
+| `POOL_NUMBERS_PER_OPERATOR` | `800000` | Numéros écrits d'avance par opérateur, entre `8` et `8000000`. Absente, suit `FULL_NUMBERS` ; posée, l'emporte sur lui |
 | `DOCS_ENABLED` | `true` | Sert `/swagger.html`, `/openapi.yaml`, `/openapi.json` à la racine |
 | `ENV_FILE` | `.env` | Chemin du fichier d'environnement à charger |
 
@@ -275,36 +270,35 @@ C'est le profil qu'utilise `make test`.
 
 ## Vivier de numéros
 
-Le registre est **fermé** : seuls les numéros ensemencés existent, et tout autre MSISDN est rejeté à
-la création. Le préfixe d'une tranche tient sur trois chiffres et sa terminaison sur six —
-`771000001` s'y lit `771` + `000001`. Une tranche part toujours de `000000` ; ce qui change, c'est
-où elle s'arrête.
+Le registre est **ouvert sur les tranches d'opérateur** : tout numéro bien formé d'une de ces
+tranches existe, ensemencé ou non. Celui que le seed n'a pas écrit naît à sa première lecture, chez
+l'opérateur de sa tranche et jamais porté ; dès lors il a une histoire, et la garde. Le préfixe
+d'une tranche tient sur trois chiffres et sa terminaison sur six — `771000001` s'y lit `771` +
+`000001`.
 
-| Opérateur | Tranches jamais portées | Par tranche | Total portable |
-|---|---|---|---|
-| ORANGE | `771000000`–`771099999` … `778000000`–`778099999` | 100 000 | **800 000** |
-| YAS | `781000000`–`781099999` … `788000000`–`788099999` | 100 000 | **800 000** |
-| EXPRESSO | `711` … `718`, terminaisons `000000`–`000999` | 1 000 | 8 000 |
-| Historiques | `761000000`–`761000999`, `701000000`–`701000999` | 1 000 | 2 000 |
+| Opérateur | Tranches ouvertes | Total portable |
+|---|---|---|
+| ORANGE | `771000000`–`771999999` … `779000000`–`779999999` | **9 000 000** |
+| YAS | `781000000`–`781999999` … `789000000`–`789999999` | **9 000 000** |
+| EXPRESSO | `711000000`–`711999999` … `719000000`–`719999999` | **9 000 000** |
+| Historiques | `761…` (YAS), `701…` (EXPRESSO) | 2 000 000 |
 
-Avec `FULL_NUMBERS=true`, les deux premières lignes passent à `771000000`–`771999999` : un million
-par tranche, huit millions par opérateur, et tout numéro bien formé d'une tranche existe. EXPRESSO
-garde ses mille par tranche dans les deux cas — il sert à exercer le portage entre deux tiers
-(UC-08), pas à être consommé en volume.
+Tout autre numéro n'existe pas. Le seed, lui, pose toujours une partie des tranches d'avance : cent
+mille numéros par tranche ORANGE et YAS de `1` à `8`, mille ailleurs, ou un million avec
+`FULL_NUMBERS=true`. Il ne décide plus de ce qui est portable ; il ne sert plus qu'à la route de
+comptage des tranches, qui ne voit que les numéros déjà écrits.
 
-<details>
-<summary>Le groupe <code>900</code> : du matériel de rejet, pas du vivier</summary>
+**Tous les numéros livrés sont portables.** Les règles restent celles de la plateforme : un numéro
+porté d'ORANGE vers YAS est chez YAS, ORANGE doit attendre trois mois pour le reprendre
+(`DELAI_PORTAGE_NON_RESPECTE`) et six pour en demander la restitution. On ne rencontre ce refus
+qu'en portant soi-même un numéro.
 
-<br>
-
-Une tranche par opérateur où **tous** les numéros ont déjà été portés, les quatre scénarios empilés
-en blocs de mille :
+Pour que la restitution reste testable dès le démarrage, les tranches `779`, `789` et `719` livrent
+deux blocs de mille numéros déjà portés, tous il y a plus de trois mois — donc portables :
 
 | Bloc | Situation | Rend testable |
 |---|---|---|
-| `…000000` → `…000999` | porté il y a 30 jours | `DELAI_PORTAGE_NON_RESPECTE` / ANO-002 |
 | `…001000` → `…001999` | porté il y a 8 mois | Restitution nominale |
-| `…002000` → `…002999` | porté il y a 2 mois | `DELAI_RESTITUTION_NON_RESPECTE` / ANO-020 |
 | `…003000` → `…003999` | porté puis déjà restitué | `NUMERO_DEJA_RESTITUE` |
 
 | Tranche | Détenteur actuel | Opérateur d'origine |
@@ -313,20 +307,16 @@ en blocs de mille :
 | `789…` | YAS | ORANGE |
 | `719…` | EXPRESSO | ORANGE |
 
-`789001001` est détenu par YAS, venu d'ORANGE, porté il y a huit mois : ORANGE peut en demander la
-restitution. `779000001` est chez ORANGE depuis trente jours : il se heurte au délai de trois mois.
-Deux de ces blocs (8 mois, déjà restitué) dépassent tout de même les 3 mois et se portent
-normalement.
-
-</details>
+`789001001` est détenu par YAS, venu d'ORANGE il y a huit mois : ORANGE peut en demander la
+restitution. Le reste de ces trois tranches est neuf, chez son détenteur actuel.
 
 **Ce que coûte le volume**, mesuré dans l'image tout-en-un sur Apple Silicon, `initdb` et migrations
 comprises :
 
 | | Lignes | Table `numero` | Démarrage à froid |
 |---|---|---|---|
-| Défaut | 1 622 000 | 193 Mo | **~25 s** |
-| `FULL_NUMBERS=true` | 16 022 000 | 1 905 Mo | **4 min 20 s** |
+| Défaut | 1 616 000 | 193 Mo | **~25 s** |
+| `FULL_NUMBERS=true` | 16 016 000 | 1 905 Mo | **4 min 20 s** |
 
 Le seed insère une tranche par instruction (`INSERT … SELECT generate_series`) et **saute une
 tranche déjà installée** — elle est posée entière ou pas du tout, et la présence de son dernier
@@ -406,19 +396,18 @@ ANO-003.
 ```json
 { "success": true, "code": "SUCCESS", "message": "Tranches de l'opérateur ORANGE",
   "data": { "operateur": "ORANGE", "operateurId": "6a21745ce6c37b5b5b487ec1",
-            "nombreTranches": 9, "totalNumeros": 804000,
+            "nombreTranches": 8, "totalNumeros": 800000,
             "tranches": [ { "prefixe": "771", "premier": "771000000", "dernier": "771099999",
                             "total": 100000, "nature": "JAMAIS_PORTE" } ] } }
 ```
 
-C'est la réponse à la question que le registre pose mal : un MSISDN hors vivier est rejeté par
-`Le numéro n'appartient pas à l'opérateur source indiqué`, exactement comme un numéro existant
-déclaré sous le mauvais opérateur source.
+Elle ne montre que les numéros déjà écrits en base : un numéro bien formé d'une tranche
+d'opérateur est portable même absent d'ici (voir le [vivier](#vivier-de-numéros)).
 
 Le décompte est **lu en base**, pas déduit de la configuration : une tranche installée à un autre
 volume dit sa vraie taille, et un numéro passé chez son destinataire après un portage complet est
-compté chez lui. La `nature` sort des lignes elles-mêmes — une tranche dont les numéros portent une
-date de portage est du matériel de rejet.
+compté chez lui. La `nature` sort des lignes elles-mêmes — `DEJA_PORTE` dès qu'un numéro de la
+tranche porte une date de portage.
 
 Compter coûte : **2,7 s** sur le vivier plein (4,6 s au tout premier appel, cache froid), quelques
 millisecondes sur un vivier réduit. Aucun index n'y change rien — un `(operateur_actuel_id, msisdn)`

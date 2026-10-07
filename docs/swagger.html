@@ -1255,7 +1255,7 @@ const spec = {
      "Sandbox"
     ],
     "summary": "Tranches de numéros d'un opérateur",
-    "description": "Les numéros que le sandbox connaît, tranche par tranche : de quel numéro à quel\nnuméro, combien, et si la tranche est du vivier portable (`JAMAIS_PORTE`) ou du\nmatériel de rejet (`DEJA_PORTE`).\n\n**À quoi ça sert.** Le registre est fermé : un MSISDN hors de ces tranches est\nrejeté à la création par `Le numéro n'appartient pas à l'opérateur source\nindiqué`, exactement comme un numéro existant déclaré sous le mauvais opérateur\nsource. Impossible de distinguer les deux depuis la réponse — cette route le dit.\n\nLe décompte est lu en base, pas déduit de la configuration : une tranche installée\nà un autre `POOL_NUMBERS_PER_OPERATOR`, ou un numéro passé chez son destinataire\naprès un portage complet, se voient ici.\n\n**Coût.** Le comptage balaie les lignes de l'opérateur : environ **2,7 s** sur le\nvivier plein (huit millions de numéros par opérateur), **4,6 s** au tout premier\nappel après démarrage, cache froid — et quelques millisecondes sur un vivier\nréduit. Mesuré.\n",
+    "description": "Les numéros que le sandbox a déjà écrits, tranche par tranche : de quel numéro à\nquel numéro, combien, et si au moins un de ses numéros a déjà été porté\n(`DEJA_PORTE`) ou aucun (`JAMAIS_PORTE`).\n\n**Ce que la route ne dit pas.** Le registre est ouvert sur les tranches\nd'opérateur : tout numéro bien formé de `771` à `779` (ORANGE), `781` à `789`\n(YAS), `711` à `719` (EXPRESSO), `761` et `701` est portable, même absent d'ici —\nil naît à sa première lecture. Seul un MSISDN hors de ces tranches est rejeté à\nla création par `Le numéro n'appartient pas à l'opérateur source indiqué`.\n\nLe décompte est lu en base, pas déduit de la configuration : une tranche installée\nà un autre `POOL_NUMBERS_PER_OPERATOR`, ou un numéro passé chez son destinataire\naprès un portage complet, se voient ici.\n\n**Coût.** Le comptage balaie les lignes de l'opérateur : environ **2,7 s** sur le\nvivier plein (huit millions de numéros par opérateur), **4,6 s** au tout premier\nappel après démarrage, cache froid — et quelques millisecondes sur un vivier\nréduit. Mesuré.\n",
     "parameters": [
      {
       "name": "operateur",
@@ -2317,7 +2317,7 @@ const spec = {
                  "JAMAIS_PORTE",
                  "DEJA_PORTE"
                 ],
-                "description": "`JAMAIS_PORTE` — vivier portable, aucun numéro de la tranche\nn'a de date de portage · `DEJA_PORTE` — matériel de rejet.\n",
+                "description": "`JAMAIS_PORTE` — vivier portable, aucun numéro de la tranche\nn'a de date de portage · `DEJA_PORTE` — au moins un numéro porté.\n",
                 "example": "JAMAIS_PORTE"
                }
               }

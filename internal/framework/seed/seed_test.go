@@ -171,3 +171,42 @@ func TestSeedIdempotent(t *testing.T) {
 	require.NoError(t, db.Pool.QueryRow(ctx, "SELECT count(*) FROM operateur").Scan(&n))
 	require.Equal(t, 3, n)
 }
+
+// TestHomeRangesOpenEveryOperatorRange: the never-ported ranges, the two
+// historical ones and the 900 group, each under the operator that holds it.
+func TestHomeRangesOpenEveryOperatorRange(t *testing.T) {
+	homes := seed.HomeRanges()
+
+	require.Equal(t, seed.OperatorOrangeID, homes["771"])
+	require.Equal(t, seed.OperatorYASID, homes["788"])
+	require.Equal(t, seed.OperatorExpressoID, homes["711"])
+	require.Equal(t, seed.OperatorYASID, homes["761"])
+	require.Equal(t, seed.OperatorExpressoID, homes["701"])
+	require.Equal(t, seed.OperatorOrangeID, homes["779"])
+	require.Equal(t, seed.OperatorYASID, homes["789"])
+	require.Equal(t, seed.OperatorExpressoID, homes["719"])
+	require.Len(t, homes, 3*seed.UnportedRangesPerOperator+2+3)
+}
+
+// TestServerVolumesSeedOnlyPortableNumbers: what the server seeds leaves
+// every number portable. The 900 group keeps its blocks ported eight months
+// ago — restitution stays exercisable — but not the two ported less than
+// three months ago, on which a porting would be refused.
+func TestServerVolumesSeedOnlyPortableNumbers(t *testing.T) {
+	db := testsupport.NewTestDB(t)
+	ctx := context.Background()
+	_, err := db.Pool.Exec(ctx, `DELETE FROM numero`)
+	require.NoError(t, err)
+
+	v := seed.VolumesFor(8 * seed.UnportedRangesPerOperator)
+	v.Expresso, v.Historical, v.PortedBlock = 8, 8, 8
+	require.NoError(t, seed.Run(ctx, db, v))
+
+	var recent, kept int
+	require.NoError(t, db.Pool.QueryRow(ctx, `
+		SELECT count(*) FILTER (WHERE date_dernier_portage > now() - interval '90 days'),
+		       count(*) FILTER (WHERE date_dernier_portage IS NOT NULL)
+		  FROM numero`).Scan(&recent, &kept))
+	require.Zero(t, recent, "no number may be seeded ported less than three months ago")
+	require.Equal(t, 3*2*8, kept, "three ranges keep their two portable blocks")
+}

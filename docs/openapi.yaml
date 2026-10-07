@@ -790,14 +790,15 @@ paths:
       tags: [Sandbox]
       summary: Tranches de numéros d'un opérateur
       description: |
-        Les numéros que le sandbox connaît, tranche par tranche : de quel numéro à quel
-        numéro, combien, et si la tranche est du vivier portable (`JAMAIS_PORTE`) ou du
-        matériel de rejet (`DEJA_PORTE`).
+        Les numéros que le sandbox a déjà écrits, tranche par tranche : de quel numéro à
+        quel numéro, combien, et si au moins un de ses numéros a déjà été porté
+        (`DEJA_PORTE`) ou aucun (`JAMAIS_PORTE`).
 
-        **À quoi ça sert.** Le registre est fermé : un MSISDN hors de ces tranches est
-        rejeté à la création par `Le numéro n'appartient pas à l'opérateur source
-        indiqué`, exactement comme un numéro existant déclaré sous le mauvais opérateur
-        source. Impossible de distinguer les deux depuis la réponse — cette route le dit.
+        **Ce que la route ne dit pas.** Le registre est ouvert sur les tranches
+        d'opérateur : tout numéro bien formé de `771` à `779` (ORANGE), `781` à `789`
+        (YAS), `711` à `719` (EXPRESSO), `761` et `701` est portable, même absent d'ici —
+        il naît à sa première lecture. Seul un MSISDN hors de ces tranches est rejeté à
+        la création par `Le numéro n'appartient pas à l'opérateur source indiqué`.
 
         Le décompte est lu en base, pas déduit de la configuration : une tranche installée
         à un autre `POOL_NUMBERS_PER_OPERATOR`, ou un numéro passé chez son destinataire
@@ -1361,7 +1362,7 @@ components:
                               enum: [JAMAIS_PORTE, DEJA_PORTE]
                               description: |
                                 `JAMAIS_PORTE` — vivier portable, aucun numéro de la tranche
-                                n'a de date de portage · `DEJA_PORTE` — matériel de rejet.
+                                n'a de date de portage · `DEJA_PORTE` — au moins un numéro porté.
                               example: JAMAIS_PORTE
 
     OperateurInvalide:

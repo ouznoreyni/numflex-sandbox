@@ -61,14 +61,10 @@ the API **and** its documentation on a single port.
 | Documentation | <http://localhost:8080/swagger.html> |
 | First `200` | **~25 s** after launch — `--rm` pays it again every time |
 
-The default pool gives **a hundred thousand numbers per range**, eight hundred thousand per
-operator. To make *every* well-formed number of a range exist — `771000000` through `771999999` —
-add `FULL_NUMBERS=true`; that costs 4 min 20 s of startup, paid once if you keep a volume:
-
-```bash
-docker run -d -p 8080:8080 -v "$PWD/data:/data" \
-  ouzdiop268/numflex-sandbox:latest PGDATA=/data FULL_NUMBERS=true
-```
+By default, **every well-formed number of an operator's range is portable** — `771…` through
+`779…` for ORANGE, `781…` to `789…` for YAS, `711…` to `719…` for EXPRESSO: nine million per
+operator, with nothing to configure. A ported number cannot be ported again for three months, but
+there is always a fresh one next to it. See the [number pool](#number-pool).
 
 ### Published images
 
@@ -190,8 +186,8 @@ Everything is set through environment variables, and nothing else.
 | `OTP_TTL_SECONDS` | `300` | OTP validity |
 | `OTP_MAX_ATTEMPTS` | `3` | Entry attempts |
 | `REVERSE_AUTO_VALIDATION_SECONDS` | `0` | `0` = validation through the `artp` CLI only |
-| `FULL_NUMBERS` | `false` | Fills every portable range whole, `000000` to `999999` |
-| `POOL_NUMBERS_PER_OPERATOR` | `800000` | Never-ported numbers per operator, between `8` and `8000000`. Absent, it follows `FULL_NUMBERS`; set, it wins over it |
+| `FULL_NUMBERS` | `false` | Writes every range whole ahead of time, `000000` to `999999`. Does not change what is portable — everything already is |
+| `POOL_NUMBERS_PER_OPERATOR` | `800000` | Numbers written ahead of time per operator, between `8` and `8000000`. Absent, it follows `FULL_NUMBERS`; set, it wins over it |
 | `DOCS_ENABLED` | `true` | Serves `/swagger.html`, `/openapi.yaml`, `/openapi.json` at the root |
 | `ENV_FILE` | `.env` | Path of the environment file to load |
 
@@ -276,35 +272,33 @@ No expiry, immediate convergence, no latency: a full cycle in under a second. Th
 
 ## Number pool
 
-The registry is **closed**: only seeded numbers exist, and any other MSISDN is rejected at creation.
-A range's prefix is three digits and its tail six — `771000001` reads as `771` + `000001`. A range
-always starts at `000000`; what changes is where it stops.
+The registry is **open on operator ranges**: every well-formed number of one of those ranges
+exists, seeded or not. One the seed never wrote is born on its first read, held by its range's
+operator and never ported; from then on it has a history, and keeps it. A range's prefix is three
+digits and its tail six — `771000001` reads as `771` + `000001`.
 
-| Operator | Never-ported ranges | Per range | Portable total |
-|---|---|---|---|
-| ORANGE | `771000000`–`771099999` … `778000000`–`778099999` | 100,000 | **800,000** |
-| YAS | `781000000`–`781099999` … `788000000`–`788099999` | 100,000 | **800,000** |
-| EXPRESSO | `711` … `718`, tails `000000`–`000999` | 1,000 | 8,000 |
-| Historical | `761000000`–`761000999`, `701000000`–`701000999` | 1,000 | 2,000 |
+| Operator | Open ranges | Portable total |
+|---|---|---|
+| ORANGE | `771000000`–`771999999` … `779000000`–`779999999` | **9,000,000** |
+| YAS | `781000000`–`781999999` … `789000000`–`789999999` | **9,000,000** |
+| EXPRESSO | `711000000`–`711999999` … `719000000`–`719999999` | **9,000,000** |
+| Historical | `761…` (YAS), `701…` (EXPRESSO) | 2,000,000 |
 
-With `FULL_NUMBERS=true` the first two rows become `771000000`–`771999999`: a million per range,
-eight million per operator, and every well-formed number of a range exists. EXPRESSO keeps its
-thousand per range either way — it is there to exercise porting between two third parties (UC-08),
-not to be consumed in volume.
+No other number exists. The seed still writes part of the ranges ahead: a hundred thousand numbers
+per ORANGE and YAS range from `1` to `8`, a thousand elsewhere, or a million with
+`FULL_NUMBERS=true`. It no longer decides what is portable; it only feeds the range-count route,
+which sees numbers already written.
 
-<details>
-<summary>The <code>900</code> group: rejection material, not portable stock</summary>
+**Every number shipped is portable.** The rules stay the platform's: a number ported from ORANGE
+to YAS is at YAS, ORANGE must wait three months to take it back (`DELAI_PORTAGE_NON_RESPECTE`) and
+six to ask for its restitution. That refusal is met only by porting a number yourself.
 
-<br>
-
-One range per operator where **every** number has already been ported, the four scenarios stacked in
-blocks of a thousand:
+So that restitution is testable from the first startup, the `779`, `789` and `719` ranges ship two
+blocks of a thousand numbers already ported, all more than three months ago — hence portable:
 
 | Block | Situation | Makes testable |
 |---|---|---|
-| `…000000` → `…000999` | ported 30 days ago | `DELAI_PORTAGE_NON_RESPECTE` / ANO-002 |
 | `…001000` → `…001999` | ported 8 months ago | Nominal restitution |
-| `…002000` → `…002999` | ported 2 months ago | `DELAI_RESTITUTION_NON_RESPECTE` / ANO-020 |
 | `…003000` → `…003999` | ported, then already restituted | `NUMERO_DEJA_RESTITUE` |
 
 | Range | Current holder | Origin operator |
@@ -313,19 +307,16 @@ blocks of a thousand:
 | `789…` | YAS | ORANGE |
 | `719…` | EXPRESSO | ORANGE |
 
-`789001001` is held by YAS, came from ORANGE, ported eight months ago: ORANGE may ask for its
-restitution. `779000001` has been at ORANGE for thirty days: it hits the three-month delay. Two of
-those blocks (8 months, already restituted) are nevertheless past 3 months and port normally.
-
-</details>
+`789001001` is held by YAS, came from ORANGE eight months ago: ORANGE may ask for its restitution.
+The rest of these three ranges is fresh, at its current holder.
 
 **What the volume costs**, measured in the all-in-one image on Apple Silicon, `initdb` and
 migrations included:
 
 | | Rows | `numero` table | Cold start |
 |---|---|---|---|
-| Default | 1,622,000 | 193 MB | **~25 s** |
-| `FULL_NUMBERS=true` | 16,022,000 | 1,905 MB | **4 min 20 s** |
+| Default | 1,616,000 | 193 MB | **~25 s** |
+| `FULL_NUMBERS=true` | 16,016,000 | 1,905 MB | **4 min 20 s** |
 
 The seed inserts one range per statement (`INSERT … SELECT generate_series`) and **skips a range
 already installed** — a range is laid down whole or not at all, and the presence of its last number
@@ -405,19 +396,18 @@ a `400` in `problem+json` naming the accepted values — off contract, hence out
 ```json
 { "success": true, "code": "SUCCESS", "message": "Tranches de l'opérateur ORANGE",
   "data": { "operateur": "ORANGE", "operateurId": "6a21745ce6c37b5b5b487ec1",
-            "nombreTranches": 9, "totalNumeros": 804000,
+            "nombreTranches": 8, "totalNumeros": 800000,
             "tranches": [ { "prefixe": "771", "premier": "771000000", "dernier": "771099999",
                             "total": 100000, "nature": "JAMAIS_PORTE" } ] } }
 ```
 
-This answers the question the registry answers badly: an MSISDN outside the pool is rejected with
-`Le numéro n'appartient pas à l'opérateur source indiqué`, exactly like an existing number declared
-under the wrong source operator.
+It shows only numbers already written to the database: a well-formed number of an operator's range
+is portable even when absent from it (see the [number pool](#number-pool)).
 
 The count is **read from the database**, not derived from configuration: a range installed at
 another volume reports its real size, and a number that moved to its recipient after a completed
-porting is counted there. `nature` comes from the rows themselves — a range whose numbers carry a
-porting date is rejection material.
+porting is counted there. `nature` comes from the rows themselves — `DEJA_PORTE` as soon as one number of
+the range carries a porting date.
 
 Counting costs what counting costs: **2.7 s** on the full pool (4.6 s on the very first call, cold
 cache), milliseconds on a smaller one. No index redeems it — a composite

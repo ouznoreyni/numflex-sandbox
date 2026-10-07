@@ -57,8 +57,9 @@ type Config struct {
 	// being rejection material rather than something to consume.
 	PoolPerOperator int
 
-	// FullNumbers fills every portable range whole — its million numbers,
-	// 000000 to 999999 — so that any well-formed number of a range exists.
+	// FullNumbers writes every portable range whole ahead of time — its
+	// million numbers, 000000 to 999999. Portability does not depend on it:
+	// the registry is open on these ranges (seed.HomeRanges).
 	// It is a shortcut on PoolPerOperator's DEFAULT, not an override: an
 	// explicit POOL_NUMBERS_PER_OPERATOR still wins, so the two can never
 	// contradict each other.
@@ -68,8 +69,8 @@ type Config struct {
 // DefaultPoolPerOperator is the pool seeded when nothing is asked: a hundred
 // thousand numbers per range, eight ranges per operator. Enough that no
 // exploration exhausts it, small enough that a container without a
-// persistent volume starts in seconds — FULL_NUMBERS=true is there for the
-// day the whole range is wanted.
+// persistent volume starts in seconds — and the numbers it leaves out are
+// portable all the same, written on their first read.
 const DefaultPoolPerOperator = 800_000
 
 func Load() (*Config, error) {

@@ -48,7 +48,7 @@ func TestCreationFailsLeavingOTPReusable(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	numbers := postgres.NewNumberGateway(db.Pool)
+	numbers := postgres.NewNumberGateway(db.Pool, seed.HomeRanges())
 	requests := postgres.NewRequestGateway(db.Pool)
 	uow := persistence.NewUnitOfWork(db)
 	clk := clock.New(0)

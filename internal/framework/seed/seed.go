@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/ouznoreyni/numflex-sandbox/internal/entity"
 	"github.com/ouznoreyni/numflex-sandbox/internal/framework/persistence"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -159,8 +160,13 @@ type Volumes struct {
 	// published before the pool was widened stay valid.
 	Historical int
 	// PortedBlock is what each scenario block of the 900 group carries.
-	// Rejection material: a thousand per case is plenty.
+	// A thousand per case is plenty.
 	PortedBlock int
+	// PortableOnly seeds only the 900 group's blocks whose numbers can still
+	// be ported — those ported more than DelayBetweenPortings ago. The
+	// server sets it: every number it ships is available, and the two
+	// blocks a porting would be refused on are left to the test suite.
+	PortableOnly bool
 }
 
 // fixedRangeSize is what every range carries that is rejection material
@@ -178,13 +184,16 @@ var TestVolumes = Volumes{
 }
 
 // VolumesFor spreads perOperator numbers over the eight never-ported ranges
-// of ORANGE and YAS, leaving every other range at fixedRangeSize.
+// of ORANGE and YAS, leaving every other range at fixedRangeSize. Every
+// number it seeds is portable: a porting rejection is met only by porting
+// a number for real.
 func VolumesFor(perOperator int) Volumes {
 	return Volumes{
-		OrangeYAS:   perOperator / UnportedRangesPerOperator,
-		Expresso:    fixedRangeSize,
-		Historical:  fixedRangeSize,
-		PortedBlock: fixedRangeSize,
+		OrangeYAS:    perOperator / UnportedRangesPerOperator,
+		Expresso:     fixedRangeSize,
+		Historical:   fixedRangeSize,
+		PortedBlock:  fixedRangeSize,
+		PortableOnly: true,
 	}
 }
 
@@ -213,6 +222,26 @@ var unportedRanges = []struct{ prefix, operator string }{
 var historicalRanges = []struct{ prefix, operator string }{
 	{"761", OperatorYASID},
 	{"701", OperatorExpressoID},
+}
+
+// HomeRanges maps the prefix of every operator range to its operator —
+// the never-ported ones, the historical ones and the 900 group, under its
+// current holder. These are the ranges the registry keeps open: any
+// well-formed number of theirs exists, whether this seed wrote it or not.
+// A number the test suite seeded as already ported keeps that history.
+func HomeRanges() map[string]string {
+	homes := make(map[string]string,
+		len(unportedRanges)+len(historicalRanges)+len(portedRanges))
+	for _, r := range unportedRanges {
+		homes[r.prefix] = r.operator
+	}
+	for _, r := range historicalRanges {
+		homes[r.prefix] = r.operator
+	}
+	for _, r := range portedRanges {
+		homes[r.prefix] = r.current
+	}
+	return homes
 }
 
 // portedRanges — the 900 group, one range per operator, where every number
@@ -264,6 +293,10 @@ func seedNumbers(ctx context.Context, db *persistence.DB, v Volumes) error {
 
 	for _, r := range portedRanges {
 		for n, sc := range portedScenarios {
+			if v.PortableOnly &&
+				time.Duration(sc.daysAgo)*24*time.Hour < entity.DelayBetweenPortings {
+				continue
+			}
 			date := time.Now().AddDate(0, 0, -sc.daysAgo)
 			if err := insertRange(ctx, db, r.prefix, r.current, r.origin,
 				&date, sc.returned, n*v.PortedBlock, v.PortedBlock); err != nil {
