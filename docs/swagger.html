@@ -14,7 +14,7 @@
 </head>
 <body>
 <div class="notice">
-  Sandbox sur <code>http://localhost:8080</code> — comptes <code>yas/yas2026</code>,
+  Sandbox sur l'origine de cette page — comptes <code>yas/yas2026</code>,
   <code>orange/orange2026</code>, <code>expresso/expresso2026</code>.
   <strong>Cette page vit à la racine, hors de la gateway</strong> : <code>/api/gateway/v1</code>
   garde exactement les 33 routes du contrat, et n'en a gagné aucune. L'image
@@ -38,8 +38,12 @@ const spec = {
  },
  "servers": [
   {
+   "url": "/",
+   "description": "Ce sandbox — l'origine de cette page"
+  },
+  {
    "url": "http://localhost:8080",
-   "description": "Sandbox local"
+   "description": "Sandbox local, pour la page servie à part (make swagger)"
   }
  ],
  "tags": [

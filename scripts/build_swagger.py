@@ -30,7 +30,7 @@ TEMPLATE = """<!doctype html>
 </head>
 <body>
 <div class="notice">
-  Sandbox sur <code>http://localhost:8080</code> — comptes <code>yas/yas2026</code>,
+  Sandbox sur l'origine de cette page — comptes <code>yas/yas2026</code>,
   <code>orange/orange2026</code>, <code>expresso/expresso2026</code>.
   <strong>Cette page vit à la racine, hors de la gateway</strong> : <code>/api/gateway/v1</code>
   garde exactement les 33 routes du contrat, et n'en a gagné aucune. L'image

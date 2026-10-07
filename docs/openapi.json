@@ -7,8 +7,12 @@
  },
  "servers": [
   {
+   "url": "/",
+   "description": "Ce sandbox — l'origine de cette page"
+  },
+  {
    "url": "http://localhost:8080",
-   "description": "Sandbox local"
+   "description": "Sandbox local, pour la page servie à part (make swagger)"
   }
  ],
  "tags": [

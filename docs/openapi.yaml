@@ -21,8 +21,12 @@ info:
     port de l'API ; `DOCS_ENABLED=false` la retire.
 
 servers:
+  # Relative : « Try it out » appelle l'origine qui sert la page — le serveur
+  # partagé comme un poste local, sans spécification à réécrire au déploiement.
+  - url: /
+    description: Ce sandbox — l'origine de cette page
   - url: http://localhost:8080
-    description: Sandbox local
+    description: Sandbox local, pour la page servie à part (make swagger)
 
 tags:
   - name: authentication
