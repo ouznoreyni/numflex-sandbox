@@ -288,35 +288,20 @@ mille numéros par tranche ORANGE et YAS de `1` à `8`, mille ailleurs, ou un mi
 `FULL_NUMBERS=true`. Il ne décide plus de ce qui est portable ; il ne sert plus qu'à la route de
 comptage des tranches, qui ne voit que les numéros déjà écrits.
 
-**Tous les numéros livrés sont portables.** Les règles restent celles de la plateforme : un numéro
-porté d'ORANGE vers YAS est chez YAS, ORANGE doit attendre trois mois pour le reprendre
-(`DELAI_PORTAGE_NON_RESPECTE`) et six pour en demander la restitution. On ne rencontre ce refus
-qu'en portant soi-même un numéro.
-
-Pour que la restitution reste testable dès le démarrage, les tranches `779`, `789` et `719` livrent
-deux blocs de mille numéros déjà portés, tous il y a plus de trois mois — donc portables :
-
-| Bloc | Situation | Rend testable |
-|---|---|---|
-| `…001000` → `…001999` | porté il y a 8 mois | Restitution nominale |
-| `…003000` → `…003999` | porté puis déjà restitué | `NUMERO_DEJA_RESTITUE` |
-
-| Tranche | Détenteur actuel | Opérateur d'origine |
-|---|---|---|
-| `779…` | ORANGE | YAS |
-| `789…` | YAS | ORANGE |
-| `719…` | EXPRESSO | ORANGE |
-
-`789001001` est détenu par YAS, venu d'ORANGE il y a huit mois : ORANGE peut en demander la
-restitution. Le reste de ces trois tranches est neuf, chez son détenteur actuel.
+**Aucun numéro n'est livré déjà porté** : chacun démarre chez l'opérateur de sa tranche. Les
+règles restent celles de la plateforme — un numéro porté d'ORANGE vers YAS est chez YAS, ORANGE doit
+attendre trois mois pour le reprendre (`DELAI_PORTAGE_NON_RESPECTE`) et six pour en demander la
+restitution. On ne rencontre ces délais qu'en portant soi-même un numéro ; une restitution n'est donc
+possible que six mois après un vrai portage. La suite de tests, elle, ensemence ses propres numéros
+pré-portés pour vérifier ces règles.
 
 **Ce que coûte le volume**, mesuré dans l'image tout-en-un sur Apple Silicon, `initdb` et migrations
 comprises :
 
 | | Lignes | Table `numero` | Démarrage à froid |
 |---|---|---|---|
-| Défaut | 1 616 000 | 193 Mo | **~25 s** |
-| `FULL_NUMBERS=true` | 16 016 000 | 1 905 Mo | **4 min 20 s** |
+| Défaut | 1 610 000 | 193 Mo | **~25 s** |
+| `FULL_NUMBERS=true` | 16 010 000 | 1 905 Mo | **4 min 20 s** |
 
 Le seed insère une tranche par instruction (`INSERT … SELECT generate_series`) et **saute une
 tranche déjà installée** — elle est posée entière ou pas du tout, et la présence de son dernier

@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/ouznoreyni/numflex-sandbox/internal/entity"
 	"github.com/ouznoreyni/numflex-sandbox/internal/framework/persistence"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -160,13 +159,9 @@ type Volumes struct {
 	// published before the pool was widened stay valid.
 	Historical int
 	// PortedBlock is what each scenario block of the 900 group carries.
-	// A thousand per case is plenty.
+	// Rejection material, seeded for the test suite only: the server leaves
+	// it at zero, so that no number it ships has ever been ported.
 	PortedBlock int
-	// PortableOnly seeds only the 900 group's blocks whose numbers can still
-	// be ported — those ported more than DelayBetweenPortings ago. The
-	// server sets it: every number it ships is available, and the two
-	// blocks a porting would be refused on are left to the test suite.
-	PortableOnly bool
 }
 
 // fixedRangeSize is what every range carries that is rejection material
@@ -184,16 +179,15 @@ var TestVolumes = Volumes{
 }
 
 // VolumesFor spreads perOperator numbers over the eight never-ported ranges
-// of ORANGE and YAS, leaving every other range at fixedRangeSize. Every
-// number it seeds is portable: a porting rejection is met only by porting
-// a number for real.
+// of ORANGE and YAS, leaving EXPRESSO's and the historical ones at
+// fixedRangeSize. It seeds no number already ported: on the server, every
+// number starts at home, and a porting date — hence a rejection or a
+// restitution — is met only by porting a number for real.
 func VolumesFor(perOperator int) Volumes {
 	return Volumes{
-		OrangeYAS:    perOperator / UnportedRangesPerOperator,
-		Expresso:     fixedRangeSize,
-		Historical:   fixedRangeSize,
-		PortedBlock:  fixedRangeSize,
-		PortableOnly: true,
+		OrangeYAS:  perOperator / UnportedRangesPerOperator,
+		Expresso:   fixedRangeSize,
+		Historical: fixedRangeSize,
 	}
 }
 
@@ -293,10 +287,6 @@ func seedNumbers(ctx context.Context, db *persistence.DB, v Volumes) error {
 
 	for _, r := range portedRanges {
 		for n, sc := range portedScenarios {
-			if v.PortableOnly &&
-				time.Duration(sc.daysAgo)*24*time.Hour < entity.DelayBetweenPortings {
-				continue
-			}
 			date := time.Now().AddDate(0, 0, -sc.daysAgo)
 			if err := insertRange(ctx, db, r.prefix, r.current, r.origin,
 				&date, sc.returned, n*v.PortedBlock, v.PortedBlock); err != nil {

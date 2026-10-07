@@ -289,34 +289,19 @@ per ORANGE and YAS range from `1` to `8`, a thousand elsewhere, or a million wit
 `FULL_NUMBERS=true`. It no longer decides what is portable; it only feeds the range-count route,
 which sees numbers already written.
 
-**Every number shipped is portable.** The rules stay the platform's: a number ported from ORANGE
-to YAS is at YAS, ORANGE must wait three months to take it back (`DELAI_PORTAGE_NON_RESPECTE`) and
-six to ask for its restitution. That refusal is met only by porting a number yourself.
-
-So that restitution is testable from the first startup, the `779`, `789` and `719` ranges ship two
-blocks of a thousand numbers already ported, all more than three months ago — hence portable:
-
-| Block | Situation | Makes testable |
-|---|---|---|
-| `…001000` → `…001999` | ported 8 months ago | Nominal restitution |
-| `…003000` → `…003999` | ported, then already restituted | `NUMERO_DEJA_RESTITUE` |
-
-| Range | Current holder | Origin operator |
-|---|---|---|
-| `779…` | ORANGE | YAS |
-| `789…` | YAS | ORANGE |
-| `719…` | EXPRESSO | ORANGE |
-
-`789001001` is held by YAS, came from ORANGE eight months ago: ORANGE may ask for its restitution.
-The rest of these three ranges is fresh, at its current holder.
+**No number ships already ported**: each starts at its range's operator. The rules stay the
+platform's — a number ported from ORANGE to YAS is at YAS, ORANGE must wait three months to take it
+back (`DELAI_PORTAGE_NON_RESPECTE`) and six to ask for its restitution. These delays are met only by
+porting a number yourself; a restitution is therefore possible only six months after a real
+porting. The test suite seeds its own pre-ported numbers to check those rules.
 
 **What the volume costs**, measured in the all-in-one image on Apple Silicon, `initdb` and
 migrations included:
 
 | | Rows | `numero` table | Cold start |
 |---|---|---|---|
-| Default | 1,616,000 | 193 MB | **~25 s** |
-| `FULL_NUMBERS=true` | 16,016,000 | 1,905 MB | **4 min 20 s** |
+| Default | 1,610,000 | 193 MB | **~25 s** |
+| `FULL_NUMBERS=true` | 16,010,000 | 1,905 MB | **4 min 20 s** |
 
 The seed inserts one range per statement (`INSERT … SELECT generate_series`) and **skips a range
 already installed** — a range is laid down whole or not at all, and the presence of its last number

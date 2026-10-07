@@ -188,25 +188,23 @@ func TestHomeRangesOpenEveryOperatorRange(t *testing.T) {
 	require.Len(t, homes, 3*seed.UnportedRangesPerOperator+2+3)
 }
 
-// TestServerVolumesSeedOnlyPortableNumbers: what the server seeds leaves
-// every number portable. The 900 group keeps its blocks ported eight months
-// ago — restitution stays exercisable — but not the two ported less than
-// three months ago, on which a porting would be refused.
-func TestServerVolumesSeedOnlyPortableNumbers(t *testing.T) {
+// TestServerVolumesSeedNoPortedNumber: what the server seeds has never
+// been ported — every number starts at home, the 900 group included.
+func TestServerVolumesSeedNoPortedNumber(t *testing.T) {
 	db := testsupport.NewTestDB(t)
 	ctx := context.Background()
 	_, err := db.Pool.Exec(ctx, `DELETE FROM numero`)
 	require.NoError(t, err)
 
 	v := seed.VolumesFor(8 * seed.UnportedRangesPerOperator)
-	v.Expresso, v.Historical, v.PortedBlock = 8, 8, 8
+	v.Expresso, v.Historical = 8, 8
 	require.NoError(t, seed.Run(ctx, db, v))
 
-	var recent, kept int
+	var ported int
 	require.NoError(t, db.Pool.QueryRow(ctx, `
-		SELECT count(*) FILTER (WHERE date_dernier_portage > now() - interval '90 days'),
-		       count(*) FILTER (WHERE date_dernier_portage IS NOT NULL)
-		  FROM numero`).Scan(&recent, &kept))
-	require.Zero(t, recent, "no number may be seeded ported less than three months ago")
-	require.Equal(t, 3*2*8, kept, "three ranges keep their two portable blocks")
+		SELECT count(*) FROM numero
+		 WHERE date_dernier_portage IS NOT NULL
+		    OR operateur_actuel_id <> operateur_origine_id
+		    OR deja_restitue`).Scan(&ported))
+	require.Zero(t, ported)
 }

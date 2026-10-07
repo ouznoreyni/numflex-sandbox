@@ -392,7 +392,7 @@
                     }
                   }
                 },
-                "description": "Compte orange — seul l'opérateur d'origine du numéro peut demander sa restitution, et il en devient le destinataire. 789001001 vient d'ORANGE et a été porté il y a 8 mois."
+                "description": "Compte orange — seul l'opérateur d'origine du numéro peut demander sa restitution, et il en devient le destinataire. Le numéro doit avoir été porté depuis l'opérateur d'origine il y a plus de 6 mois : le sandbox n'en livre aucun déjà porté, remplacez 789001001 par un numéro que vous avez porté."
               },
               "response": []
             }
@@ -432,7 +432,7 @@
                     }
                   }
                 },
-                "description": "Compte orange — seul l'opérateur source (origine du numéro) peut soumettre un reverse. La validation et le rejet sont réservés à l'ARTP, hors API : voir le CLI artp."
+                "description": "Compte orange — seul l'opérateur source (origine du numéro) peut soumettre un reverse. La validation et le rejet sont réservés à l'ARTP, hors API : voir le CLI artp. Le numéro doit avoir été porté : remplacez 789001001 par un numéro que vous avez porté."
               },
               "response": []
             },
