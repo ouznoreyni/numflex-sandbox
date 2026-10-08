@@ -131,3 +131,21 @@ func TestCreateEnterpriseRequestNoEligibleNumber(t *testing.T) {
 	require.Equal(t, "AUCUN_NUMERO_ELIGIBLE", fault.Code)
 	require.Equal(t, 0, f.requests.RequestCount())
 }
+
+// A fleet member that is not a national number is never registered: the
+// request is refused and the registry left untouched.
+func TestCreateEnterpriseRequestDoesNotRegisterMalformedNumber(t *testing.T) {
+	f := newFixture()
+	f.requests.SeedPrefix(orangeID, "191")
+	f.numbers.Seed(entity.NumberState{MSISDN: "771000001", CurrentOperatorID: orangeID, OriginOperatorID: orangeID})
+	seedOTP(t, f, "771000001", "123456")
+
+	_, fault := enterpriseInteractor(f).Execute(ctxCaller(yasID),
+		validEnterpriseInput("771000001", []string{"771000001", "pas-un-num"}))
+	require.NotNil(t, fault)
+	require.Equal(t, "OPERATEUR_SOURCE_INCORRECT", fault.Code)
+
+	_, found, err := f.numbers.State(context.Background(), "pas-un-num")
+	require.NoError(t, err)
+	require.False(t, found)
+}

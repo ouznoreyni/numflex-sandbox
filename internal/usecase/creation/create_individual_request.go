@@ -2,6 +2,7 @@ package creation
 
 import (
 	"context"
+	"regexp"
 
 	"github.com/ouznoreyni/numflex-sandbox/internal/entity"
 	"github.com/ouznoreyni/numflex-sandbox/internal/usecase/otp"
@@ -132,16 +133,23 @@ func (i *CreateIndividualRequestInteractor) Execute(
 	return view, nil
 }
 
+// nationalNumber is the national format: nine digits.
+var nationalNumber = regexp.MustCompile(`^[0-9]{9}$`)
+
 // stateOrRegister reads msisdn, writing it first at sourceOperatorID when
 // the registry does not hold it yet: a porting request is what brings a
-// number into the registry. found stays false only when sourceOperatorID is
-// not an operator.
+// number into the registry. found stays false when msisdn is not a national
+// number — fleet members reach here unvalidated — or sourceOperatorID is not
+// an operator.
 func stateOrRegister(ctx context.Context, numbers port.NumberGateway,
 	msisdn, sourceOperatorID string) (entity.NumberState, bool, error) {
 
 	state, found, err := numbers.State(ctx, msisdn)
 	if err != nil || found {
 		return state, found, err
+	}
+	if !nationalNumber.MatchString(msisdn) {
+		return entity.NumberState{}, false, nil
 	}
 	if err := numbers.Register(ctx, msisdn, sourceOperatorID); err != nil {
 		return entity.NumberState{}, false, err
