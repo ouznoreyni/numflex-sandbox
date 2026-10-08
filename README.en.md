@@ -36,7 +36,7 @@ around an anomaly in acceptance must work around it here too.
 | **[Getting started](#getting-started)** · [first porting](#your-first-porting-in-four-calls) · [pitfalls](#five-first-run-pitfalls) | Thirty seconds, one command |
 | **[Images](#published-images)** | All-in-one `:latest`, slim `:slim` |
 | **[Configuration](#configuration)** · [fidelity](#fidelity-real-reproduces-what-was-measured) | One variable, three sources |
-| **[Number pool](#number-pool)** | Which MSISDNs exist, and how far |
+| **[Number registry](#number-registry)** | Which MSISDNs exist, and how far |
 | **[API surface](#api-surface)** · [accounts](#accounts) · [off-contract](#the-two-off-contract-routes) | 33 + 2 + 2 routes |
 | **[Reproduced anomalies](#reproduced-anomalies)** | What is wrong on purpose |
 | **[Documentation](#api-documentation)** | Swagger, OpenAPI, Postman |
@@ -52,19 +52,17 @@ docker run --rm -p 8080:8080 ouzdiop268/numflex-sandbox:latest
 ```
 
 That is all: no database to install, no network to create, no configuration file. The image carries
-its own PostgreSQL, initialises the cluster, runs the migrations, seeds the number pool, then serves
+its own PostgreSQL, initialises the cluster, runs the migrations, seeds the reference data, then serves
 the API **and** its documentation on a single port.
 
 | | |
 |---|---|
 | API | <http://localhost:8080/api/gateway/v1> |
 | Documentation | <http://localhost:8080/swagger.html> |
-| First `200` | **~25 s** after launch — `--rm` pays it again every time |
+| First `200` | as soon as the migrations have run — no number is seeded |
 
-By default, **every well-formed number of an operator's range is portable** — `771…` through
-`779…` for ORANGE, `781…` to `789…` for YAS, `711…` to `719…` for EXPRESSO: nine million per
-operator, with nothing to configure. A ported number cannot be ported again for three months, but
-there is always a fresh one next to it. See the [number pool](#number-pool).
+**No number is hard-coded.** The registry starts empty; a porting request on an unknown number
+registers it at the `operateurSourceId` it declares. See the [number registry](#number-registry).
 
 ### Published images
 
@@ -140,13 +138,12 @@ see [Accounts](#accounts).
 entitled, step not reached: all `500` with `RuntimeException: …` in `detail`. That is not a
 failure, it is ANO-003, reproduced on purpose.
 
-**3. A made-up number does not exist, and the sandbox says so badly.** The registry is closed:
-outside the seeded numbers, no MSISDN is known, and creation answers
+**3. A made-up number is registered, not refused.** The registry starts empty: the first porting
+request on a number writes it at the `operateurSourceId` it declares. If that choice is wrong, it
+stays: the number now belongs to that operator, and a later request naming another source answers
 `RuntimeException: Le numéro n'appartient pas à l'opérateur source indiqué`
-(`OPERATEUR_SOURCE_INCORRECT`). The same message comes out when the number exists but
-`operateurSourceId` is not its current holder — nothing tells the two cases apart. Nothing warns you
-at the previous step either: `otp/send` accepts any number without consulting the registry. To
-settle it: `GET /api/sandbox/v1/numeros/tranches?operateur=ORANGE` says exactly which numbers exist.
+(`OPERATEUR_SOURCE_INCORRECT`). `GET /api/sandbox/v1/numeros/tranches?operateur=YAS` says which
+numbers are already registered, and where.
 
 **4. Only the all-in-one image serves the documentation.** `:slim` starts from `scratch` and ships
 no page: `/swagger.html` answers `404` there. In both images `/api/gateway/v1` keeps exactly its 33
@@ -186,8 +183,6 @@ Everything is set through environment variables, and nothing else.
 | `OTP_TTL_SECONDS` | `300` | OTP validity |
 | `OTP_MAX_ATTEMPTS` | `3` | Entry attempts |
 | `REVERSE_AUTO_VALIDATION_SECONDS` | `0` | `0` = validation through the `artp` CLI only |
-| `FULL_NUMBERS` | `false` | Writes every range whole ahead of time, `000000` to `999999`. Does not change what is portable — everything already is |
-| `POOL_NUMBERS_PER_OPERATOR` | `800000` | Numbers written ahead of time per operator, between `8` and `8000000`. Absent, it follows `FULL_NUMBERS`; set, it wins over it |
 | `DOCS_ENABLED` | `true` | Serves `/swagger.html`, `/openapi.yaml`, `/openapi.json` at the root |
 | `ENV_FILE` | `.env` | Path of the environment file to load |
 
@@ -270,43 +265,25 @@ No expiry, immediate convergence, no latency: a full cycle in under a second. Th
 
 ---
 
-## Number pool
+## Number registry
 
-The registry is **open on operator ranges**: every well-formed number of one of those ranges
-exists, seeded or not. One the seed never wrote is born on its first read, held by its range's
-operator and never ported; from then on it has a history, and keeps it. A range's prefix is three
-digits and its tail six — `771000001` reads as `771` + `000001`.
+The registry is the `numero` table and nothing else: **no range is hard-coded**, and the server
+seeds no number. A number exists because a request wrote it.
 
-| Operator | Open ranges | Portable total |
-|---|---|---|
-| ORANGE | `771000000`–`771999999` … `779000000`–`779999999` | **9,000,000** |
-| YAS | `781000000`–`781999999` … `789000000`–`789999999` | **9,000,000** |
-| EXPRESSO | `711000000`–`711999999` … `719000000`–`719999999` | **9,000,000** |
-| Historical | `761…` (YAS), `701…` (EXPRESSO) | 2,000,000 |
+- **Porting** (`/demandes/particulier`, `/demandes/entreprise`): a number absent from the registry is
+  written, once the OTP is verified, at the declared `operateurSourceId`, never ported. The request
+  goes on. Any nine-digit MSISDN is therefore portable from its first request — `768012042` as
+  well as `771000001`.
+- A number **already in the database** keeps its history. If the declared `operateurSourceId` is not
+  its current holder, creation answers `Le numéro n'appartient pas à l'opérateur source indiqué`
+  (`OPERATEUR_SOURCE_INCORRECT`).
+- **Restitution** and **reverse** register nothing: they concern a number already ported, hence
+  already in the database. An unknown number is refused there.
 
-No other number exists. The seed still writes part of the ranges ahead: a hundred thousand numbers
-per ORANGE and YAS range from `1` to `8`, a thousand elsewhere, or a million with
-`FULL_NUMBERS=true`. It no longer decides what is portable; it only feeds the range-count route,
-which sees numbers already written.
-
-**No number ships already ported**: each starts at its range's operator. The rules stay the
-platform's — a number ported from ORANGE to YAS is at YAS, ORANGE must wait three months to take it
-back (`DELAI_PORTAGE_NON_RESPECTE`) and six to ask for its restitution. These delays are met only by
-porting a number yourself; a restitution is therefore possible only six months after a real
-porting. The test suite seeds its own pre-ported numbers to check those rules.
-
-**What the volume costs**, measured in the all-in-one image on Apple Silicon, `initdb` and
-migrations included:
-
-| | Rows | `numero` table | Cold start |
-|---|---|---|---|
-| Default | 1,610,000 | 193 MB | **~25 s** |
-| `FULL_NUMBERS=true` | 16,010,000 | 1,905 MB | **4 min 20 s** |
-
-The seed inserts one range per statement (`INSERT … SELECT generate_series`) and **skips a range
-already installed** — a range is laid down whole or not at all, and the presence of its last number
-is enough to know. Restart on the same database: **2 s**. A persistent volume therefore never pays
-for the seed twice.
+The rules stay the platform's — a number ported from ORANGE to YAS is at YAS, ORANGE must wait three
+months to take it back (`DELAI_PORTAGE_NON_RESPECTE`) and six to ask for its restitution. These
+delays are met only by porting a number yourself. The test suite writes its own numbers, pre-ported
+ones included, from `internal/testsupport/numbers.go` — a file the server cannot reach.
 
 ---
 
@@ -386,16 +363,15 @@ a `400` in `problem+json` naming the accepted values — off contract, hence out
                             "total": 100000, "nature": "JAMAIS_PORTE" } ] } }
 ```
 
-It shows only numbers already written to the database: a well-formed number of an operator's range
-is portable even when absent from it (see the [number pool](#number-pool)).
+It shows the numbers written to the database, hence those a request has already registered (see
+the [registry](#number-registry)).
 
-The count is **read from the database**, not derived from configuration: a range installed at
-another volume reports its real size, and a number that moved to its recipient after a completed
+The count is **read from the database**: a number that moved to its recipient after a completed
 porting is counted there. `nature` comes from the rows themselves — `DEJA_PORTE` as soon as one number of
 the range carries a porting date.
 
-Counting costs what counting costs: **2.7 s** on the full pool (4.6 s on the very first call, cold
-cache), milliseconds on a smaller one. No index redeems it — a composite
+Counting scans the operator's rows: milliseconds while the registry holds only the numbers of the
+requests received. No index redeems it — a composite
 `(operateur_actuel_id, msisdn)` was measured at 902 MB for no gain at all.
 
 </details>

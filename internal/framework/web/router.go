@@ -165,9 +165,8 @@ func NewRouter(d *Deps) *gin.Engine {
 	// an unknown path under /api/sandbox/v1 should indeed answer 404 rather
 	// than 401.
 	//
-	// The range count answers "which numbers exist", the question the
-	// registry's single rejection message — OPERATEUR_SOURCE_INCORRECT for
-	// an absent number as for a wrong source — cannot answer. The purge is
+	// The range count answers "which numbers exist" — those a request has
+	// written, a porting registering an unknown number at its source. The purge is
 	// what makes a scenario replayable, restoring the registry for every
 	// number it frees. Both are mounted unconditionally: a sandbox whose
 	// reset button waits for an environment variable is a sandbox nobody

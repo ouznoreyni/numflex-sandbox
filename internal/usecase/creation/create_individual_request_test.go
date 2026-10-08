@@ -127,14 +127,38 @@ func TestCreateIndividualRequestInvalidOTPConsumesNothing(t *testing.T) {
 	require.Equal(t, 0, f.requests.RequestCount())
 }
 
-func TestCreateIndividualRequestUnknownNumber(t *testing.T) {
+// A number the registry does not hold is written at the declared source
+// operator, never ported, and the request goes through: no prefix decides
+// who owns it.
+func TestCreateIndividualRequestRegistersUnknownNumber(t *testing.T) {
 	f := newFixture()
-	seedOTP(t, f, "771000001", "123456")
-	// No numero.Seed: the registry does not know this number.
+	f.requests.SeedPrefix(orangeID, "191")
+	seedOTP(t, f, "768012042", "123456")
+	// No numbers.Seed: the registry does not know this number.
 
-	_, fault := individualInteractor(f).Execute(ctxCaller(yasID), validIndividualInput("771000001"))
+	_, fault := individualInteractor(f).Execute(ctxCaller(yasID), validIndividualInput("768012042"))
+	require.Nil(t, fault)
+	require.Equal(t, 1, f.requests.RequestCount())
+
+	state, found, err := f.numbers.State(context.Background(), "768012042")
+	require.NoError(t, err)
+	require.True(t, found)
+	require.Equal(t, orangeID, state.CurrentOperatorID)
+	require.Equal(t, orangeID, state.OriginOperatorID)
+	require.Nil(t, state.LastPortingDate)
+}
+
+// A number the registry holds at another operator than the declared source
+// is refused, and keeps its holder.
+func TestCreateIndividualRequestWrongSourceOperator(t *testing.T) {
+	f := newFixture()
+	f.numbers.Seed(entity.NumberState{MSISDN: "768012042", CurrentOperatorID: "operateur-expresso", OriginOperatorID: "operateur-expresso"})
+	seedOTP(t, f, "768012042", "123456")
+
+	_, fault := individualInteractor(f).Execute(ctxCaller(yasID), validIndividualInput("768012042"))
 	require.NotNil(t, fault)
 	require.Equal(t, "OPERATEUR_SOURCE_INCORRECT", fault.Code)
+	require.Equal(t, 0, f.requests.RequestCount())
 }
 
 func TestCreateIndividualRequestPortingDelayNotRespected(t *testing.T) {

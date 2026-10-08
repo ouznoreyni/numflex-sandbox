@@ -128,7 +128,6 @@ builder = docker buildx inspect $(BUILDER) >/dev/null 2>&1 || \
 #
 #   make image-standalone                    → numflex-sandbox:standalone, locally
 #   make run-standalone                      → runs it, nothing to mount
-#   make run-standalone FULL=1               → full ranges (a four-minute seed)
 #   make run-standalone DATA=/srv/pg PORT=9000
 #   make run-standalone ENV_FILE=./prod.env  → mounts that file on /app/.env
 #   make push                                → builds AND publishes, multi-arch
@@ -148,7 +147,6 @@ builder = docker buildx inspect $(BUILDER) >/dev/null 2>&1 || \
 DATA     ?=
 PORT     ?= 8080
 ENV_FILE ?=
-FULL     ?=
 
 # `docker images` reports a DISK USAGE that counts the build attestations
 # and the cache: it announced 457 MB for an image of 120. This reads the
@@ -166,6 +164,6 @@ run-standalone: image-standalone
 	docker run --rm -p $(PORT):8080 \
 	  $(if $(DATA),-v "$(DATA):/data",) \
 	  $(if $(ENV_FILE),-v "$(abspath $(ENV_FILE)):/app/.env:ro",) \
-	  $(IMAGE):standalone $(if $(DATA),PGDATA=/data,) $(if $(FULL),FULL_NUMBERS=true,)
+	  $(IMAGE):standalone $(if $(DATA),PGDATA=/data,)
 
 .PHONY: up test test-unit run swagger swagger-build image push push-slim push-all image-standalone run-standalone

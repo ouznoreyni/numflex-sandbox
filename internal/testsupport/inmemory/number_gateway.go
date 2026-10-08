@@ -38,3 +38,13 @@ func (g *NumberGateway) State(_ context.Context, msisdn string) (entity.NumberSt
 	s, ok := g.states[msisdn]
 	return s, ok, nil
 }
+
+func (g *NumberGateway) Register(_ context.Context, msisdn, operatorID string) error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if _, ok := g.states[msisdn]; !ok {
+		g.states[msisdn] = entity.NumberState{
+			MSISDN: msisdn, CurrentOperatorID: operatorID, OriginOperatorID: operatorID}
+	}
+	return nil
+}

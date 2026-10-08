@@ -6,7 +6,6 @@ import (
 	"github.com/ouznoreyni/numflex-sandbox/internal/framework/clock"
 	"github.com/ouznoreyni/numflex-sandbox/internal/framework/identifier"
 	"github.com/ouznoreyni/numflex-sandbox/internal/framework/persistence"
-	"github.com/ouznoreyni/numflex-sandbox/internal/framework/seed"
 	"github.com/ouznoreyni/numflex-sandbox/internal/usecase/creation"
 	"github.com/ouznoreyni/numflex-sandbox/internal/usecase/otp"
 )
@@ -19,7 +18,7 @@ import (
 // presenter — behind the three creation routes. NewRouter calls it once, at
 // router construction. Moved from internal/api/creation.go (Task 18).
 func (d *Deps) creationController() *controller.CreationController {
-	numbers := postgres.NewNumberGateway(d.DB.Pool, seed.HomeRanges())
+	numbers := postgres.NewNumberGateway(d.DB.Pool)
 	requestsRead := postgres.NewRequestGateway(d.DB.Pool)
 	uow := persistence.NewUnitOfWork(d.DB)
 	ids := identifier.NewGenerator()

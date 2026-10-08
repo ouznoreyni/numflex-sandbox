@@ -14,73 +14,84 @@ import (
 // import the framework layer.
 const orangeID = "6a21745ce6c37b5b5b487ec1"
 
-// homes is the part of seed.HomeRanges these tests exercise.
-var homes = map[string]string{"771": orangeID}
+const yasID = "6a2174c3e6c37b5b5b487ec4"
 
-// TestNumberGatewayOpensHomeRanges pins the open registry: a well-formed
-// number of a home range exists even though the seed never wrote it, held
-// by the range's operator and never ported — and it is written on that
-// first read, so the porting that follows finds a row to transfer.
-func TestNumberGatewayOpensHomeRanges(t *testing.T) {
+// TestNumberGatewayHasNoHardCodedRange: a number the registry does not
+// hold does not exist, whatever its prefix — 768 included, which no fixture
+// writes — and reading it writes nothing.
+func TestNumberGatewayHasNoHardCodedRange(t *testing.T) {
 	db := testsupport.NewTestDB(t)
-	g := postgres.NewNumberGateway(db.Pool, homes)
+	g := postgres.NewNumberGateway(db.Pool)
 	ctx := context.Background()
 
-	// seed.TestVolumes stops each range at 000999: 771987654 is not seeded.
-	const msisdn = "771987654"
-
-	n, found, err := g.State(ctx, msisdn)
-	must(t, err)
-	if !found {
-		t.Fatal("a number of a home range must exist without being seeded")
-	}
-	if n.CurrentOperatorID != orangeID || n.OriginOperatorID != orangeID {
-		t.Fatalf("771987654 should be ORANGE's, at home: got %+v", n)
-	}
-	if n.LastPortingDate != nil || n.AlreadyRestituted || n.RequestInProgress {
-		t.Fatalf("an unseeded number must start never ported: got %+v", n)
+	for _, msisdn := range []string{"768012042", "771987654", "791000001"} {
+		_, found, err := g.State(ctx, msisdn)
+		must(t, err)
+		if found {
+			t.Errorf("%s is not in the registry and must not exist", msisdn)
+		}
 	}
 
 	var rows int
 	must(t, db.Pool.QueryRow(ctx,
-		`SELECT count(*) FROM numero WHERE msisdn = $1`, msisdn).Scan(&rows))
-	if rows != 1 {
-		t.Fatalf("the first read must write the number: %d rows", rows)
+		`SELECT count(*) FROM numero WHERE msisdn = '768012042'`).Scan(&rows))
+	if rows != 0 {
+		t.Fatalf("a read must write nothing: %d rows", rows)
 	}
 }
 
-// TestNumberGatewayKeepsOtherNumbersClosed: the registry opens on home
-// ranges only. A prefix no operator owns does not exist, and a malformed
-// number is not a number.
-func TestNumberGatewayKeepsOtherNumbersClosed(t *testing.T) {
+// TestNumberGatewayRegisters: Register writes an unknown number at the
+// operator given, at home and never ported.
+func TestNumberGatewayRegisters(t *testing.T) {
 	db := testsupport.NewTestDB(t)
-	g := postgres.NewNumberGateway(db.Pool, homes)
+	g := postgres.NewNumberGateway(db.Pool)
 	ctx := context.Background()
 
-	for _, msisdn := range []string{
-		"791000001",  // no operator's range
-		"77100000a",  // not digits
-		"7710000001", // ten digits
-	} {
-		_, found, err := g.State(ctx, msisdn)
-		must(t, err)
-		if found {
-			t.Errorf("%s must not exist", msisdn)
-		}
+	must(t, g.Register(ctx, "768012042", yasID))
+
+	n, found, err := g.State(ctx, "768012042")
+	must(t, err)
+	if !found {
+		t.Fatal("a registered number must exist")
+	}
+	if n.CurrentOperatorID != yasID || n.OriginOperatorID != yasID {
+		t.Fatalf("768012042 should be YAS's, at home: got %+v", n)
+	}
+	if n.LastPortingDate != nil || n.AlreadyRestituted || n.RequestInProgress {
+		t.Fatalf("a registered number must start never ported: got %+v", n)
 	}
 }
 
-// TestNumberGatewayKeepsAHistory: opening a range never rewrites a number
-// already there. 789001001 is seeded ported from ORANGE eight months ago;
-// with 789 open under YAS, it is still that number.
-func TestNumberGatewayKeepsAHistory(t *testing.T) {
+// TestNumberGatewayRegisterKeepsAHistory: registering a number already
+// there never rewrites it. 789001001 is a fixture ported from ORANGE to YAS
+// eight months ago; registering it at ORANGE leaves it that number.
+func TestNumberGatewayRegisterKeepsAHistory(t *testing.T) {
 	db := testsupport.NewTestDB(t)
-	const yasID = "6a2174c3e6c37b5b5b487ec4"
-	g := postgres.NewNumberGateway(db.Pool, map[string]string{"789": yasID})
+	g := postgres.NewNumberGateway(db.Pool)
+	ctx := context.Background()
 
-	n, found, err := g.State(context.Background(), "789001001")
+	must(t, g.Register(ctx, "789001001", orangeID))
+
+	n, found, err := g.State(ctx, "789001001")
 	must(t, err)
-	if !found || n.LastPortingDate == nil || n.OriginOperatorID != orangeID {
-		t.Fatalf("789001001 must keep its seeded porting: got %+v", n)
+	if !found || n.CurrentOperatorID != yasID || n.LastPortingDate == nil ||
+		n.OriginOperatorID != orangeID {
+		t.Fatalf("789001001 must keep its porting: got %+v", n)
+	}
+}
+
+// TestNumberGatewayRegisterNeedsAnOperator: an operator the registry does
+// not know writes nothing.
+func TestNumberGatewayRegisterNeedsAnOperator(t *testing.T) {
+	db := testsupport.NewTestDB(t)
+	g := postgres.NewNumberGateway(db.Pool)
+	ctx := context.Background()
+
+	must(t, g.Register(ctx, "768012042", "operateur-inconnu"))
+
+	_, found, err := g.State(ctx, "768012042")
+	must(t, err)
+	if found {
+		t.Fatal("an unknown operator must not register a number")
 	}
 }

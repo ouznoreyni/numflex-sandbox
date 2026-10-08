@@ -1,13 +1,17 @@
 // Package seed populates a fresh database with the operators, rejection
-// reasons, request types, processes, incident types, accounts and number
-// pool the sandbox needs from its first startup. Run is idempotent — every
-// statement is an INSERT ... ON CONFLICT DO NOTHING.
+// reasons, request types, processes, incident types and accounts the sandbox
+// needs from its first startup. Run is idempotent — every statement is an
+// INSERT ... ON CONFLICT DO NOTHING.
+//
+// It writes no number. The registry is the numero table and nothing else:
+// a number is there because a request wrote it there — a porting request
+// registers an unknown number at its declared source operator — never
+// because a prefix hard-coded here says who owns it.
 package seed
 
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/ouznoreyni/numflex-sandbox/internal/framework/persistence"
 	"golang.org/x/crypto/bcrypt"
@@ -38,7 +42,7 @@ const (
 	IncidentTypeTechnicalID = "65abc456def002"
 )
 
-func Run(ctx context.Context, db *persistence.DB, v Volumes) error {
+func Run(ctx context.Context, db *persistence.DB) error {
 	operators := []struct{ id, name, prefix string }{
 		{OperatorOrangeID, "ORANGE", "191"},
 		{OperatorYASID, "YAS", "192"},
@@ -128,218 +132,5 @@ func Run(ctx context.Context, db *persistence.DB, v Volumes) error {
 		}
 	}
 
-	return seedNumbers(ctx, db, v)
-}
-
-// UnportedRangesPerOperator is how many never-ported ranges each operator
-// owns — the eight of the 100 to 800 groups. The pool a porting test
-// consumes is spread evenly over them.
-const UnportedRangesPerOperator = 8
-
-// MaxPerRange is what a range holds: the tail is six digits, so the million
-// numbers running from 000000 to 999999 — 771 is 771000000 to 771999999,
-// whole. lpad truncates on the right beyond that, which would silently fold
-// 1000000 onto 100000 and lose the number to ON CONFLICT.
-const MaxPerRange = 1_000_000
-
-// Volumes fixes how many numbers each kind of range carries. It exists
-// because the pool is seeded again at every startup and, in the test suite,
-// at every test: what makes a usable sandbox — millions of numbers — would
-// make an unusable suite.
-type Volumes struct {
-	// OrangeYAS is what each of the eight never-ported ranges of ORANGE and
-	// YAS carries. This is the pool that a successful porting consumes, one
-	// number at a time.
-	OrangeYAS int
-	// Expresso is the same for the third operator, present so that a porting
-	// between two third parties (UC-08) is exercisable — not to be consumed
-	// in volume.
-	Expresso int
-	// Historical is for the two ranges 76100 and 70100, kept so numbers
-	// published before the pool was widened stay valid.
-	Historical int
-	// PortedBlock is what each scenario block of the 900 group carries.
-	// Rejection material, seeded for the test suite only: the server leaves
-	// it at zero, so that no number it ships has ever been ported.
-	PortedBlock int
-}
-
-// fixedRangeSize is what every range carries that is rejection material
-// rather than portable stock: EXPRESSO's, the two historical ones, and each
-// block of the 900 group. A thousand per case is plenty, and costs nothing.
-const fixedRangeSize = 1000
-
-// TestVolumes is what the test suite seeds: enough for every number
-// published in the README to exist, small enough to reseed between tests.
-var TestVolumes = Volumes{
-	OrangeYAS:   fixedRangeSize,
-	Expresso:    fixedRangeSize,
-	Historical:  fixedRangeSize,
-	PortedBlock: fixedRangeSize,
-}
-
-// VolumesFor spreads perOperator numbers over the eight never-ported ranges
-// of ORANGE and YAS, leaving EXPRESSO's and the historical ones at
-// fixedRangeSize. It seeds no number already ported: on the server, every
-// number starts at home, and a porting date — hence a rejection or a
-// restitution — is met only by porting a number for real.
-func VolumesFor(perOperator int) Volumes {
-	return Volumes{
-		OrangeYAS:  perOperator / UnportedRangesPerOperator,
-		Expresso:   fixedRangeSize,
-		Historical: fixedRangeSize,
-	}
-}
-
-// unportedRanges — the never-ported pool, eight ranges per operator. The
-// prefix is three digits and the tail six, so a number keeps the identity it
-// had when ranges were five digits and tails four: 771 + 000001 is the same
-// 771000001 as 77100 + 0001.
-var unportedRanges = []struct{ prefix, operator string }{
-	{"771", OperatorOrangeID}, {"772", OperatorOrangeID},
-	{"773", OperatorOrangeID}, {"774", OperatorOrangeID},
-	{"775", OperatorOrangeID}, {"776", OperatorOrangeID},
-	{"777", OperatorOrangeID}, {"778", OperatorOrangeID},
-
-	{"781", OperatorYASID}, {"782", OperatorYASID},
-	{"783", OperatorYASID}, {"784", OperatorYASID},
-	{"785", OperatorYASID}, {"786", OperatorYASID},
-	{"787", OperatorYASID}, {"788", OperatorYASID},
-
-	{"711", OperatorExpressoID}, {"712", OperatorExpressoID},
-	{"713", OperatorExpressoID}, {"714", OperatorExpressoID},
-	{"715", OperatorExpressoID}, {"716", OperatorExpressoID},
-	{"717", OperatorExpressoID}, {"718", OperatorExpressoID},
-}
-
-// historicalRanges — 76100 and 70100 under their new three-digit reading.
-var historicalRanges = []struct{ prefix, operator string }{
-	{"761", OperatorYASID},
-	{"701", OperatorExpressoID},
-}
-
-// HomeRanges maps the prefix of every operator range to its operator —
-// the never-ported ones, the historical ones and the 900 group, under its
-// current holder. These are the ranges the registry keeps open: any
-// well-formed number of theirs exists, whether this seed wrote it or not.
-// A number the test suite seeded as already ported keeps that history.
-func HomeRanges() map[string]string {
-	homes := make(map[string]string,
-		len(unportedRanges)+len(historicalRanges)+len(portedRanges))
-	for _, r := range unportedRanges {
-		homes[r.prefix] = r.operator
-	}
-	for _, r := range historicalRanges {
-		homes[r.prefix] = r.operator
-	}
-	for _, r := range portedRanges {
-		homes[r.prefix] = r.current
-	}
-	return homes
-}
-
-// portedRanges — the 900 group, one range per operator, where every number
-// has already been ported. Each range stacks the four scenarios in
-// consecutive blocks, in the order of portedScenarios.
-var portedRanges = []struct{ prefix, current, origin string }{
-	{"779", OperatorOrangeID, OperatorYASID},
-	{"789", OperatorYASID, OperatorOrangeID},
-	{"719", OperatorExpressoID, OperatorOrangeID},
-}
-
-// portedScenarios — the four situations a ported number can be in, each
-// making one rule exercisable from the first startup. Block n of a ported
-// range holds scenario n.
-var portedScenarios = [...]struct {
-	daysAgo  int
-	returned bool
-}{
-	{30, false},  // DELAI_PORTAGE_NON_RESPECTE — ported less than 3 months ago
-	{240, false}, // nominal restitution — ported more than 6 months ago
-	{60, false},  // DELAI_RESTITUTION_NON_RESPECTE — ported 2 months ago
-	{240, true},  // NUMERO_DEJA_RESTITUE — ported, then already restituted
-}
-
-// PortedScenarioCount is how many scenario blocks a ported range stacks.
-const PortedScenarioCount = len(portedScenarios)
-
-// seedNumbers installs the pool, one statement per range rather than one per
-// number: at two million numbers per operator the unitary INSERT would cost
-// as many round trips at every startup.
-func seedNumbers(ctx context.Context, db *persistence.DB, v Volumes) error {
-	for _, r := range unportedRanges {
-		size := v.OrangeYAS
-		if r.operator == OperatorExpressoID {
-			size = v.Expresso
-		}
-		if err := insertRange(ctx, db, r.prefix, r.operator, r.operator,
-			nil, false, 0, size); err != nil {
-			return err
-		}
-	}
-
-	for _, r := range historicalRanges {
-		if err := insertRange(ctx, db, r.prefix, r.operator, r.operator,
-			nil, false, 0, v.Historical); err != nil {
-			return err
-		}
-	}
-
-	for _, r := range portedRanges {
-		for n, sc := range portedScenarios {
-			date := time.Now().AddDate(0, 0, -sc.daysAgo)
-			if err := insertRange(ctx, db, r.prefix, r.current, r.origin,
-				&date, sc.returned, n*v.PortedBlock, v.PortedBlock); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
-// insertRange inserts size numbers whose six-digit tails run from first, all
-// sharing one situation. A range starts at 000000: a full one runs from
-// first=0 to the millionth number, 999999.
-//
-// It returns early when the last number of the range is already there. A
-// range is installed by a single statement, hence whole or not at all, so
-// that one number answers for all of them — and the shortcut is what keeps a
-// restart on persistent data instant: letting two million rows conflict away
-// one by one costs as much as inserting them.
-func insertRange(ctx context.Context, db *persistence.DB, prefix,
-	current, origin string, porting *time.Time, returned bool,
-	first, size int) error {
-
-	if size <= 0 {
-		return nil
-	}
-	if first+size > MaxPerRange {
-		return fmt.Errorf("tranche %s : %d numéros dépassent la capacité %d",
-			prefix, first+size, MaxPerRange)
-	}
-	last := first + size - 1
-
-	var present bool
-	if err := db.Pool.QueryRow(ctx,
-		`SELECT EXISTS (SELECT 1 FROM numero WHERE msisdn = $1)`,
-		fmt.Sprintf("%s%06d", prefix, last)).Scan(&present); err != nil {
-		return fmt.Errorf("seed tranche %s : %w", prefix, err)
-	}
-	if present {
-		return nil
-	}
-
-	if _, err := db.Pool.Exec(ctx,
-		`INSERT INTO numero
-		   (msisdn, operateur_actuel_id, operateur_origine_id,
-		    date_dernier_portage, deja_restitue, actif)
-		 SELECT $1 || lpad(g::text, 6, '0'), $2, $3,
-		        $4::timestamptz, $5::boolean, true
-		 FROM generate_series($6::int, $7::int) AS g
-		 ON CONFLICT (msisdn) DO NOTHING`,
-		prefix, current, origin, porting, returned,
-		first, last); err != nil {
-		return fmt.Errorf("seed tranche %s à partir de %06d : %w", prefix, first, err)
-	}
 	return nil
 }

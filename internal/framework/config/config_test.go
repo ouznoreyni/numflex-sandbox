@@ -30,11 +30,6 @@ func TestLoadDefaults(t *testing.T) {
 	// deferred behaviour measured at SIT v0.3 (R-10).
 	require.Equal(t, time.Duration(0), c.ConvergenceMin)
 	require.Equal(t, time.Duration(0), c.ConvergenceMax)
-	// A hundred thousand per range: enough that no exploration exhausts it,
-	// small enough that a container without a volume starts in seconds.
-	require.Equal(t, DefaultPoolPerOperator, c.PoolPerOperator)
-	require.Equal(t, 800_000, c.PoolPerOperator)
-	require.False(t, c.FullNumbers)
 	require.Equal(t, 30500*time.Millisecond, c.CompletionLatency)
 	require.Equal(t, 540*time.Second, c.ClockSkew)
 	require.Equal(t, "123456", c.OTPStaticCode)
@@ -42,44 +37,6 @@ func TestLoadDefaults(t *testing.T) {
 	require.Equal(t, 3, c.OTPMaxAttempts)
 	require.Equal(t, 24*time.Hour, c.JWTTTL)
 	require.Equal(t, time.Duration(0), c.ReverseAutoValidation)
-}
-
-// FULL_NUMBERS fills every portable range whole. It moves the pool's
-// DEFAULT, so an explicit POOL_NUMBERS_PER_OPERATOR still wins and the two
-// can never contradict each other.
-func TestLoadFullNumbers(t *testing.T) {
-	t.Setenv("DATABASE_URL", "postgres://x")
-
-	t.Setenv("FULL_NUMBERS", "true")
-	c, err := Load()
-	require.NoError(t, err)
-	require.True(t, c.FullNumbers)
-	require.Equal(t, 8_000_000, c.PoolPerOperator)
-
-	t.Setenv("POOL_NUMBERS_PER_OPERATOR", "80000")
-	c, err = Load()
-	require.NoError(t, err)
-	require.Equal(t, 80000, c.PoolPerOperator, "an explicit pool wins over the shortcut")
-}
-
-func TestLoadPoolBounds(t *testing.T) {
-	t.Setenv("DATABASE_URL", "postgres://x")
-
-	// One number per range is the floor: below it a range would be empty.
-	t.Setenv("POOL_NUMBERS_PER_OPERATOR", "7")
-	_, err := Load()
-	require.ErrorContains(t, err, "POOL_NUMBERS_PER_OPERATOR")
-
-	// The ceiling is the six-digit tail: beyond it lpad would truncate and
-	// numbers would collide.
-	t.Setenv("POOL_NUMBERS_PER_OPERATOR", "8000001")
-	_, err = Load()
-	require.ErrorContains(t, err, "POOL_NUMBERS_PER_OPERATOR")
-
-	t.Setenv("POOL_NUMBERS_PER_OPERATOR", "80000")
-	c, err := Load()
-	require.NoError(t, err)
-	require.Equal(t, 80000, c.PoolPerOperator)
 }
 
 func TestLoadCIProfile(t *testing.T) {

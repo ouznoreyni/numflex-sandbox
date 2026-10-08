@@ -6,7 +6,6 @@ import (
 	"github.com/ouznoreyni/numflex-sandbox/internal/framework/clock"
 	"github.com/ouznoreyni/numflex-sandbox/internal/framework/identifier"
 	"github.com/ouznoreyni/numflex-sandbox/internal/framework/persistence"
-	"github.com/ouznoreyni/numflex-sandbox/internal/framework/seed"
 	"github.com/ouznoreyni/numflex-sandbox/internal/usecase/reverse"
 )
 
@@ -18,7 +17,7 @@ import (
 // route: the guide excludes it explicitly for a reverse. Moved from
 // internal/api/reverse.go (Task 18).
 func (d *Deps) reverseController() *controller.ReverseController {
-	numbers := postgres.NewNumberGateway(d.DB.Pool, seed.HomeRanges())
+	numbers := postgres.NewNumberGateway(d.DB.Pool)
 	reverses := postgres.NewReverseGateway(d.DB.Pool)
 	uow := persistence.NewUnitOfWork(d.DB)
 	ids := identifier.NewGenerator()

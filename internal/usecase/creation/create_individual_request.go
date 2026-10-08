@@ -69,7 +69,7 @@ func (i *CreateIndividualRequestInteractor) Execute(
 		return port.RequestView{}, f
 	}
 
-	state, found, err := i.numbers.State(ctx, in.MSISDN)
+	state, found, err := stateOrRegister(ctx, i.numbers, in.MSISDN, in.SourceOperatorID)
 	if err != nil {
 		return port.RequestView{}, entity.InternalError("reading the number")
 	}
@@ -130,4 +130,21 @@ func (i *CreateIndividualRequestInteractor) Execute(
 		return port.RequestView{}, entity.InternalError("re-reading the request")
 	}
 	return view, nil
+}
+
+// stateOrRegister reads msisdn, writing it first at sourceOperatorID when
+// the registry does not hold it yet: a porting request is what brings a
+// number into the registry. found stays false only when sourceOperatorID is
+// not an operator.
+func stateOrRegister(ctx context.Context, numbers port.NumberGateway,
+	msisdn, sourceOperatorID string) (entity.NumberState, bool, error) {
+
+	state, found, err := numbers.State(ctx, msisdn)
+	if err != nil || found {
+		return state, found, err
+	}
+	if err := numbers.Register(ctx, msisdn, sourceOperatorID); err != nil {
+		return entity.NumberState{}, false, err
+	}
+	return numbers.State(ctx, msisdn)
 }

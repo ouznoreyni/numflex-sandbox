@@ -5,8 +5,6 @@ import (
 	"os"
 	"strconv"
 	"time"
-
-	"github.com/ouznoreyni/numflex-sandbox/internal/framework/seed"
 )
 
 type Fidelity string
@@ -46,32 +44,7 @@ type Config struct {
 	// there, so the scratch-based `runtime` image — which ships none —
 	// registers nothing even with Docs true.
 	DocsDir string
-
-	// PoolPerOperator is how many never-ported numbers ORANGE and YAS each
-	// get at seed time, spread over their eight ranges — the pool a porting
-	// consumes, one number per successful cycle. It is the one setting that
-	// costs real time and disk, which is why the default is a hundred
-	// thousand per range rather than a full one: DefaultPoolPerOperator
-	// starts in about twenty seconds, FullNumbers in four and a half
-	// minutes. EXPRESSO and the already-ported ranges keep their fixed size,
-	// being rejection material rather than something to consume.
-	PoolPerOperator int
-
-	// FullNumbers writes every portable range whole ahead of time — its
-	// million numbers, 000000 to 999999. Portability does not depend on it:
-	// the registry is open on these ranges (seed.HomeRanges).
-	// It is a shortcut on PoolPerOperator's DEFAULT, not an override: an
-	// explicit POOL_NUMBERS_PER_OPERATOR still wins, so the two can never
-	// contradict each other.
-	FullNumbers bool
 }
-
-// DefaultPoolPerOperator is the pool seeded when nothing is asked: a hundred
-// thousand numbers per range, eight ranges per operator. Enough that no
-// exploration exhausts it, small enough that a container without a
-// persistent volume starts in seconds — and the numbers it leaves out are
-// portable all the same, written on their first read.
-const DefaultPoolPerOperator = 800_000
 
 func Load() (*Config, error) {
 	c := &Config{
@@ -114,18 +87,6 @@ func Load() (*Config, error) {
 	if c.OTPMaxAttempts, err = num("OTP_MAX_ATTEMPTS", 3); err != nil {
 		return nil, err
 	}
-	// FULL_NUMBERS is read first: it decides the pool's default, which the
-	// line below then lets POOL_NUMBERS_PER_OPERATOR override.
-	if c.FullNumbers, err = boolean("FULL_NUMBERS", false); err != nil {
-		return nil, err
-	}
-	pool := DefaultPoolPerOperator
-	if c.FullNumbers {
-		pool = seed.UnportedRangesPerOperator * seed.MaxPerRange
-	}
-	if c.PoolPerOperator, err = num("POOL_NUMBERS_PER_OPERATOR", pool); err != nil {
-		return nil, err
-	}
 	if c.Docs, err = boolean("DOCS_ENABLED", true); err != nil {
 		return nil, err
 	}
@@ -139,14 +100,6 @@ func Load() (*Config, error) {
 	}
 	if c.ConvergenceMax < c.ConvergenceMin {
 		return nil, fmt.Errorf("CONVERGENCE_MAX_SECONDS ne peut être inférieur à CONVERGENCE_MIN_SECONDS")
-	}
-	if c.PoolPerOperator < seed.UnportedRangesPerOperator {
-		return nil, fmt.Errorf("POOL_NUMBERS_PER_OPERATOR must be at least %d, one per range",
-			seed.UnportedRangesPerOperator)
-	}
-	if c.PoolPerOperator > seed.UnportedRangesPerOperator*seed.MaxPerRange {
-		return nil, fmt.Errorf("POOL_NUMBERS_PER_OPERATOR cannot exceed %d: a range holds %d numbers at most",
-			seed.UnportedRangesPerOperator*seed.MaxPerRange, seed.MaxPerRange)
 	}
 	if c.EngineTick <= 0 {
 		return nil, fmt.Errorf("ENGINE_TICK_SECONDS must be strictly positive")

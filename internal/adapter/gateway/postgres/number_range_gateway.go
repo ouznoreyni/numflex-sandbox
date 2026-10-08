@@ -31,8 +31,7 @@ func NewNumberRangeGateway(db Querier) *NumberRangeGateway {
 // very first call after startup, cold cache), and no index redeems it: a
 // composite (operateur_actuel_id, msisdn) index was measured at 902 MB for
 // no gain at all, the aggregate still having to visit every row. The route is introspection, not a step of the porting cycle, and a
-// sandbox started at a smaller POOL_NUMBERS_PER_OPERATOR answers in
-// milliseconds.
+// registry filled only by the requests it received answers in milliseconds.
 func (g *NumberRangeGateway) RangesByOperator(ctx context.Context, operatorID string) ([]port.NumberRange, error) {
 	rows, err := g.db.Query(ctx,
 		`SELECT left(msisdn, 3) AS prefixe,

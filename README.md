@@ -31,7 +31,7 @@ intégration qui contourne une anomalie en recette doit la contourner ici aussi.
 | **[Démarrer](#démarrer)** · [premier portage](#le-premier-portage-en-quatre-appels) · [pièges](#cinq-pièges-du-premier-essai) | Trente secondes, une commande |
 | **[Images](#images-publiées)** | Tout-en-un `:latest`, mince `:slim` |
 | **[Configuration](#configuration)** · [fidélité](#fidélité--real-reproduit-la-recette-mesurée) | Une variable, trois sources |
-| **[Vivier de numéros](#vivier-de-numéros)** | Quels MSISDN existent, et jusqu'où |
+| **[Registre des numéros](#registre-des-numéros)** | Quels MSISDN existent, et jusqu'où |
 | **[Surface de l'API](#surface-de-lapi)** · [comptes](#comptes) · [hors contrat](#les-deux-routes-hors-contrat) | 33 + 2 + 2 routes |
 | **[Anomalies reproduites](#anomalies-reproduites)** | Ce qui est faux exprès |
 | **[Documentation](#documentation-de-lapi)** | Swagger, OpenAPI, Postman |
@@ -47,19 +47,18 @@ docker run --rm -p 8080:8080 ouzdiop268/numflex-sandbox:latest
 ```
 
 C'est tout : ni base à installer, ni réseau à créer, ni fichier de configuration. L'image embarque
-son PostgreSQL, initialise le cluster, joue les migrations, ensemence le vivier de numéros, puis
+son PostgreSQL, initialise le cluster, joue les migrations, ensemence les données de référence, puis
 sert l'API **et** sa documentation sur un seul port.
 
 | | |
 |---|---|
 | API | <http://localhost:8080/api/gateway/v1> |
 | Documentation | <http://localhost:8080/swagger.html> |
-| Premier `200` | **~25 s** après le lancement — `--rm` le refait à chaque fois |
+| Premier `200` | dès les migrations jouées — aucun numéro n'est ensemencé |
 
-Par défaut, **tout numéro bien formé d'une tranche d'opérateur est portable** — `771…` à
-`779…` pour ORANGE, `781…` à `789…` pour YAS, `711…` à `719…` pour EXPRESSO : neuf millions
-par opérateur, sans rien configurer. Un numéro porté n'est plus portable avant trois mois, mais il
-en reste toujours un neuf à côté. Voir le [vivier de numéros](#vivier-de-numéros).
+**Aucun numéro n'est codé en dur.** Le registre démarre vide ; une demande de portage sur un numéro
+inconnu l'enregistre chez l'`operateurSourceId` qu'elle déclare. Voir le
+[registre des numéros](#registre-des-numéros).
 
 ### Images publiées
 
@@ -136,14 +135,12 @@ précis** ; voir [Comptes](#comptes).
 étape non atteinte : tous en `500` avec `RuntimeException: …` dans `detail`. Ce n'est pas une
 panne, c'est ANO-003, reproduit exprès.
 
-**3. Un numéro inventé n'existe pas, et le sandbox le dit mal.** Le vivier est fermé : hors des
-numéros ensemencés, aucun MSISDN n'est connu du registre, et la création répond
-`RuntimeException: Le numéro n'appartient pas à l'opérateur source indiqué`
-(`OPERATEUR_SOURCE_INCORRECT`). Le même message sort quand le numéro existe mais qu'
-`operateurSourceId` ne désigne pas son détenteur actuel — rien ne distingue les deux cas. Rien ne
-prévient non plus à l'étape d'avant : `otp/send` accepte n'importe quel numéro sans consulter le
-registre. Pour lever le doute :
-`GET /api/sandbox/v1/numeros/tranches?operateur=ORANGE` dit exactement quels numéros existent.
+**3. Un numéro inventé est enregistré, pas refusé.** Le registre démarre vide : la première
+demande de portage sur un numéro l'écrit chez l'`operateurSourceId` qu'elle déclare. Si ce choix est
+faux, il reste : le numéro est désormais chez cet opérateur, et une demande suivante qui désigne une
+autre source répond `RuntimeException: Le numéro n'appartient pas à l'opérateur source indiqué`
+(`OPERATEUR_SOURCE_INCORRECT`). `GET /api/sandbox/v1/numeros/tranches?operateur=YAS` dit quels
+numéros sont déjà enregistrés, et chez qui.
 
 **4. Seule l'image tout-en-un sert la documentation.** `:slim` part de `scratch` et n'embarque
 aucune page : `/swagger.html` y répond `404`. Dans les deux images, `/api/gateway/v1` garde
@@ -183,8 +180,6 @@ Tout se règle par variables d'environnement, et rien d'autre.
 | `OTP_TTL_SECONDS` | `300` | Validité de l'OTP |
 | `OTP_MAX_ATTEMPTS` | `3` | Tentatives de saisie |
 | `REVERSE_AUTO_VALIDATION_SECONDS` | `0` | `0` = validation par le CLI `artp` uniquement |
-| `FULL_NUMBERS` | `false` | Écrit d'avance chaque tranche entière, `000000` à `999999`. Ne change pas ce qui est portable — tout l'est déjà |
-| `POOL_NUMBERS_PER_OPERATOR` | `800000` | Numéros écrits d'avance par opérateur, entre `8` et `8000000`. Absente, suit `FULL_NUMBERS` ; posée, l'emporte sur lui |
 | `DOCS_ENABLED` | `true` | Sert `/swagger.html`, `/openapi.yaml`, `/openapi.json` à la racine |
 | `ENV_FILE` | `.env` | Chemin du fichier d'environnement à charger |
 
@@ -268,45 +263,26 @@ C'est le profil qu'utilise `make test`.
 
 ---
 
-## Vivier de numéros
+## Registre des numéros
 
-Le registre est **ouvert sur les tranches d'opérateur** : tout numéro bien formé d'une de ces
-tranches existe, ensemencé ou non. Celui que le seed n'a pas écrit naît à sa première lecture, chez
-l'opérateur de sa tranche et jamais porté ; dès lors il a une histoire, et la garde. Le préfixe
-d'une tranche tient sur trois chiffres et sa terminaison sur six — `771000001` s'y lit `771` +
-`000001`.
+Le registre, c'est la table `numero` et rien d'autre : **aucune tranche n'est codée en dur**, et le
+serveur n'ensemence aucun numéro. Un numéro existe parce qu'une demande l'a écrit.
 
-| Opérateur | Tranches ouvertes | Total portable |
-|---|---|---|
-| ORANGE | `771000000`–`771999999` … `779000000`–`779999999` | **9 000 000** |
-| YAS | `781000000`–`781999999` … `789000000`–`789999999` | **9 000 000** |
-| EXPRESSO | `711000000`–`711999999` … `719000000`–`719999999` | **9 000 000** |
-| Historiques | `761…` (YAS), `701…` (EXPRESSO) | 2 000 000 |
+- **Portage** (`/demandes/particulier`, `/demandes/entreprise`) : un numéro absent du registre y est
+  écrit, après vérification de l'OTP, chez l'`operateurSourceId` déclaré, jamais porté. La demande
+  suit son cours. N'importe quel MSISDN à neuf chiffres est donc portable dès sa première demande
+  — `768012042` comme `771000001`.
+- Un numéro **déjà en base** garde son histoire. Si l'`operateurSourceId` déclaré n'est pas son
+  détenteur actuel, la création répond `Le numéro n'appartient pas à l'opérateur source indiqué`
+  (`OPERATEUR_SOURCE_INCORRECT`).
+- **Restitution** et **reverse** n'enregistrent rien : elles portent sur un numéro déjà porté, donc
+  déjà en base. Un numéro inconnu y est refusé.
 
-Tout autre numéro n'existe pas. Le seed, lui, pose toujours une partie des tranches d'avance : cent
-mille numéros par tranche ORANGE et YAS de `1` à `8`, mille ailleurs, ou un million avec
-`FULL_NUMBERS=true`. Il ne décide plus de ce qui est portable ; il ne sert plus qu'à la route de
-comptage des tranches, qui ne voit que les numéros déjà écrits.
-
-**Aucun numéro n'est livré déjà porté** : chacun démarre chez l'opérateur de sa tranche. Les
-règles restent celles de la plateforme — un numéro porté d'ORANGE vers YAS est chez YAS, ORANGE doit
-attendre trois mois pour le reprendre (`DELAI_PORTAGE_NON_RESPECTE`) et six pour en demander la
-restitution. On ne rencontre ces délais qu'en portant soi-même un numéro ; une restitution n'est donc
-possible que six mois après un vrai portage. La suite de tests, elle, ensemence ses propres numéros
-pré-portés pour vérifier ces règles.
-
-**Ce que coûte le volume**, mesuré dans l'image tout-en-un sur Apple Silicon, `initdb` et migrations
-comprises :
-
-| | Lignes | Table `numero` | Démarrage à froid |
-|---|---|---|---|
-| Défaut | 1 610 000 | 193 Mo | **~25 s** |
-| `FULL_NUMBERS=true` | 16 010 000 | 1 905 Mo | **4 min 20 s** |
-
-Le seed insère une tranche par instruction (`INSERT … SELECT generate_series`) et **saute une
-tranche déjà installée** — elle est posée entière ou pas du tout, et la présence de son dernier
-numéro suffit à le savoir. Redémarrage sur la même base : **2 s**. Un volume persistant ne repaie
-donc jamais le seed.
+Les règles restent celles de la plateforme — un numéro porté d'ORANGE vers YAS est chez YAS, ORANGE
+doit attendre trois mois pour le reprendre (`DELAI_PORTAGE_NON_RESPECTE`) et six pour en demander la
+restitution. On ne rencontre ces délais qu'en portant soi-même un numéro. La suite de tests, elle,
+écrit ses propres numéros, dont des pré-portés, depuis `internal/testsupport/numbers.go` — un
+fichier que le serveur n'atteint pas.
 
 ---
 
@@ -386,16 +362,15 @@ ANO-003.
                             "total": 100000, "nature": "JAMAIS_PORTE" } ] } }
 ```
 
-Elle ne montre que les numéros déjà écrits en base : un numéro bien formé d'une tranche
-d'opérateur est portable même absent d'ici (voir le [vivier](#vivier-de-numéros)).
+Elle montre les numéros écrits en base, donc ceux qu'une demande a déjà enregistrés (voir le
+[registre](#registre-des-numéros)).
 
-Le décompte est **lu en base**, pas déduit de la configuration : une tranche installée à un autre
-volume dit sa vraie taille, et un numéro passé chez son destinataire après un portage complet est
+Le décompte est **lu en base** : un numéro passé chez son destinataire après un portage complet est
 compté chez lui. La `nature` sort des lignes elles-mêmes — `DEJA_PORTE` dès qu'un numéro de la
 tranche porte une date de portage.
 
-Compter coûte : **2,7 s** sur le vivier plein (4,6 s au tout premier appel, cache froid), quelques
-millisecondes sur un vivier réduit. Aucun index n'y change rien — un `(operateur_actuel_id, msisdn)`
+Compter balaie les lignes de l'opérateur : quelques millisecondes tant que le registre ne tient que
+les numéros des demandes reçues. Aucun index n'y change rien — un `(operateur_actuel_id, msisdn)`
 a été mesuré à 902 Mo pour aucun gain, l'agrégat devant de toute façon visiter chaque ligne.
 
 </details>

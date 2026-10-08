@@ -109,7 +109,7 @@ func (i *CreateEnterpriseRequestInteractor) Execute(
 
 	states := make(map[string]entity.NumberState, len(distinct))
 	for _, number := range distinct {
-		state, found, err := i.numbers.State(ctx, number)
+		state, found, err := stateOrRegister(ctx, i.numbers, number, in.SourceOperatorID)
 		if err != nil {
 			return CreateEnterpriseRequestOutput{}, entity.InternalError("reading the number")
 		}

@@ -54,14 +54,18 @@ type ReferenceGateway interface {
 
 // NumberGateway resolves a number's current standing in the registry — the
 // same read the three creation endpoints (and later acceptance, restitution
-// and reverse) need before deciding whether a number is portable. It is
-// always read outside any transaction: nothing here is written by request
-// creation.
+// and reverse) need before deciding whether a number is portable. It works
+// outside any transaction.
 type NumberGateway interface {
 	// State returns found=false when msisdn is absent from the registry —
-	// the caller decides what fault that deserves (a source number must be
-	// registered; a fleet member that isn't cannot be requested either).
+	// the caller decides what that deserves: a porting registers it at its
+	// declared source operator, a restitution or a reverse refuses it.
 	State(ctx context.Context, msisdn string) (entity.NumberState, bool, error)
+
+	// Register writes msisdn at operatorID, at home and never ported, when
+	// it is not in the registry yet — a number the registry already holds
+	// keeps its history. An unknown operatorID writes nothing.
+	Register(ctx context.Context, msisdn, operatorID string) error
 }
 
 // CreateRequestInput carries the fields a new porting/restitution request
@@ -576,10 +580,9 @@ type SandboxGateway interface {
 
 // NumberRange is one three-digit range of the national registry as it
 // actually stands, for one operator: how many numbers that operator holds
-// in it, and the first and last of them. The sandbox seeds ranges whole,
-// but nothing guarantees they still are — a persistent database seeded at
-// another POOL_NUMBERS_PER_OPERATOR, or a completed porting moving a number
-// to its recipient, both show up here.
+// in it, and the first and last of them. The server seeds no number: a
+// range appears here once a request has written one of its numbers, and a
+// completed porting moving a number to its recipient shows up too.
 type NumberRange struct {
 	Prefix string
 	First  string

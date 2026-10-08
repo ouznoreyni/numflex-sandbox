@@ -15,7 +15,8 @@ const truncateSQL = `TRUNCATE
 	type_incident, processus, type_demande, motif_rejet, operateur
 	RESTART IDENTITY CASCADE`
 
-// NewTestDB returns a migrated, emptied and seeded database.
+// NewTestDB returns a migrated, emptied and seeded database, with the
+// number fixtures of SeedNumbers.
 func NewTestDB(t *testing.T) *persistence.DB {
 	t.Helper()
 	url := os.Getenv("DATABASE_URL")
@@ -35,10 +36,11 @@ func NewTestDB(t *testing.T) *persistence.DB {
 	if _, err := db.Pool.Exec(ctx, truncateSQL); err != nil {
 		t.Fatalf("truncate: %v", err)
 	}
-	// seed.TestVolumes, not the server's: the pool is reseeded at every
-	// test, and the production volume would make the suite unusable.
-	if err := seed.Run(ctx, db, seed.TestVolumes); err != nil {
+	if err := seed.Run(ctx, db); err != nil {
 		t.Fatalf("seed: %v", err)
+	}
+	if err := SeedNumbers(ctx, db); err != nil {
+		t.Fatalf("fixtures: %v", err)
 	}
 	return db
 }

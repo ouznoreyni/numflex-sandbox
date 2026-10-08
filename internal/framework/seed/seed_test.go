@@ -3,7 +3,6 @@ package seed_test
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/ouznoreyni/numflex-sandbox/internal/framework/seed"
 	"github.com/ouznoreyni/numflex-sandbox/internal/testsupport"
@@ -78,133 +77,29 @@ func TestAccounts(t *testing.T) {
 	}
 }
 
-func TestNumberPool(t *testing.T) {
-	db := testsupport.NewTestDB(t)
-	ctx := context.Background()
-
-	cases := []struct {
-		msisdn          string
-		currentOperator string
-		porting         bool
-		alreadyReturned bool
-		portingAgeMinD  int
-		portingAgeMaxD  int
-	}{
-		{"771000001", seed.OperatorOrangeID, false, false, 0, 0},
-		{"761000001", seed.OperatorYASID, false, false, 0, 0},
-		{"701000001", seed.OperatorExpressoID, false, false, 0, 0},
-		{"779000001", seed.OperatorOrangeID, true, false, 25, 35},
-		{"789001001", seed.OperatorYASID, true, false, 230, 250},
-		{"789002001", seed.OperatorYASID, true, false, 55, 65},
-		{"789003001", seed.OperatorYASID, true, true, 230, 250},
-		// Range ends: a range starts at 000000, so the thousandth number
-		// of a thousand-strong range is 000999, and the last block of a
-		// ported range stops at 003999.
-		{"771000000", seed.OperatorOrangeID, false, false, 0, 0},
-		{"771000999", seed.OperatorOrangeID, false, false, 0, 0},
-		{"719003999", seed.OperatorExpressoID, true, true, 230, 250},
-	}
-	for _, c := range cases {
-		var current string
-		var date *time.Time
-		var returned bool
-		require.NoErrorf(t, db.Pool.QueryRow(ctx,
-			`SELECT operateur_actuel_id, date_dernier_portage, deja_restitue
-			 FROM numero WHERE msisdn = $1`, c.msisdn).Scan(&current, &date, &returned),
-			"number %s missing from the pool", c.msisdn)
-
-		require.Equal(t, c.currentOperator, current, c.msisdn)
-		require.Equal(t, c.alreadyReturned, returned, c.msisdn)
-		if !c.porting {
-			require.Nilf(t, date, "%s must not carry a porting date", c.msisdn)
-			continue
-		}
-		require.NotNilf(t, date, "%s must carry a porting date", c.msisdn)
-		age := int(time.Since(*date).Hours() / 24)
-		require.GreaterOrEqual(t, age, c.portingAgeMinD, c.msisdn)
-		require.LessOrEqual(t, age, c.portingAgeMaxD, c.msisdn)
-	}
-}
-
-func TestNumberPoolVolume(t *testing.T) {
-	db := testsupport.NewTestDB(t)
-	ctx := context.Background()
-
-	// 1000 per range: ORANGE 8 unported + 4 ported blocks, YAS and EXPRESSO
-	// 9 unported each — their historical range included — plus 4 blocks.
-	v := seed.TestVolumes
-	perOperator := map[string]int{
-		seed.OperatorOrangeID: seed.UnportedRangesPerOperator*v.OrangeYAS +
-			seed.PortedScenarioCount*v.PortedBlock,
-		seed.OperatorYASID: seed.UnportedRangesPerOperator*v.OrangeYAS + v.Historical +
-			seed.PortedScenarioCount*v.PortedBlock,
-		seed.OperatorExpressoID: seed.UnportedRangesPerOperator*v.Expresso + v.Historical +
-			seed.PortedScenarioCount*v.PortedBlock,
-	}
-	total := 0
-	for id, expected := range perOperator {
-		var n int
-		require.NoError(t, db.Pool.QueryRow(ctx,
-			"SELECT count(*) FROM numero WHERE operateur_actuel_id = $1", id).Scan(&n))
-		require.Equal(t, expected, n, id)
-		total += expected
-	}
-
-	var n int
-	require.NoError(t, db.Pool.QueryRow(ctx, "SELECT count(*) FROM numero").Scan(&n))
-	require.Equal(t, total, n)
-
-	// A range stops at its size: nothing beyond it.
-	require.NoError(t, db.Pool.QueryRow(ctx,
-		"SELECT count(*) FROM numero WHERE msisdn = '771001000'").Scan(&n))
-	require.Zero(t, n)
-}
-
 func TestSeedIdempotent(t *testing.T) {
 	db := testsupport.NewTestDB(t)
 	ctx := context.Background()
 
-	require.NoError(t, seed.Run(ctx, db, seed.TestVolumes))
-	require.NoError(t, seed.Run(ctx, db, seed.TestVolumes))
+	require.NoError(t, seed.Run(ctx, db))
+	require.NoError(t, seed.Run(ctx, db))
 
 	var n int
 	require.NoError(t, db.Pool.QueryRow(ctx, "SELECT count(*) FROM operateur").Scan(&n))
 	require.Equal(t, 3, n)
 }
 
-// TestHomeRangesOpenEveryOperatorRange: the never-ported ranges, the two
-// historical ones and the 900 group, each under the operator that holds it.
-func TestHomeRangesOpenEveryOperatorRange(t *testing.T) {
-	homes := seed.HomeRanges()
-
-	require.Equal(t, seed.OperatorOrangeID, homes["771"])
-	require.Equal(t, seed.OperatorYASID, homes["788"])
-	require.Equal(t, seed.OperatorExpressoID, homes["711"])
-	require.Equal(t, seed.OperatorYASID, homes["761"])
-	require.Equal(t, seed.OperatorExpressoID, homes["701"])
-	require.Equal(t, seed.OperatorOrangeID, homes["779"])
-	require.Equal(t, seed.OperatorYASID, homes["789"])
-	require.Equal(t, seed.OperatorExpressoID, homes["719"])
-	require.Len(t, homes, 3*seed.UnportedRangesPerOperator+2+3)
-}
-
-// TestServerVolumesSeedNoPortedNumber: what the server seeds has never
-// been ported — every number starts at home, the 900 group included.
-func TestServerVolumesSeedNoPortedNumber(t *testing.T) {
+// TestSeedWritesNoNumber: the server starts with an empty registry. No
+// number is anyone's until a request writes it.
+func TestSeedWritesNoNumber(t *testing.T) {
 	db := testsupport.NewTestDB(t)
 	ctx := context.Background()
 	_, err := db.Pool.Exec(ctx, `DELETE FROM numero`)
 	require.NoError(t, err)
 
-	v := seed.VolumesFor(8 * seed.UnportedRangesPerOperator)
-	v.Expresso, v.Historical = 8, 8
-	require.NoError(t, seed.Run(ctx, db, v))
+	require.NoError(t, seed.Run(ctx, db))
 
-	var ported int
-	require.NoError(t, db.Pool.QueryRow(ctx, `
-		SELECT count(*) FROM numero
-		 WHERE date_dernier_portage IS NOT NULL
-		    OR operateur_actuel_id <> operateur_origine_id
-		    OR deja_restitue`).Scan(&ported))
-	require.Zero(t, ported)
+	var n int
+	require.NoError(t, db.Pool.QueryRow(ctx, "SELECT count(*) FROM numero").Scan(&n))
+	require.Zero(t, n)
 }

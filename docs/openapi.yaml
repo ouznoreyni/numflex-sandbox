@@ -794,20 +794,13 @@ paths:
         quel numéro, combien, et si au moins un de ses numéros a déjà été porté
         (`DEJA_PORTE`) ou aucun (`JAMAIS_PORTE`).
 
-        **Ce que la route ne dit pas.** Le registre est ouvert sur les tranches
-        d'opérateur : tout numéro bien formé de `771` à `779` (ORANGE), `781` à `789`
-        (YAS), `711` à `719` (EXPRESSO), `761` et `701` est portable, même absent d'ici —
-        il naît à sa première lecture. Seul un MSISDN hors de ces tranches est rejeté à
-        la création par `Le numéro n'appartient pas à l'opérateur source indiqué`.
+        **Aucune tranche n'est codée en dur.** Le serveur n'ensemence aucun numéro : un
+        numéro apparaît ici quand une demande de portage l'a enregistré chez
+        l'`operateurSourceId` qu'elle déclarait. Un numéro passé chez son destinataire
+        après un portage complet est compté chez lui.
 
-        Le décompte est lu en base, pas déduit de la configuration : une tranche installée
-        à un autre `POOL_NUMBERS_PER_OPERATOR`, ou un numéro passé chez son destinataire
-        après un portage complet, se voient ici.
-
-        **Coût.** Le comptage balaie les lignes de l'opérateur : environ **2,7 s** sur le
-        vivier plein (huit millions de numéros par opérateur), **4,6 s** au tout premier
-        appel après démarrage, cache froid — et quelques millisecondes sur un vivier
-        réduit. Mesuré.
+        **Coût.** Le comptage balaie les lignes de l'opérateur : quelques millisecondes
+        tant que le registre ne tient que les numéros des demandes reçues.
       parameters:
         - name: operateur
           in: query

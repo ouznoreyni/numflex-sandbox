@@ -175,3 +175,24 @@ func TestCreateIndividualInContractModeReturnsABusinessCode(t *testing.T) {
 	require.Equal(t, "DELAI_PORTAGE_NON_RESPECTE", body["code"])
 	require.Equal(t, false, body["success"])
 }
+
+// A number no fixture wrote — 768012042, the request of 2026-10-08 — is
+// portable all the same: the registry has no hard-coded range, and the
+// request writes the number at its declared source operator, here YAS
+// towards ORANGE.
+func TestCreateIndividualRegistersUnknownNumber(t *testing.T) {
+	h := routerharness.NewRouterHarness(t)
+	token := h.Token("orange", "orange2026")
+	h.Call(http.MethodPost, "/api/gateway/v1/otp/send", token,
+		map[string]any{"numero": "768012042"})
+
+	req := individualBody("768012042")
+	req["operateurSourceId"] = operatorYAS
+	req["operateurDestinataireId"] = operatorOrange
+	resp, body := h.Call(http.MethodPost, "/api/gateway/v1/demandes/particulier", token, req)
+
+	require.Equal(t, http.StatusCreated, resp.StatusCode, body)
+	data := body["data"].(map[string]any)
+	require.Equal(t, "768012042", data["numero"])
+	require.Equal(t, operatorYAS, data["operateurSource"].(map[string]any)["id"])
+}
